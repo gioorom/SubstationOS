@@ -3,6 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import documents
 
+from app.database.database import engine, Base
+from app.models import document
+
+
+# Creazione automatica database/tabelle
+Base.metadata.create_all(bind=engine)
+
 
 app = FastAPI(
     title="SubstationOS API"
