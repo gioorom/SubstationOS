@@ -15,3 +15,5 @@ node_modules/
 Thumbs.db
 # Database
 *.db
+# Engineering documents storage
+storage/
