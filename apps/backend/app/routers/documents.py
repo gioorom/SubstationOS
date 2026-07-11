@@ -54,3 +54,17 @@ async def upload_document(
         "path": document.file_path,
         "uploaded_at": document.uploaded_at
     }
+@router.get("/")
+def get_documents(
+    db: Session = Depends(get_db)
+):
+
+    documents = db.query(Document).all()
+
+    return documents
+@router.get("/")
+def get_documents(
+    db: Session = Depends(get_db)
+):
+    documents = db.query(Document).all()
+    return documents
