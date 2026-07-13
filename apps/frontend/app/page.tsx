@@ -1,63 +1,114 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import DocumentTable from "@/components/documents/DocumentTable";
+import FilterPanel from "@/components/documents/FilterPanel";
 import SearchBar from "@/components/documents/SearchBar";
+import UploadBox from "@/components/UploadBox";
 
-interface Document {
-  id: number;
-  filename: string;
-  category: string;
-  project: string;
-  revision: string;
-  uploaded_at: string;
-}
+import { useDocuments } from "@/hooks/useDocuments";
 
 export default function DocumentsPage() {
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const {
+    documents,
+    loading,
+    error,
+    reload,
+  } = useDocuments();
+
   const [searchTerm, setSearchTerm] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [selectedCategory, setSelectedCategory] =
+    useState("");
+  const [selectedProject, setSelectedProject] =
+    useState("");
+  const [selectedRevision, setSelectedRevision] =
+    useState("");
 
-  useEffect(() => {
-    async function loadDocuments() {
-      try {
-        const response = await fetch(
-          "http://127.0.0.1:8000/documents/"
-        );
+  const categories = useMemo(() => {
+    return [
+      ...new Set(
+        documents.map((document) => document.category)
+      ),
+    ]
+      .filter(Boolean)
+      .sort();
+  }, [documents]);
 
-        if (!response.ok) {
-          throw new Error("Impossibile caricare i documenti");
-        }
+  const projects = useMemo(() => {
+    return [
+      ...new Set(
+        documents.map((document) => document.project)
+      ),
+    ]
+      .filter(Boolean)
+      .sort();
+  }, [documents]);
 
-        const data: Document[] = await response.json();
-        setDocuments(data);
-      } catch {
-        setError("Errore durante il caricamento dei documenti.");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadDocuments();
-  }, []);
+  const revisions = useMemo(() => {
+    return [
+      ...new Set(
+        documents.map((document) => document.revision)
+      ),
+    ]
+      .filter(Boolean)
+      .sort();
+  }, [documents]);
 
   const filteredDocuments = useMemo(() => {
     const normalizedSearchTerm = searchTerm
       .trim()
       .toLowerCase();
 
-    if (!normalizedSearchTerm) {
-      return documents;
-    }
+    return documents.filter((document) => {
+      const matchesSearch =
+        normalizedSearchTerm === "" ||
+        document.filename
+          .toLowerCase()
+          .includes(normalizedSearchTerm) ||
+        document.category
+          .toLowerCase()
+          .includes(normalizedSearchTerm) ||
+        document.project
+          .toLowerCase()
+          .includes(normalizedSearchTerm) ||
+        document.revision
+          .toLowerCase()
+          .includes(normalizedSearchTerm);
 
-    return documents.filter((document) =>
-      document.filename
-        .toLowerCase()
-        .includes(normalizedSearchTerm)
-    );
-  }, [documents, searchTerm]);
+      const matchesCategory =
+        selectedCategory === "" ||
+        document.category === selectedCategory;
+
+      const matchesProject =
+        selectedProject === "" ||
+        document.project === selectedProject;
+
+      const matchesRevision =
+        selectedRevision === "" ||
+        document.revision === selectedRevision;
+
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesProject &&
+        matchesRevision
+      );
+    });
+  }, [
+    documents,
+    searchTerm,
+    selectedCategory,
+    selectedProject,
+    selectedRevision,
+  ]);
+
+  function resetFilters() {
+    setSearchTerm("");
+    setSelectedCategory("");
+    setSelectedProject("");
+    setSelectedRevision("");
+  }
 
   return (
     <main className="p-8">
@@ -66,12 +117,32 @@ export default function DocumentsPage() {
       </h1>
 
       <p className="mt-2 text-gray-600">
-        Documenti tecnici registrati in SubstationOS.
+        Carica, ricerca e gestisci i documenti tecnici di
+        SubstationOS.
       </p>
+
+      <div className="mt-8">
+        <UploadBox
+          onUploadSuccess={reload}
+        />
+      </div>
 
       <SearchBar
         value={searchTerm}
         onChange={setSearchTerm}
+      />
+
+      <FilterPanel
+        categories={categories}
+        projects={projects}
+        revisions={revisions}
+        selectedCategory={selectedCategory}
+        selectedProject={selectedProject}
+        selectedRevision={selectedRevision}
+        onCategoryChange={setSelectedCategory}
+        onProjectChange={setSelectedProject}
+        onRevisionChange={setSelectedRevision}
+        onReset={resetFilters}
       />
 
       {loading && (
@@ -99,7 +170,7 @@ export default function DocumentsPage() {
         documents.length > 0 &&
         filteredDocuments.length === 0 && (
           <p className="mt-8 text-gray-600">
-            Nessun documento corrisponde alla ricerca.
+            Nessun documento corrisponde ai criteri selezionati.
           </p>
         )}
 
