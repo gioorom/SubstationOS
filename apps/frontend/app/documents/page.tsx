@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import DocumentTable from "@/components/documents/DocumentTable";
+import SearchBar from "@/components/documents/SearchBar";
 
 interface Document {
   id: number;
@@ -13,6 +16,7 @@ interface Document {
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -39,6 +43,20 @@ export default function DocumentsPage() {
     loadDocuments();
   }, []);
 
+  const filteredDocuments = useMemo(() => {
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+
+    if (!normalizedSearchTerm) {
+      return documents;
+    }
+
+    return documents.filter((document) =>
+      document.filename
+        .toLowerCase()
+        .includes(normalizedSearchTerm)
+    );
+  }, [documents, searchTerm]);
+
   return (
     <main className="p-8">
       <h1 className="text-3xl font-bold">
@@ -48,6 +66,11 @@ export default function DocumentsPage() {
       <p className="mt-2 text-gray-600">
         Documenti tecnici registrati in SubstationOS.
       </p>
+
+      <SearchBar
+        value={searchTerm}
+        onChange={setSearchTerm}
+      />
 
       {loading && (
         <p className="mt-8">
@@ -61,64 +84,28 @@ export default function DocumentsPage() {
         </p>
       )}
 
-      {!loading && !error && documents.length === 0 && (
-        <p className="mt-8 text-gray-600">
-          Nessun documento registrato.
-        </p>
-      )}
+      {!loading &&
+        !error &&
+        documents.length === 0 && (
+          <p className="mt-8 text-gray-600">
+            Nessun documento registrato.
+          </p>
+        )}
 
-      {!loading && !error && documents.length > 0 && (
-        <div className="mt-8 overflow-hidden rounded-xl border">
-          <table className="w-full border-collapse">
-            <thead className="bg-gray-100 text-black">
-              <tr>
-                <th className="p-4 text-left">
-                  Filename
-                </th>
-                <th className="p-4 text-left">
-                  Categoria
-                </th>
-                <th className="p-4 text-left">
-                  Progetto
-                </th>
-                <th className="p-4 text-left">
-                  Revisione
-                </th>
-                <th className="p-4 text-left">
-                  Caricato il
-                </th>
-              </tr>
-            </thead>
+      {!loading &&
+        !error &&
+        documents.length > 0 &&
+        filteredDocuments.length === 0 && (
+          <p className="mt-8 text-gray-600">
+            Nessun documento corrisponde alla ricerca.
+          </p>
+        )}
 
-            <tbody>
-              {documents.map((document) => (
-                <tr
-                  key={document.id}
-                  className="border-t"
-                >
-                  <td className="p-4">
-                    {document.filename}
-                  </td>
-                  <td className="p-4">
-                    {document.category}
-                  </td>
-                  <td className="p-4">
-                    {document.project}
-                  </td>
-                  <td className="p-4">
-                    {document.revision}
-                  </td>
-                  <td className="p-4">
-                    {new Date(
-                      document.uploaded_at
-                    ).toLocaleString("it-IT")}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {!loading &&
+        !error &&
+        filteredDocuments.length > 0 && (
+          <DocumentTable documents={filteredDocuments} />
+        )}
     </main>
   );
 }
