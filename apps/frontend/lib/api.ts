@@ -1,6 +1,6 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
-  "http://127.0.0.1:8000";
+import { env } from "@/config/env";
+
+const API_BASE_URL = env.apiBaseUrl;
 
 export async function apiRequest<T>(
   path: string,

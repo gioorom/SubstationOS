@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  Bell,
+  Search,
+  UserRound,
+} from "lucide-react";
 import { usePathname } from "next/navigation";
 
 const pageTitles: Record<string, string> = {
@@ -33,30 +38,24 @@ export default function AppTopBar() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/60 bg-white/68 backdrop-blur-2xl">
-      <div className="flex min-h-20 items-center justify-between gap-6 px-6 lg:px-10">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+      <div className="flex min-h-20 items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
+        <div className="min-w-0">
+          <p className="hidden text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground sm:block">
             Engineering workspace
           </p>
 
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="truncate text-xl font-semibold tracking-tight text-foreground sm:mt-1 sm:text-2xl">
             {pageTitle}
           </h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden min-w-72 items-center gap-3 rounded-2xl border border-white/70 bg-white/72 px-4 py-3 shadow-sm backdrop-blur-xl md:flex">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              className="h-5 w-5 text-muted-foreground"
+        <div className="flex items-center gap-2 sm:gap-3">
+          <label className="hidden min-w-64 items-center gap-3 rounded-2xl border border-white/70 bg-white/72 px-4 py-3 shadow-sm backdrop-blur-xl md:flex lg:min-w-72">
+            <Search
+              className="h-5 w-5 shrink-0 text-muted-foreground"
+              strokeWidth={1.8}
               aria-hidden="true"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-4-4" />
-            </svg>
+            />
 
             <input
               type="search"
@@ -64,23 +63,17 @@ export default function AppTopBar() {
               aria-label="Cerca in SubstationOS"
               className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
-          </div>
+          </label>
 
           <button
             type="button"
             aria-label="Notifiche"
-            className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-white/70 bg-white/72 text-muted-foreground shadow-sm transition hover:bg-white hover:text-foreground"
+            className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-white/70 bg-white/72 text-muted-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:text-foreground"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
+            <Bell
               className="h-5 w-5"
-            >
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-              <path d="M10 21h4" />
-            </svg>
+              strokeWidth={1.8}
+            />
 
             <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white" />
           </button>
@@ -88,10 +81,13 @@ export default function AppTopBar() {
           <button
             type="button"
             aria-label="Profilo utente"
-            className="flex h-11 items-center gap-3 rounded-2xl border border-white/70 bg-white/72 px-2.5 pr-4 shadow-sm transition hover:bg-white"
+            className="flex h-11 items-center gap-3 rounded-2xl border border-white/70 bg-white/72 px-2.5 shadow-sm transition hover:-translate-y-0.5 hover:bg-white sm:pr-4"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-              PR
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <UserRound
+                className="h-4 w-4"
+                strokeWidth={1.9}
+              />
             </div>
 
             <div className="hidden text-left sm:block">
