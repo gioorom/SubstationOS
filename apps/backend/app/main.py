@@ -5,42 +5,41 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database.database import Base, SessionLocal, engine
-from app.models import document
-from app.routers import documents
+from app.models import document, project
+from app.routers import documents, projects
 
 
 Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(
-    title="SubstationOS API"
+    title="SubstationOS API",
 )
 
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000"
+        "http://localhost:3000",
     ],
     allow_credentials=True,
     allow_methods=[
-        "*"
+        "*",
     ],
     allow_headers=[
-        "*"
+        "*",
     ],
 )
 
 
-app.include_router(
-    documents.router
-)
+app.include_router(documents.router)
+app.include_router(projects.router)
 
 
 @app.get("/")
 def root():
     return {
-        "message": "SubstationOS API running"
+        "message": "SubstationOS API running",
     }
 
 
@@ -60,14 +59,16 @@ def health_check():
     try:
         storage_path.mkdir(
             parents=True,
-            exist_ok=True
+            exist_ok=True,
         )
 
         test_file = storage_path / ".healthcheck"
+
         test_file.write_text(
             "ok",
-            encoding="utf-8"
+            encoding="utf-8",
         )
+
         test_file.unlink()
     except Exception:
         storage_status = "offline"
@@ -85,6 +86,6 @@ def health_check():
             "api": "online",
             "database": database_status,
             "storage": storage_status,
-            "ai": "offline"
-        }
+            "ai": "offline",
+        },
     }

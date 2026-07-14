@@ -1,45 +1,93 @@
-from sqlalchemy import Column, Integer, String, DateTime
 from datetime import datetime
+from enum import Enum
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime
+from sqlalchemy import Enum as SqlEnum
+from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.database import Base
 
+if TYPE_CHECKING:
+    from app.models.project import Project
+
+
+class DocumentFormat(str, Enum):
+    PDF = "pdf"
+    DWG = "dwg"
+    MODEL_3D = "model_3d"
+    XLSX = "xlsx"
+    DOCX = "docx"
+    OTHER = "other"
+
+
+class DocumentCategory(str, Enum):
+    FUNCTIONAL_SCHEMATIC = "functional_schematic"
+    WIRING_TERMINAL = "wiring_terminal"
+    GENERAL_TECHNICAL = "general_technical"
+    CABLE_LIST = "cable_list"
+    RELAY_SETTINGS = "relay_settings"
+    COMMISSIONING_REPORT = "commissioning_report"
+    OTHER = "other"
+
 
 class Document(Base):
-
     __tablename__ = "documents"
 
-    id = Column(
+    id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
-        index=True
+        index=True,
     )
 
-    filename = Column(
-        String,
-        nullable=False
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id"),
+        nullable=True,
+        index=True,
     )
 
-    category = Column(
-        String,
-        default="Unknown"
+    filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
     )
 
-    project = Column(
-        String,
-        default="Unknown"
+    file_path: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
     )
 
-    revision = Column(
-        String,
-        default="00"
+    file_format: Mapped[DocumentFormat] = mapped_column(
+        SqlEnum(DocumentFormat),
+        nullable=False,
+        default=DocumentFormat.OTHER,
     )
 
-    file_path = Column(
-        String,
-        nullable=False
+    category: Mapped[DocumentCategory] = mapped_column(
+        SqlEnum(DocumentCategory),
+        nullable=False,
+        default=DocumentCategory.GENERAL_TECHNICAL,
     )
 
-    uploaded_at = Column(
+    revision: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="00",
+    )
+
+    project_name: Mapped[str] = mapped_column(
+        String(150),
+        nullable=False,
+        default="Unknown",
+    )
+
+    uploaded_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+    project: Mapped["Project | None"] = relationship(
+        "Project",
+        back_populates="documents",
     )
