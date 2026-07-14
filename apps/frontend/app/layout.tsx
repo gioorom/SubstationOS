@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import AppSidebar from "@/components/layout/AppSidebar";
 import AppTopBar from "@/components/layout/AppTopBar";
+import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
 
@@ -30,6 +31,12 @@ export default function RootLayout({
             </main>
           </div>
         </div>
+
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+        />
       </body>
     </html>
   );

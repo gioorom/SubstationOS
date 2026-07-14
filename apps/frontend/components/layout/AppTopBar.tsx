@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 
+import MobileSidebar from "@/components/layout/MobileSidebar";
+
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
   "/documents": "Documents",
@@ -39,14 +41,18 @@ export default function AppTopBar() {
   return (
     <header className="sticky top-0 z-30 border-b border-white/60 bg-white/68 backdrop-blur-2xl">
       <div className="flex min-h-20 items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
-        <div className="min-w-0">
-          <p className="hidden text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground sm:block">
-            Engineering workspace
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          <MobileSidebar />
 
-          <h1 className="truncate text-xl font-semibold tracking-tight text-foreground sm:mt-1 sm:text-2xl">
-            {pageTitle}
-          </h1>
+          <div className="min-w-0">
+            <p className="hidden text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground sm:block">
+              Engineering workspace
+            </p>
+
+            <h1 className="truncate text-xl font-semibold tracking-tight text-foreground sm:mt-1 sm:text-2xl">
+              {pageTitle}
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
