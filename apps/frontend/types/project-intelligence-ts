@@ -1,0 +1,49 @@
+export type DocumentationStatus =
+  | "empty"
+  | "incomplete"
+  | "available";
+
+export type ModuleStatus =
+  | "not_started"
+  | "in_progress"
+  | "completed";
+
+export type RiskLevel =
+  | "low"
+  | "medium"
+  | "high";
+
+export type ReadinessStatus =
+  | "not_ready"
+  | "partially_ready"
+  | "ready";
+
+export interface DocumentationIntelligence {
+  document_count: number;
+  completion: number;
+  status: DocumentationStatus;
+}
+
+export interface ProgressIntelligence {
+  completed: number;
+  total: number;
+  completion: number;
+  status: ModuleStatus;
+}
+
+export interface IssuesIntelligence {
+  open: number;
+  critical: number;
+}
+
+export interface ProjectIntelligence {
+  project_id: number;
+  health_score: number;
+  risk_level: RiskLevel;
+  readiness: ReadinessStatus;
+  next_action: string;
+  documentation: DocumentationIntelligence;
+  commissioning: ProgressIntelligence;
+  relay_testing: ProgressIntelligence;
+  issues: IssuesIntelligence;
+}

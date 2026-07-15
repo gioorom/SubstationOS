@@ -1,254 +1,181 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   ArrowLeft,
-  Building2,
   FileText,
-  MapPin,
   Network,
+  TriangleAlert,
   Zap,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import EngineeringIntelligencePanel from "@/components/intelligence/EngineeringIntelligencePanel";
+import MetricCard from "@/components/design-system/MetricCard";
+import ProjectDocumentsPanel from "@/components/projects/ProjectDocumentsPanel";
+import ProjectHero from "@/components/projects/ProjectHero";
+import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+
+import { useDocuments } from "@/hooks/useDocuments";
+import { useProjectIntelligence } from "@/hooks/useProjectIntelligence";
 import { getProject } from "@/lib/projects";
 import { Project } from "@/types/project";
 
-const statusLabels: Record<Project["status"], string> = {
-  planning: "Pianificazione",
-  active: "Attivo",
-  on_hold: "In sospeso",
-  completed: "Completato",
-  cancelled: "Annullato",
-};
+const documentationStatusLabels = {
+  empty: "Nessun documento disponibile",
+  incomplete: "Set documentale incompleto",
+  available: "Documentazione disponibile",
+} as const;
+
+const moduleStatusLabels = {
+  not_started: "Modulo non avviato",
+  in_progress: "Attività in corso",
+  completed: "Attività completate",
+} as const;
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
 
-  const [project, setProject] =
-    useState<Project | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const projectId = useMemo(() => Number(params.projectId), [params.projectId]);
+  const validProjectId = Number.isInteger(projectId) ? projectId : undefined;
+
+  const [project, setProject] = useState<Project | null>(null);
+  const [loadingProject, setLoadingProject] = useState(true);
+  const [projectError, setProjectError] = useState("");
+
+  const { documents, loading: documentsLoading } = useDocuments(validProjectId);
+
+  const {
+    intelligence,
+    loading: intelligenceLoading,
+    error: intelligenceError,
+  } = useProjectIntelligence(validProjectId);
 
   useEffect(() => {
     async function loadProject() {
-      const projectId = Number(params.projectId);
-
-      if (!Number.isInteger(projectId)) {
-        setError("Identificativo progetto non valido.");
-        setLoading(false);
+      if (validProjectId === undefined) {
+        setProjectError("Identificativo progetto non valido.");
+        setLoadingProject(false);
         return;
       }
 
+      setLoadingProject(true);
+      setProjectError("");
+
       try {
-        const data = await getProject(projectId);
-        setProject(data);
+        setProject(await getProject(validProjectId));
       } catch {
-        setError("Impossibile caricare il progetto.");
+        setProject(null);
+        setProjectError("Impossibile caricare il progetto.");
       } finally {
-        setLoading(false);
+        setLoadingProject(false);
       }
     }
 
     void loadProject();
-  }, [params.projectId]);
+  }, [validProjectId]);
 
-  if (loading) {
+  if (loadingProject || intelligenceLoading) {
     return (
       <main className="px-6 py-8 lg:px-10 lg:py-10">
         <Skeleton className="h-10 w-40" />
-
-        <section className="mt-6 rounded-[2rem] border border-white/70 bg-white/72 p-8 shadow-sm backdrop-blur-2xl">
-          <Skeleton className="h-7 w-32" />
-          <Skeleton className="mt-4 h-11 w-3/5" />
-          <Skeleton className="mt-4 h-5 w-full max-w-2xl" />
-
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <Skeleton
-                key={index}
-                className="h-28 rounded-2xl"
-              />
-            ))}
-          </div>
+        <section className="mt-6">
+          <Skeleton className="h-[440px] rounded-[2rem]" />
         </section>
       </main>
     );
   }
 
-  if (error || !project) {
+  if (projectError || intelligenceError || !project || !intelligence || validProjectId === undefined) {
     return (
       <main className="px-6 py-8 lg:px-10 lg:py-10">
         <section className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700">
-          <p className="font-semibold">
-            Progetto non disponibile
-          </p>
-
+          <p className="font-semibold">Progetto non disponibile</p>
           <p className="mt-2 text-sm">
-            {error || "Il progetto richiesto non esiste."}
+            {projectError || intelligenceError || "Il progetto richiesto non esiste."}
           </p>
-
-          <Button asChild variant="outline" className="mt-5">
-            <Link href="/projects">
-              <ArrowLeft className="h-4 w-4" />
-              Torna ai progetti
-            </Link>
-          </Button>
+          <Link href="/projects" className={[buttonVariants({ variant: "outline" }), "mt-5"].join(" ")}>
+            <ArrowLeft className="h-4 w-4" />
+            Torna ai progetti
+          </Link>
         </section>
       </main>
     );
   }
 
+  const lastDocument = documents.slice().sort(
+    (a,b)=> new Date(b.uploaded_at).getTime()-new Date(a.uploaded_at).getTime()
+  )[0];
+
+  const lastActivityLabel = documentsLoading
+    ? "Caricamento..."
+    : lastDocument
+      ? new Date(lastDocument.uploaded_at).toLocaleString("it-IT")
+      : "Nessuna attività recente";
+
+  const documentationStatus = documentationStatusLabels[intelligence.documentation.status];
+  const commissioningStatus = moduleStatusLabels[intelligence.commissioning.status];
+  const relayTestingStatus = moduleStatusLabels[intelligence.relay_testing.status];
+
   return (
     <main className="px-6 py-8 lg:px-10 lg:py-10">
-      <Button asChild variant="ghost">
-        <Link href="/projects">
-          <ArrowLeft className="h-4 w-4" />
-          Torna ai progetti
-        </Link>
-      </Button>
+      <Link href="/projects" className={buttonVariants({ variant: "ghost" })}>
+        <ArrowLeft className="h-4 w-4" />
+        Torna ai progetti
+      </Link>
 
-      <section className="relative mt-6 overflow-hidden rounded-[2rem] border border-white/70 bg-white/72 p-7 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur-2xl lg:p-9">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-blue-400/14 blur-3xl"
+      <section className="mt-6">
+        <ProjectHero
+          project={project}
+          documentCount={intelligence.documentation.document_count}
+          lastActivityLabel={lastActivityLabel}
+          healthScore={intelligence.health_score}
         />
-
-        <div className="relative">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                  {project.code}
-                </span>
-
-                <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
-                  {statusLabels[project.status]}
-                </span>
-              </div>
-
-              <h2 className="mt-5 text-3xl font-semibold tracking-tight text-foreground lg:text-4xl">
-                {project.name}
-              </h2>
-
-              <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground">
-                {project.description ||
-                  "Nessuna descrizione disponibile."}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-white/70 bg-white/60 p-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <Building2 className="h-5 w-5 text-primary" />
-
-                <p className="text-sm font-medium text-muted-foreground">
-                  Committente
-                </p>
-              </div>
-
-              <p className="mt-3 font-semibold text-foreground">
-                {project.customer || "Non specificato"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/70 bg-white/60 p-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <Network className="h-5 w-5 text-primary" />
-
-                <p className="text-sm font-medium text-muted-foreground">
-                  EPC
-                </p>
-              </div>
-
-              <p className="mt-3 font-semibold text-foreground">
-                {project.epc || "Non specificato"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/70 bg-white/60 p-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <MapPin className="h-5 w-5 text-primary" />
-
-                <p className="text-sm font-medium text-muted-foreground">
-                  Località
-                </p>
-              </div>
-
-              <p className="mt-3 font-semibold text-foreground">
-                {project.location || "Non specificata"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/70 bg-white/60 p-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <Zap className="h-5 w-5 text-primary" />
-
-                <p className="text-sm font-medium text-muted-foreground">
-                  Tensione
-                </p>
-              </div>
-
-              <p className="mt-3 font-semibold text-foreground">
-                {project.voltage_level || "Non specificata"}
-              </p>
-            </div>
-          </div>
-        </div>
       </section>
 
-      <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        <article className="rounded-3xl border border-white/70 bg-white/72 p-6 shadow-sm backdrop-blur-2xl">
-          <FileText className="h-7 w-7 text-primary" />
+      <section className="mt-8">
+        <EngineeringIntelligencePanel intelligence={intelligence} />
+      </section>
 
-          <h3 className="mt-5 text-lg font-semibold text-foreground">
-            Documents
-          </h3>
+      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Documentazione"
+          value={`${intelligence.documentation.completion}%`}
+          description={`${intelligence.documentation.document_count} documenti associati`}
+          trend={documentationStatus}
+          status={intelligence.documentation.status === "available" ? "positive" : intelligence.documentation.status === "incomplete" ? "warning" : "critical"}
+          icon={<FileText className="h-6 w-6" />}
+        />
+        <MetricCard
+          label="Commissioning"
+          value={`${intelligence.commissioning.completion}%`}
+          description={`${intelligence.commissioning.completed} attività completate su ${intelligence.commissioning.total}`}
+          trend={commissioningStatus}
+          status={intelligence.commissioning.status === "completed" ? "positive" : intelligence.commissioning.status === "in_progress" ? "warning" : "neutral"}
+          icon={<Zap className="h-6 w-6" />}
+        />
+        <MetricCard
+          label="Relay Testing"
+          value={`${intelligence.relay_testing.completed} / ${intelligence.relay_testing.total}`}
+          description={`${intelligence.relay_testing.completion}% delle prove completate`}
+          trend={relayTestingStatus}
+          status={intelligence.relay_testing.status === "completed" ? "positive" : intelligence.relay_testing.status === "in_progress" ? "warning" : "neutral"}
+          icon={<Network className="h-6 w-6" />}
+        />
+        <MetricCard
+          label="Open Issues"
+          value={intelligence.issues.open}
+          description={`${intelligence.issues.critical} criticità ad alta priorità`}
+          trend={intelligence.issues.open === 0 ? "Nessuna criticità aperta" : "Intervento richiesto"}
+          status={intelligence.issues.critical > 0 ? "critical" : intelligence.issues.open > 0 ? "warning" : "positive"}
+          icon={<TriangleAlert className="h-6 w-6" />}
+        />
+      </section>
 
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Documenti tecnici associati alla commessa.
-          </p>
-
-          <p className="mt-6 text-sm font-medium text-muted-foreground">
-            Collegamento in arrivo
-          </p>
-        </article>
-
-        <article className="rounded-3xl border border-white/70 bg-white/72 p-6 shadow-sm backdrop-blur-2xl">
-          <Zap className="h-7 w-7 text-primary" />
-
-          <h3 className="mt-5 text-lg font-semibold text-foreground">
-            Commissioning
-          </h3>
-
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Attività, prove e avanzamento della messa in servizio.
-          </p>
-
-          <p className="mt-6 text-sm font-medium text-muted-foreground">
-            Modulo in arrivo
-          </p>
-        </article>
-
-        <article className="rounded-3xl border border-white/70 bg-white/72 p-6 shadow-sm backdrop-blur-2xl">
-          <Network className="h-7 w-7 text-primary" />
-
-          <h3 className="mt-5 text-lg font-semibold text-foreground">
-            Engineering
-          </h3>
-
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Schemi funzionali, cablaggi, revisioni e as-built.
-          </p>
-
-          <p className="mt-6 text-sm font-medium text-muted-foreground">
-            Workspace in arrivo
-          </p>
-        </article>
+      <section className="mt-8 grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+        <ProjectDocumentsPanel projectId={project.id} />
       </section>
     </main>
   );

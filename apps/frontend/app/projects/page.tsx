@@ -8,7 +8,10 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import {
+  Button,
+  buttonVariants,
+} from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjects } from "@/hooks/useProjects";
 
@@ -38,12 +41,13 @@ export default function ProjectsPage() {
           </p>
         </div>
 
-        <Button asChild>
-          <Link href="/projects/new">
-            <Plus className="h-4 w-4" />
-            Nuovo progetto
-          </Link>
-        </Button>
+        <Link
+          href="/projects/new"
+          className={buttonVariants()}
+        >
+          <Plus className="h-4 w-4" />
+          Nuovo progetto
+        </Link>
       </section>
 
       {loading && (
@@ -101,12 +105,16 @@ export default function ProjectsPage() {
             della cabina.
           </p>
 
-          <Button asChild className="mt-6">
-            <Link href="/projects/new">
-              <Plus className="h-4 w-4" />
-              Crea il primo progetto
-            </Link>
-          </Button>
+          <Link
+            href="/projects/new"
+            className={[
+              buttonVariants(),
+              "mt-6",
+            ].join(" ")}
+          >
+            <Plus className="h-4 w-4" />
+            Crea il primo progetto
+          </Link>
         </section>
       )}
 
