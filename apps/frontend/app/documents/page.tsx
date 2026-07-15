@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 
-import UploadBox from "@/components/UploadBox";
 import DocumentTable from "@/components/documents/DocumentTable";
 import FilterPanel from "@/components/documents/FilterPanel";
 import SearchBar from "@/components/documents/SearchBar";
+import UploadBox from "@/components/UploadBox";
 
 import { useDocuments } from "@/hooks/useDocuments";
 
@@ -13,43 +13,75 @@ export default function DocumentsPage() {
   const {
     documents,
     loading,
+    uploading,
     error,
-    reload,
+    addDocument,
   } = useDocuments();
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedProject, setSelectedProject] = useState("");
-  const [selectedRevision, setSelectedRevision] = useState("");
+  const [selectedCategory, setSelectedCategory] =
+    useState("");
+  const [selectedProject, setSelectedProject] =
+    useState("");
+  const [selectedRevision, setSelectedRevision] =
+    useState("");
 
   const categories = useMemo(() => {
-    return [...new Set(documents.map((document) => document.category))]
+    return [
+      ...new Set(
+        documents.map((document) => document.category)
+      ),
+    ]
       .filter(Boolean)
       .sort();
   }, [documents]);
 
   const projects = useMemo(() => {
-    return [...new Set(documents.map((document) => document.project))]
+    return [
+      ...new Set(
+        documents.map(
+          (document) => document.project_name
+        )
+      ),
+    ]
       .filter(Boolean)
       .sort();
   }, [documents]);
 
   const revisions = useMemo(() => {
-    return [...new Set(documents.map((document) => document.revision))]
+    return [
+      ...new Set(
+        documents.map((document) => document.revision)
+      ),
+    ]
       .filter(Boolean)
       .sort();
   }, [documents]);
 
   const filteredDocuments = useMemo(() => {
-    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+    const normalizedSearchTerm = searchTerm
+      .trim()
+      .toLowerCase();
 
     return documents.filter((document) => {
+      const filename =
+        document.filename?.toLowerCase() ?? "";
+
+      const category =
+        document.category?.toLowerCase() ?? "";
+
+      const projectName =
+        document.project_name?.toLowerCase() ?? "";
+
+      const revision =
+        document.revision?.toLowerCase() ?? "";
+
       const matchesSearch =
         normalizedSearchTerm === "" ||
-        document.filename.toLowerCase().includes(normalizedSearchTerm) ||
-        document.category.toLowerCase().includes(normalizedSearchTerm) ||
-        document.project.toLowerCase().includes(normalizedSearchTerm) ||
-        document.revision.toLowerCase().includes(normalizedSearchTerm);
+        filename.includes(normalizedSearchTerm) ||
+        category.includes(normalizedSearchTerm) ||
+        projectName.includes(normalizedSearchTerm) ||
+        revision.includes(normalizedSearchTerm);
 
       const matchesCategory =
         selectedCategory === "" ||
@@ -57,7 +89,7 @@ export default function DocumentsPage() {
 
       const matchesProject =
         selectedProject === "" ||
-        document.project === selectedProject;
+        document.project_name === selectedProject;
 
       const matchesRevision =
         selectedRevision === "" ||
@@ -87,69 +119,82 @@ export default function DocumentsPage() {
 
   return (
     <main className="px-6 py-8 lg:px-10 lg:py-10">
-      <section className="glass-panel rounded-[2rem] p-6 lg:p-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-          Document Registry
-        </h1>
-
-        <p className="mt-2 text-muted-foreground">
-          Carica, ricerca e gestisci i documenti tecnici di SubstationOS.
+      <section>
+        <p className="text-sm font-medium text-primary">
+          Document Workspace
         </p>
 
-        <div className="mt-8">
-          <UploadBox onUploadSuccess={reload} />
-        </div>
+        <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+          Document Registry
+        </h2>
 
-        <SearchBar
-          value={searchTerm}
-          onChange={setSearchTerm}
-        />
-
-        <FilterPanel
-          categories={categories}
-          projects={projects}
-          revisions={revisions}
-          selectedCategory={selectedCategory}
-          selectedProject={selectedProject}
-          selectedRevision={selectedRevision}
-          onCategoryChange={setSelectedCategory}
-          onProjectChange={setSelectedProject}
-          onRevisionChange={setSelectedRevision}
-          onReset={resetFilters}
-        />
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          Carica, ricerca e gestisci i documenti tecnici
+          registrati in SubstationOS.
+        </p>
       </section>
 
+      <div className="mt-8">
+        <UploadBox
+          onUpload={addDocument}
+          uploading={uploading}
+        />
+      </div>
+
+      <SearchBar
+        value={searchTerm}
+        onChange={setSearchTerm}
+      />
+
+      <FilterPanel
+        categories={categories}
+        projects={projects}
+        revisions={revisions}
+        selectedCategory={selectedCategory}
+        selectedProject={selectedProject}
+        selectedRevision={selectedRevision}
+        onCategoryChange={setSelectedCategory}
+        onProjectChange={setSelectedProject}
+        onRevisionChange={setSelectedRevision}
+        onReset={resetFilters}
+      />
+
       {loading && (
-        <p className="mt-8 text-muted-foreground">
+        <p className="mt-8 text-sm text-muted-foreground">
           Caricamento documenti...
         </p>
       )}
 
       {error && (
-        <p className="mt-8 text-red-600">
+        <section className="mt-8 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
           {error}
-        </p>
+        </section>
       )}
 
-      {!loading && !error && documents.length === 0 && (
-        <p className="mt-8 text-muted-foreground">
-          Nessun documento registrato.
-        </p>
-      )}
+      {!loading &&
+        !error &&
+        documents.length === 0 && (
+          <p className="mt-8 text-sm text-muted-foreground">
+            Nessun documento registrato.
+          </p>
+        )}
 
       {!loading &&
         !error &&
         documents.length > 0 &&
         filteredDocuments.length === 0 && (
-          <p className="mt-8 text-muted-foreground">
-            Nessun documento corrisponde ai criteri selezionati.
+          <p className="mt-8 text-sm text-muted-foreground">
+            Nessun documento corrisponde ai criteri
+            selezionati.
           </p>
         )}
 
       {!loading &&
         !error &&
         filteredDocuments.length > 0 && (
-          <DocumentTable documents={filteredDocuments} />
+          <DocumentTable
+            documents={filteredDocuments}
+          />
         )}
     </main>
   );

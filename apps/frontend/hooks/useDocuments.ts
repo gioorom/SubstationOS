@@ -1,20 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
-import { getDocuments } from "@/lib/documents";
+import {
+  getDocuments,
+  uploadDocument,
+} from "@/lib/documents";
 import { Document } from "@/types/document";
 
 interface UseDocumentsResult {
   documents: Document[];
   loading: boolean;
+  uploading: boolean;
   error: string;
   reload: () => Promise<void>;
+  addDocument: (
+    file: File
+  ) => Promise<Document>;
 }
 
-export function useDocuments(): UseDocumentsResult {
+export function useDocuments(
+  projectId?: number
+): UseDocumentsResult {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
   const reload = useCallback(async () => {
@@ -22,14 +36,46 @@ export function useDocuments(): UseDocumentsResult {
     setError("");
 
     try {
-      const data = await getDocuments();
+      const data = await getDocuments(projectId);
       setDocuments(data);
     } catch {
-      setError("Errore durante il caricamento dei documenti.");
+      setError(
+        "Errore durante il caricamento dei documenti."
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [projectId]);
+
+  const addDocument = useCallback(
+    async (file: File): Promise<Document> => {
+      setUploading(true);
+      setError("");
+
+      try {
+        const document = await uploadDocument(
+          file,
+          projectId
+        );
+
+        setDocuments((currentDocuments) => [
+          document,
+          ...currentDocuments,
+        ]);
+
+        return document;
+      } catch (error) {
+        setError(
+          "Errore durante il caricamento del documento."
+        );
+
+        throw error;
+      } finally {
+        setUploading(false);
+      }
+    },
+    [projectId]
+  );
 
   useEffect(() => {
     void reload();
@@ -38,7 +84,9 @@ export function useDocuments(): UseDocumentsResult {
   return {
     documents,
     loading,
+    uploading,
     error,
     reload,
+    addDocument,
   };
 }
