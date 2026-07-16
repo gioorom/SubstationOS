@@ -16,11 +16,13 @@ import EngineeringIntelligencePanel from "@/components/intelligence/EngineeringI
 import TodaysFocusPanel from "@/components/intelligence/TodaysFocusPanel";
 import ProjectDocumentsPanel from "@/components/projects/ProjectDocumentsPanel";
 import ProjectHero from "@/components/projects/ProjectHero";
+import TimelinePanel from "@/components/timeline/TimelinePanel";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { useDocuments } from "@/hooks/useDocuments";
 import { useProjectIntelligence } from "@/hooks/useProjectIntelligence";
+import { demoTimelineEvents } from "@/lib/demo-timeline";
 import { getProject } from "@/lib/projects";
 import { Project } from "@/types/project";
 
@@ -38,30 +40,14 @@ const moduleStatusLabels = {
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
+  const projectId = useMemo(() => Number(params.projectId), [params.projectId]);
+  const validProjectId = Number.isInteger(projectId) ? projectId : undefined;
 
-  const projectId = useMemo(
-    () => Number(params.projectId),
-    [params.projectId]
-  );
+  const [project, setProject] = useState<Project | null>(null);
+  const [loadingProject, setLoadingProject] = useState(true);
+  const [projectError, setProjectError] = useState("");
 
-  const validProjectId = Number.isInteger(projectId)
-    ? projectId
-    : undefined;
-
-  const [project, setProject] =
-    useState<Project | null>(null);
-
-  const [loadingProject, setLoadingProject] =
-    useState(true);
-
-  const [projectError, setProjectError] =
-    useState("");
-
-  const {
-    documents,
-    loading: documentsLoading,
-  } = useDocuments(validProjectId);
-
+  const { documents, loading: documentsLoading } = useDocuments(validProjectId);
   const {
     intelligence,
     loading: intelligenceLoading,
@@ -71,9 +57,7 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     async function loadProject() {
       if (validProjectId === undefined) {
-        setProjectError(
-          "Identificativo progetto non valido."
-        );
+        setProjectError("Identificativo progetto non valido.");
         setLoadingProject(false);
         return;
       }
@@ -82,16 +66,10 @@ export default function ProjectDetailPage() {
       setProjectError("");
 
       try {
-        const data = await getProject(
-          validProjectId
-        );
-
-        setProject(data);
+        setProject(await getProject(validProjectId));
       } catch {
         setProject(null);
-        setProjectError(
-          "Impossibile caricare il progetto."
-        );
+        setProjectError("Impossibile caricare il progetto.");
       } finally {
         setLoadingProject(false);
       }
@@ -104,30 +82,18 @@ export default function ProjectDetailPage() {
     return (
       <main className="px-6 py-8 lg:px-10 lg:py-10">
         <Skeleton className="h-10 w-40" />
-
-        <section className="mt-6">
-          <Skeleton className="h-[440px] rounded-[2rem]" />
-        </section>
-
-        <section className="mt-8">
-          <Skeleton className="h-80 rounded-[2rem]" />
-        </section>
-
+        <section className="mt-6"><Skeleton className="h-[440px] rounded-[2rem]" /></section>
+        <section className="mt-8"><Skeleton className="h-80 rounded-[2rem]" /></section>
         <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map(
-            (_, index) => (
-              <Skeleton
-                key={index}
-                className="h-44 rounded-[2rem]"
-              />
-            )
-          )}
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-44 rounded-[2rem]" />
+          ))}
         </section>
-
         <section className="mt-8 grid gap-6 xl:grid-cols-2">
           <Skeleton className="h-[420px] rounded-[2rem]" />
           <Skeleton className="h-[420px] rounded-[2rem]" />
         </section>
+        <section className="mt-8"><Skeleton className="h-[520px] rounded-[2rem]" /></section>
       </main>
     );
   }
@@ -142,24 +108,13 @@ export default function ProjectDetailPage() {
     return (
       <main className="px-6 py-8 lg:px-10 lg:py-10">
         <section className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700">
-          <p className="font-semibold">
-            Progetto non disponibile
-          </p>
-
+          <p className="font-semibold">Progetto non disponibile</p>
           <p className="mt-2 text-sm">
-            {projectError ||
-              intelligenceError ||
-              "Il progetto richiesto non esiste."}
+            {projectError || intelligenceError || "Il progetto richiesto non esiste."}
           </p>
-
           <Link
             href="/projects"
-            className={[
-              buttonVariants({
-                variant: "outline",
-              }),
-              "mt-5",
-            ].join(" ")}
+            className={[buttonVariants({ variant: "outline" }), "mt-5"].join(" ")}
           >
             <ArrowLeft className="h-4 w-4" />
             Torna ai progetti
@@ -172,33 +127,20 @@ export default function ProjectDetailPage() {
   const lastDocument = documents
     .slice()
     .sort(
-      (a, b) =>
-        new Date(b.uploaded_at).getTime() -
-        new Date(a.uploaded_at).getTime()
+      (first, second) =>
+        new Date(second.uploaded_at).getTime() -
+        new Date(first.uploaded_at).getTime()
     )[0];
 
   const lastActivityLabel = documentsLoading
     ? "Caricamento..."
     : lastDocument
-      ? new Date(
-          lastDocument.uploaded_at
-        ).toLocaleString("it-IT")
+      ? new Date(lastDocument.uploaded_at).toLocaleString("it-IT")
       : "Nessuna attività recente";
 
-  const documentationStatus =
-    documentationStatusLabels[
-      intelligence.documentation.status
-    ];
-
-  const commissioningStatus =
-    moduleStatusLabels[
-      intelligence.commissioning.status
-    ];
-
-  const relayTestingStatus =
-    moduleStatusLabels[
-      intelligence.relay_testing.status
-    ];
+  const documentationStatus = documentationStatusLabels[intelligence.documentation.status];
+  const commissioningStatus = moduleStatusLabels[intelligence.commissioning.status];
+  const relayTestingStatus = moduleStatusLabels[intelligence.relay_testing.status];
 
   const focusItems = [
     {
@@ -217,10 +159,7 @@ export default function ProjectDetailPage() {
           : intelligence.documentation.status === "incomplete"
             ? ("medium" as const)
             : ("low" as const),
-      estimatedMinutes:
-        intelligence.documentation.status === "available"
-          ? 30
-          : 45,
+      estimatedMinutes: intelligence.documentation.status === "available" ? 30 : 45,
       completed: false,
     },
     {
@@ -233,8 +172,7 @@ export default function ProjectDetailPage() {
           ? ("medium" as const)
           : ("low" as const),
       estimatedMinutes: 40,
-      completed:
-        intelligence.commissioning.status === "completed",
+      completed: intelligence.commissioning.status === "completed",
     },
     {
       id: "relay-testing",
@@ -246,19 +184,18 @@ export default function ProjectDetailPage() {
           ? ("medium" as const)
           : ("low" as const),
       estimatedMinutes: 35,
-      completed:
-        intelligence.relay_testing.status === "completed",
+      completed: intelligence.relay_testing.status === "completed",
     },
   ];
 
+  const projectTimelineEvents = demoTimelineEvents.map((event) => ({
+    ...event,
+    project_id: project.id,
+  }));
+
   return (
     <main className="px-6 py-8 lg:px-10 lg:py-10">
-      <Link
-        href="/projects"
-        className={buttonVariants({
-          variant: "ghost",
-        })}
-      >
+      <Link href="/projects" className={buttonVariants({ variant: "ghost" })}>
         <ArrowLeft className="h-4 w-4" />
         Torna ai progetti
       </Link>
@@ -266,21 +203,14 @@ export default function ProjectDetailPage() {
       <section className="mt-6">
         <ProjectHero
           project={project}
-          documentCount={
-            intelligence.documentation
-              .document_count
-          }
+          documentCount={intelligence.documentation.document_count}
           lastActivityLabel={lastActivityLabel}
-          healthScore={
-            intelligence.health_score
-          }
+          healthScore={intelligence.health_score}
         />
       </section>
 
       <section className="mt-8">
-        <EngineeringIntelligencePanel
-          intelligence={intelligence}
-        />
+        <EngineeringIntelligencePanel intelligence={intelligence} />
       </section>
 
       <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
@@ -290,57 +220,42 @@ export default function ProjectDetailPage() {
           description={`${intelligence.documentation.document_count} documenti associati`}
           trend={documentationStatus}
           status={
-            intelligence.documentation.status ===
-            "available"
+            intelligence.documentation.status === "available"
               ? "positive"
-              : intelligence.documentation.status ===
-                  "incomplete"
+              : intelligence.documentation.status === "incomplete"
                 ? "warning"
                 : "critical"
           }
-          icon={
-            <FileText className="h-6 w-6" />
-          }
+          icon={<FileText className="h-6 w-6" />}
         />
-
         <MetricCard
           label="Commissioning"
           value={`${intelligence.commissioning.completion}%`}
           description={`${intelligence.commissioning.completed} attività completate su ${intelligence.commissioning.total}`}
           trend={commissioningStatus}
           status={
-            intelligence.commissioning.status ===
-            "completed"
+            intelligence.commissioning.status === "completed"
               ? "positive"
-              : intelligence.commissioning.status ===
-                  "in_progress"
+              : intelligence.commissioning.status === "in_progress"
                 ? "warning"
                 : "neutral"
           }
-          icon={
-            <Zap className="h-6 w-6" />
-          }
+          icon={<Zap className="h-6 w-6" />}
         />
-
         <MetricCard
           label="Relay Testing"
           value={`${intelligence.relay_testing.completed} / ${intelligence.relay_testing.total}`}
           description={`${intelligence.relay_testing.completion}% delle prove completate`}
           trend={relayTestingStatus}
           status={
-            intelligence.relay_testing.status ===
-            "completed"
+            intelligence.relay_testing.status === "completed"
               ? "positive"
-              : intelligence.relay_testing.status ===
-                  "in_progress"
+              : intelligence.relay_testing.status === "in_progress"
                 ? "warning"
                 : "neutral"
           }
-          icon={
-            <Network className="h-6 w-6" />
-          }
+          icon={<Network className="h-6 w-6" />}
         />
-
         <MetricCard
           label="Open Issues"
           value={intelligence.issues.open}
@@ -357,20 +272,17 @@ export default function ProjectDetailPage() {
                 ? "warning"
                 : "positive"
           }
-          icon={
-            <TriangleAlert className="h-6 w-6" />
-          }
+          icon={<TriangleAlert className="h-6 w-6" />}
         />
       </section>
 
       <section className="mt-8 grid gap-6 xl:grid-cols-2">
-        <TodaysFocusPanel
-          items={focusItems}
-        />
+        <TodaysFocusPanel items={focusItems} />
+        <ProjectDocumentsPanel projectId={project.id} />
+      </section>
 
-        <ProjectDocumentsPanel
-          projectId={project.id}
-        />
+      <section className="mt-8">
+        <TimelinePanel events={projectTimelineEvents} />
       </section>
     </main>
   );
