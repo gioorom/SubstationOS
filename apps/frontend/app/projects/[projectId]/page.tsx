@@ -11,6 +11,7 @@ import {
   Zap,
 } from "lucide-react";
 
+import { OverviewPanel } from "@/components/commissioning/OverviewPanel";
 import MetricCard from "@/components/design-system/MetricCard";
 import EngineeringIntelligencePanel from "@/components/intelligence/EngineeringIntelligencePanel";
 import TodaysFocusPanel from "@/components/intelligence/TodaysFocusPanel";
@@ -22,9 +23,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { useDocuments } from "@/hooks/useDocuments";
 import { useProjectIntelligence } from "@/hooks/useProjectIntelligence";
+import { demoCommissioning } from "@/lib/demo-commissioning";
 import { demoTimelineEvents } from "@/lib/demo-timeline";
 import { getProject } from "@/lib/projects";
-import { Project } from "@/types/project";
+import type { Project } from "@/types/project";
 
 const documentationStatusLabels = {
   empty: "Nessun documento disponibile",
@@ -40,14 +42,25 @@ const moduleStatusLabels = {
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
-  const projectId = useMemo(() => Number(params.projectId), [params.projectId]);
-  const validProjectId = Number.isInteger(projectId) ? projectId : undefined;
+
+  const projectId = useMemo(
+    () => Number(params.projectId),
+    [params.projectId]
+  );
+
+  const validProjectId = Number.isInteger(projectId)
+    ? projectId
+    : undefined;
 
   const [project, setProject] = useState<Project | null>(null);
   const [loadingProject, setLoadingProject] = useState(true);
   const [projectError, setProjectError] = useState("");
 
-  const { documents, loading: documentsLoading } = useDocuments(validProjectId);
+  const {
+    documents,
+    loading: documentsLoading,
+  } = useDocuments(validProjectId);
+
   const {
     intelligence,
     loading: intelligenceLoading,
@@ -66,7 +79,8 @@ export default function ProjectDetailPage() {
       setProjectError("");
 
       try {
-        setProject(await getProject(validProjectId));
+        const loadedProject = await getProject(validProjectId);
+        setProject(loadedProject);
       } catch {
         setProject(null);
         setProjectError("Impossibile caricare il progetto.");
@@ -82,18 +96,36 @@ export default function ProjectDetailPage() {
     return (
       <main className="px-6 py-8 lg:px-10 lg:py-10">
         <Skeleton className="h-10 w-40" />
-        <section className="mt-6"><Skeleton className="h-[440px] rounded-[2rem]" /></section>
-        <section className="mt-8"><Skeleton className="h-80 rounded-[2rem]" /></section>
+
+        <section className="mt-6">
+          <Skeleton className="h-[440px] rounded-[2rem]" />
+        </section>
+
+        <section className="mt-8">
+          <Skeleton className="h-80 rounded-[2rem]" />
+        </section>
+
+        <section className="mt-8">
+          <Skeleton className="h-[760px] rounded-[2rem]" />
+        </section>
+
         <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-44 rounded-[2rem]" />
+            <Skeleton
+              key={index}
+              className="h-44 rounded-[2rem]"
+            />
           ))}
         </section>
+
         <section className="mt-8 grid gap-6 xl:grid-cols-2">
           <Skeleton className="h-[420px] rounded-[2rem]" />
           <Skeleton className="h-[420px] rounded-[2rem]" />
         </section>
-        <section className="mt-8"><Skeleton className="h-[520px] rounded-[2rem]" /></section>
+
+        <section className="mt-8">
+          <Skeleton className="h-[520px] rounded-[2rem]" />
+        </section>
       </main>
     );
   }
@@ -107,14 +139,23 @@ export default function ProjectDetailPage() {
   ) {
     return (
       <main className="px-6 py-8 lg:px-10 lg:py-10">
-        <section className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700">
-          <p className="font-semibold">Progetto non disponibile</p>
-          <p className="mt-2 text-sm">
-            {projectError || intelligenceError || "Il progetto richiesto non esiste."}
+        <section className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+          <p className="font-semibold">
+            Progetto non disponibile
           </p>
+
+          <p className="mt-2 text-sm">
+            {projectError ||
+              intelligenceError ||
+              "Il progetto richiesto non esiste."}
+          </p>
+
           <Link
             href="/projects"
-            className={[buttonVariants({ variant: "outline" }), "mt-5"].join(" ")}
+            className={[
+              buttonVariants({ variant: "outline" }),
+              "mt-5",
+            ].join(" ")}
           >
             <ArrowLeft className="h-4 w-4" />
             Torna ai progetti
@@ -138,9 +179,20 @@ export default function ProjectDetailPage() {
       ? new Date(lastDocument.uploaded_at).toLocaleString("it-IT")
       : "Nessuna attività recente";
 
-  const documentationStatus = documentationStatusLabels[intelligence.documentation.status];
-  const commissioningStatus = moduleStatusLabels[intelligence.commissioning.status];
-  const relayTestingStatus = moduleStatusLabels[intelligence.relay_testing.status];
+  const documentationStatus =
+    documentationStatusLabels[
+      intelligence.documentation.status
+    ];
+
+  const commissioningStatus =
+    moduleStatusLabels[
+      intelligence.commissioning.status
+    ];
+
+  const relayTestingStatus =
+    moduleStatusLabels[
+      intelligence.relay_testing.status
+    ];
 
   const focusItems = [
     {
@@ -159,7 +211,10 @@ export default function ProjectDetailPage() {
           : intelligence.documentation.status === "incomplete"
             ? ("medium" as const)
             : ("low" as const),
-      estimatedMinutes: intelligence.documentation.status === "available" ? 30 : 45,
+      estimatedMinutes:
+        intelligence.documentation.status === "available"
+          ? 30
+          : 45,
       completed: false,
     },
     {
@@ -172,7 +227,8 @@ export default function ProjectDetailPage() {
           ? ("medium" as const)
           : ("low" as const),
       estimatedMinutes: 40,
-      completed: intelligence.commissioning.status === "completed",
+      completed:
+        intelligence.commissioning.status === "completed",
     },
     {
       id: "relay-testing",
@@ -184,18 +240,30 @@ export default function ProjectDetailPage() {
           ? ("medium" as const)
           : ("low" as const),
       estimatedMinutes: 35,
-      completed: intelligence.relay_testing.status === "completed",
+      completed:
+        intelligence.relay_testing.status === "completed",
     },
   ];
 
-  const projectTimelineEvents = demoTimelineEvents.map((event) => ({
-    ...event,
-    project_id: project.id,
-  }));
+  const projectTimelineEvents = demoTimelineEvents.map(
+    (event) => ({
+      ...event,
+      project_id: project.id,
+    })
+  );
+
+  const projectCommissioningAssets =
+    demoCommissioning.assets.map((asset) => ({
+      ...asset,
+      projectId: String(project.id),
+    }));
 
   return (
     <main className="px-6 py-8 lg:px-10 lg:py-10">
-      <Link href="/projects" className={buttonVariants({ variant: "ghost" })}>
+      <Link
+        href="/projects"
+        className={buttonVariants({ variant: "ghost" })}
+      >
         <ArrowLeft className="h-4 w-4" />
         Torna ai progetti
       </Link>
@@ -203,14 +271,25 @@ export default function ProjectDetailPage() {
       <section className="mt-6">
         <ProjectHero
           project={project}
-          documentCount={intelligence.documentation.document_count}
+          documentCount={
+            intelligence.documentation.document_count
+          }
           lastActivityLabel={lastActivityLabel}
           healthScore={intelligence.health_score}
         />
       </section>
 
       <section className="mt-8">
-        <EngineeringIntelligencePanel intelligence={intelligence} />
+        <EngineeringIntelligencePanel
+          intelligence={intelligence}
+        />
+      </section>
+
+      <section className="mt-8">
+        <OverviewPanel
+          assets={projectCommissioningAssets}
+          summary={demoCommissioning.summary}
+        />
       </section>
 
       <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
@@ -228,6 +307,7 @@ export default function ProjectDetailPage() {
           }
           icon={<FileText className="h-6 w-6" />}
         />
+
         <MetricCard
           label="Commissioning"
           value={`${intelligence.commissioning.completion}%`}
@@ -242,6 +322,7 @@ export default function ProjectDetailPage() {
           }
           icon={<Zap className="h-6 w-6" />}
         />
+
         <MetricCard
           label="Relay Testing"
           value={`${intelligence.relay_testing.completed} / ${intelligence.relay_testing.total}`}
@@ -256,6 +337,7 @@ export default function ProjectDetailPage() {
           }
           icon={<Network className="h-6 w-6" />}
         />
+
         <MetricCard
           label="Open Issues"
           value={intelligence.issues.open}
@@ -278,6 +360,7 @@ export default function ProjectDetailPage() {
 
       <section className="mt-8 grid gap-6 xl:grid-cols-2">
         <TodaysFocusPanel items={focusItems} />
+
         <ProjectDocumentsPanel projectId={project.id} />
       </section>
 
