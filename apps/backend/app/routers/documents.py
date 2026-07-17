@@ -1,3 +1,6 @@
+import logging
+from pathlib import Path
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -11,7 +14,12 @@ from sqlalchemy.orm import Session
 from app.database.database import SessionLocal
 from app.models.document import Document
 from app.models.project import Project
+from app.services.knowledge_graph import ingest_document
+from app.services.pdf_text_extractor import extract_text_from_pdf
 from app.services.storage import save_file
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(
@@ -50,13 +58,15 @@ async def upload_document(
                 detail="Project not found",
             )
 
+    filename = file.filename or "unnamed_document"
+
     saved_path = save_file(
         file.file,
-        file.filename,
+        filename,
     )
 
     document = Document(
-        filename=file.filename,
+        filename=filename,
         file_path=str(saved_path),
         project_id=project.id if project else None,
         project_name=project.name if project else "Unknown",
@@ -65,6 +75,41 @@ async def upload_document(
     db.add(document)
     db.commit()
     db.refresh(document)
+
+    extracted_entities_count = 0
+    knowledge_graph_status = "skipped"
+
+    # Il Knowledge Graph richiede un progetto associato.
+    if project is not None:
+        file_extension = Path(saved_path).suffix.lower()
+
+        if file_extension == ".pdf":
+            try:
+                text = extract_text_from_pdf(saved_path)
+
+                if text:
+                    entities = ingest_document(
+                        db=db,
+                        project_id=project.id,
+                        text=text,
+                        source_document=document.filename,
+                    )
+
+                    extracted_entities_count = len(entities)
+                    knowledge_graph_status = "completed"
+                else:
+                    knowledge_graph_status = "no_text"
+
+            except Exception:
+                # L'upload rimane valido anche se l'analisi fallisce.
+                logger.exception(
+                    "Knowledge Graph ingestion failed for document %s",
+                    document.id,
+                )
+
+                knowledge_graph_status = "failed"
+        else:
+            knowledge_graph_status = "unsupported_file_type"
 
     return {
         "id": document.id,
@@ -76,6 +121,10 @@ async def upload_document(
         "revision": document.revision,
         "project_name": document.project_name,
         "uploaded_at": document.uploaded_at,
+        "knowledge_graph": {
+            "status": knowledge_graph_status,
+            "entities_found": extracted_entities_count,
+        },
     }
 
 

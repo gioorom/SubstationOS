@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database.database import Base, SessionLocal, engine
-from app.models import document, project
+from app.models import document, project, knowledge_graph
 from app.routers import documents, projects
 
 
