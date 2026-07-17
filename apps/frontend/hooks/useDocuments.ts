@@ -19,14 +19,18 @@ interface UseDocumentsResult {
   error: string;
   reload: () => Promise<void>;
   addDocument: (
-    file: File
+    file: File,
+    uploadProjectId?: number
   ) => Promise<Document>;
 }
 
 export function useDocuments(
   projectId?: number
 ): UseDocumentsResult {
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documents, setDocuments] = useState<Document[]>(
+    []
+  );
+
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -48,14 +52,26 @@ export function useDocuments(
   }, [projectId]);
 
   const addDocument = useCallback(
-    async (file: File): Promise<Document> => {
+    async (
+      file: File,
+      uploadProjectId?: number
+    ): Promise<Document> => {
+      const effectiveProjectId =
+        uploadProjectId ?? projectId;
+
+      if (effectiveProjectId === undefined) {
+        throw new Error(
+          "È necessario selezionare un progetto."
+        );
+      }
+
       setUploading(true);
       setError("");
 
       try {
         const document = await uploadDocument(
           file,
-          projectId
+          effectiveProjectId
         );
 
         setDocuments((currentDocuments) => [
@@ -64,12 +80,12 @@ export function useDocuments(
         ]);
 
         return document;
-      } catch (error) {
+      } catch (uploadError) {
         setError(
           "Errore durante il caricamento del documento."
         );
 
-        throw error;
+        throw uploadError;
       } finally {
         setUploading(false);
       }
