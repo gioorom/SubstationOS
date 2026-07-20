@@ -8,9 +8,14 @@ from app.models.knowledge_graph import (
     RelationType,
 )
 
+from app.services.entity_extractor import extract_entities
+
 
 def _normalize_name(name: str) -> str:
-    """Normalizza il nome mantenendo una forma leggibile."""
+    """
+    Normalizza il nome mantenendo una forma leggibile.
+    """
+
     return " ".join(name.strip().split())
 
 
@@ -20,6 +25,10 @@ def find_entity(
     name: str,
     entity_type: EntityType | None = None,
 ) -> ProjectEntity | None:
+    """
+    Cerca un'entità all'interno di un progetto.
+    """
+
     normalized_name = _normalize_name(name)
 
     statement = select(ProjectEntity).where(
@@ -43,10 +52,16 @@ def create_entity(
     description: str | None = None,
     source_document: str | None = None,
 ) -> ProjectEntity:
+    """
+    Crea una nuova entità nel Knowledge Graph.
+    """
+
     normalized_name = _normalize_name(name)
 
     if not normalized_name:
-        raise ValueError("Entity name cannot be empty.")
+        raise ValueError(
+            "Entity name cannot be empty."
+        )
 
     entity = ProjectEntity(
         project_id=project_id,
@@ -71,6 +86,12 @@ def get_or_create_entity(
     description: str | None = None,
     source_document: str | None = None,
 ) -> tuple[ProjectEntity, bool]:
+    """
+    Restituisce un'entità esistente oppure ne crea una nuova.
+
+    Il secondo valore restituito indica se l'entità è stata creata.
+    """
+
     existing_entity = find_entity(
         db=db,
         project_id=project_id,
@@ -98,9 +119,15 @@ def get_project_entities(
     project_id: int,
     entity_type: EntityType | None = None,
 ) -> list[ProjectEntity]:
+    """
+    Restituisce tutte le entità di un progetto.
+    """
+
     statement = (
         select(ProjectEntity)
-        .where(ProjectEntity.project_id == project_id)
+        .where(
+            ProjectEntity.project_id == project_id,
+        )
         .order_by(
             ProjectEntity.entity_type,
             ProjectEntity.name,
@@ -121,11 +148,26 @@ def create_relation(
     target_entity_id: int,
     relation_type: RelationType,
 ) -> EntityRelation:
-    if source_entity_id == target_entity_id:
-        raise ValueError("An entity cannot be related to itself.")
+    """
+    Crea una relazione fra due entità.
 
-    source_entity = db.get(ProjectEntity, source_entity_id)
-    target_entity = db.get(ProjectEntity, target_entity_id)
+    Se la relazione esiste già, restituisce quella esistente.
+    """
+
+    if source_entity_id == target_entity_id:
+        raise ValueError(
+            "An entity cannot be related to itself."
+        )
+
+    source_entity = db.get(
+        ProjectEntity,
+        source_entity_id,
+    )
+
+    target_entity = db.get(
+        ProjectEntity,
+        target_entity_id,
+    )
 
     if source_entity is None:
         raise ValueError(
@@ -171,24 +213,37 @@ def get_related_entities(
     entity_id: int,
     relation_type: RelationType | None = None,
 ) -> list[ProjectEntity]:
-    entity = db.get(ProjectEntity, entity_id)
+    """
+    Restituisce le entità collegate all'entità indicata.
+    """
+
+    entity = db.get(
+        ProjectEntity,
+        entity_id,
+    )
 
     if entity is None:
-        raise ValueError(f"Entity {entity_id} does not exist.")
+        raise ValueError(
+            f"Entity {entity_id} does not exist."
+        )
 
     statement = (
         select(ProjectEntity)
         .join(
             EntityRelation,
             or_(
-                EntityRelation.target_entity_id == ProjectEntity.id,
-                EntityRelation.source_entity_id == ProjectEntity.id,
+                EntityRelation.target_entity_id
+                == ProjectEntity.id,
+                EntityRelation.source_entity_id
+                == ProjectEntity.id,
             ),
         )
         .where(
             or_(
-                EntityRelation.source_entity_id == entity_id,
-                EntityRelation.target_entity_id == entity_id,
+                EntityRelation.source_entity_id
+                == entity_id,
+                EntityRelation.target_entity_id
+                == entity_id,
             ),
             ProjectEntity.id != entity_id,
         )
@@ -198,11 +253,11 @@ def get_related_entities(
 
     if relation_type is not None:
         statement = statement.where(
-            EntityRelation.relation_type == relation_type,
+            EntityRelation.relation_type
+            == relation_type,
         )
 
     return list(db.scalars(statement).all())
-from app.services.entity_extractor import extract_entities
 
 
 def ingest_document(
@@ -211,14 +266,17 @@ def ingest_document(
     text: str,
     source_document: str | None = None,
 ) -> list[ProjectEntity]:
+    """
+    Estrae le entità dal testo, le salva e costruisce
+    automaticamente la topologia elettrica del progetto.
+    """
 
-    created_entities = []
+    processed_entities: list[ProjectEntity] = []
 
     extracted_entities = extract_entities(text)
 
     for extracted in extracted_entities:
-
-        entity, created = get_or_create_entity(
+        entity, _created = get_or_create_entity(
             db=db,
             project_id=project_id,
             entity_type=extracted.entity_type,
@@ -226,6 +284,18 @@ def ingest_document(
             source_document=source_document,
         )
 
-        created_entities.append(entity)
+        processed_entities.append(entity)
 
-    return created_entities
+    # Import locale intenzionale:
+    # evita un'importazione circolare fra knowledge_graph
+    # e topology.builder.
+    from app.services.topology.builder import (
+        build_substation_topology,
+    )
+
+    build_substation_topology(
+        db=db,
+        project_id=project_id,
+    )
+
+    return processed_entities
