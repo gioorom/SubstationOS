@@ -1,3 +1,4 @@
+from typing import Any
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -8,7 +9,7 @@ from app.models.knowledge_graph import (
     RelationType,
 )
 
-from app.services.entity_extractor import extract_entities
+from app.services.ai.extractor import extract_entities
 
 
 def _normalize_name(name: str) -> str:
@@ -51,6 +52,7 @@ def create_entity(
     name: str,
     description: str | None = None,
     source_document: str | None = None,
+    attributes: dict[str, Any] | None = None,
 ) -> ProjectEntity:
     """
     Crea una nuova entità nel Knowledge Graph.
@@ -69,6 +71,7 @@ def create_entity(
         name=normalized_name,
         description=description,
         source_document=source_document,
+        attributes=dict(attributes or {}),
     )
 
     db.add(entity)
@@ -85,9 +88,12 @@ def get_or_create_entity(
     name: str,
     description: str | None = None,
     source_document: str | None = None,
+    attributes: dict[str, Any] | None = None,
 ) -> tuple[ProjectEntity, bool]:
     """
     Restituisce un'entità esistente oppure ne crea una nuova.
+
+    Se l'entità esiste già, aggiorna eventuali informazioni mancanti.
 
     Il secondo valore restituito indica se l'entità è stata creata.
     """
@@ -100,6 +106,30 @@ def get_or_create_entity(
     )
 
     if existing_entity is not None:
+        updated = False
+
+        if description and not existing_entity.description:
+            existing_entity.description = description
+            updated = True
+
+        if source_document and not existing_entity.source_document:
+            existing_entity.source_document = source_document
+            updated = True
+
+        if attributes:
+            merged_attributes = {
+                **(existing_entity.attributes or {}),
+                **attributes,
+            }
+
+            if merged_attributes != existing_entity.attributes:
+                existing_entity.attributes = merged_attributes
+                updated = True
+
+        if updated:
+            db.commit()
+            db.refresh(existing_entity)
+
         return existing_entity, False
 
     entity = create_entity(
@@ -109,6 +139,7 @@ def get_or_create_entity(
         name=name,
         description=description,
         source_document=source_document,
+        attributes=attributes,
     )
 
     return entity, True
@@ -267,8 +298,8 @@ def ingest_document(
     source_document: str | None = None,
 ) -> list[ProjectEntity]:
     """
-    Estrae le entità dal testo, le salva e costruisce
-    automaticamente la topologia elettrica del progetto.
+    Estrae le entità dal testo, le salva nel Knowledge Graph
+    e aggiorna la topologia della sottostazione.
     """
 
     processed_entities: list[ProjectEntity] = []
@@ -276,22 +307,19 @@ def ingest_document(
     extracted_entities = extract_entities(text)
 
     for extracted in extracted_entities:
-        entity, _created = get_or_create_entity(
+        entity, _ = get_or_create_entity(
             db=db,
             project_id=project_id,
             entity_type=extracted.entity_type,
             name=extracted.name,
+            description=extracted.description,
             source_document=source_document,
+            attributes=extracted.attributes,
         )
 
         processed_entities.append(entity)
 
-    # Import locale intenzionale:
-    # evita un'importazione circolare fra knowledge_graph
-    # e topology.builder.
-    from app.services.topology.builder import (
-        build_substation_topology,
-    )
+    from app.services.topology.builder import build_substation_topology
 
     build_substation_topology(
         db=db,

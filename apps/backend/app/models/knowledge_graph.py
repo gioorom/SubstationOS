@@ -1,10 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime
 from sqlalchemy import Enum as SqlEnum
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.database import Base
@@ -28,6 +28,8 @@ class EntityType(str, Enum):
     DOCUMENT = "document"
     TEST = "test"
     OTHER = "other"
+    BUSBAR = "busbar"
+    LINE = "line"
 
 
 class RelationType(str, Enum):
@@ -69,6 +71,13 @@ class ProjectEntity(Base):
     description: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
+    )
+
+    # Nuovo campo per gli attributi dinamici dell'entità
+    attributes: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        default=dict,
+        nullable=False,
     )
 
     source_document: Mapped[str | None] = mapped_column(
