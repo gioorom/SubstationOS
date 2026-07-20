@@ -100,22 +100,60 @@ class EntityRelation(Base):
     id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
+        index=True,
+    )
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id"),
+        nullable=False,
+        index=True,
     )
 
     source_entity_id: Mapped[int] = mapped_column(
         ForeignKey("project_entities.id"),
         nullable=False,
+        index=True,
     )
 
     target_entity_id: Mapped[int] = mapped_column(
         ForeignKey("project_entities.id"),
         nullable=False,
+        index=True,
     )
 
     relation_type: Mapped[RelationType] = mapped_column(
         SqlEnum(RelationType),
         nullable=False,
     )
+
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    confidence: Mapped[float] = mapped_column(
+        default=1.0,
+        nullable=False,
+    )
+
+    attributes: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        default=dict,
+        nullable=False,
+    )
+
+    source_document: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+    project: Mapped["Project"] = relationship("Project")
 
     source_entity = relationship(
         "ProjectEntity",

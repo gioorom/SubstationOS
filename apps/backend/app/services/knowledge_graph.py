@@ -1,4 +1,5 @@
 from typing import Any
+
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -8,8 +9,9 @@ from app.models.knowledge_graph import (
     ProjectEntity,
     RelationType,
 )
-
 from app.services.ai.extractor import extract_entities
+from app.services.ai.models import ExtractedRelationship
+from app.services.ai.relationship_extractor import extract_relationships
 
 
 def _normalize_name(name: str) -> str:
@@ -61,9 +63,7 @@ def create_entity(
     normalized_name = _normalize_name(name)
 
     if not normalized_name:
-        raise ValueError(
-            "Entity name cannot be empty."
-        )
+        raise ValueError("Entity name cannot be empty.")
 
     entity = ProjectEntity(
         project_id=project_id,
@@ -175,20 +175,23 @@ def get_project_entities(
 
 def create_relation(
     db: Session,
+    project_id: int,
     source_entity_id: int,
     target_entity_id: int,
     relation_type: RelationType,
+    description: str | None = None,
+    confidence: float = 1.0,
+    source_document: str | None = None,
+    attributes: dict[str, Any] | None = None,
 ) -> EntityRelation:
     """
     Crea una relazione fra due entità.
 
-    Se la relazione esiste già, restituisce quella esistente.
+    Se la relazione esiste già, aggiorna le informazioni mancanti.
     """
 
     if source_entity_id == target_entity_id:
-        raise ValueError(
-            "An entity cannot be related to itself."
-        )
+        raise ValueError("An entity cannot be related to itself.")
 
     source_entity = db.get(
         ProjectEntity,
@@ -215,21 +218,62 @@ def create_relation(
             "Entities from different projects cannot be related."
         )
 
+    if source_entity.project_id != project_id:
+        raise ValueError(
+            "The entities do not belong to the specified project."
+        )
+
+    normalized_confidence = max(0.0, min(float(confidence), 1.0))
+
     statement = select(EntityRelation).where(
+        EntityRelation.project_id == project_id,
         EntityRelation.source_entity_id == source_entity_id,
         EntityRelation.target_entity_id == target_entity_id,
         EntityRelation.relation_type == relation_type,
     )
 
-    existing_relation = db.scalar(statement)
+    existing = db.scalar(statement)
 
-    if existing_relation is not None:
-        return existing_relation
+    if existing is not None:
+        updated = False
+
+        if description and not existing.description:
+            existing.description = description
+            updated = True
+
+        if source_document and not existing.source_document:
+            existing.source_document = source_document
+            updated = True
+
+        if normalized_confidence > existing.confidence:
+            existing.confidence = normalized_confidence
+            updated = True
+
+        if attributes:
+            merged_attributes = {
+                **(existing.attributes or {}),
+                **attributes,
+            }
+
+            if merged_attributes != existing.attributes:
+                existing.attributes = merged_attributes
+                updated = True
+
+        if updated:
+            db.commit()
+            db.refresh(existing)
+
+        return existing
 
     relation = EntityRelation(
+        project_id=project_id,
         source_entity_id=source_entity_id,
         target_entity_id=target_entity_id,
         relation_type=relation_type,
+        description=description,
+        confidence=normalized_confidence,
+        source_document=source_document,
+        attributes=dict(attributes or {}),
     )
 
     db.add(relation)
@@ -263,18 +307,14 @@ def get_related_entities(
         .join(
             EntityRelation,
             or_(
-                EntityRelation.target_entity_id
-                == ProjectEntity.id,
-                EntityRelation.source_entity_id
-                == ProjectEntity.id,
+                EntityRelation.target_entity_id == ProjectEntity.id,
+                EntityRelation.source_entity_id == ProjectEntity.id,
             ),
         )
         .where(
             or_(
-                EntityRelation.source_entity_id
-                == entity_id,
-                EntityRelation.target_entity_id
-                == entity_id,
+                EntityRelation.source_entity_id == entity_id,
+                EntityRelation.target_entity_id == entity_id,
             ),
             ProjectEntity.id != entity_id,
         )
@@ -284,11 +324,53 @@ def get_related_entities(
 
     if relation_type is not None:
         statement = statement.where(
-            EntityRelation.relation_type
-            == relation_type,
+            EntityRelation.relation_type == relation_type,
         )
 
     return list(db.scalars(statement).all())
+
+
+def ingest_relationships(
+    db: Session,
+    project_id: int,
+    relationships: list[ExtractedRelationship],
+    source_document: str | None = None,
+) -> None:
+    """
+    Salva nel Knowledge Graph le relazioni estratte dall'AI.
+    """
+
+    for relationship in relationships:
+        source_entity = find_entity(
+            db=db,
+            project_id=project_id,
+            name=relationship.source,
+        )
+
+        target_entity = find_entity(
+            db=db,
+            project_id=project_id,
+            name=relationship.target,
+        )
+
+        if source_entity is None or target_entity is None:
+            print(
+                "[WARNING] Relazione ignorata: "
+                f"{relationship.source} -> {relationship.target}"
+            )
+            continue
+
+        create_relation(
+            db=db,
+            project_id=project_id,
+            source_entity_id=source_entity.id,
+            target_entity_id=target_entity.id,
+            relation_type=relationship.relation_type,
+            description=relationship.description,
+            confidence=relationship.confidence,
+            source_document=source_document,
+            attributes=relationship.attributes,
+        )
 
 
 def ingest_document(
@@ -298,7 +380,7 @@ def ingest_document(
     source_document: str | None = None,
 ) -> list[ProjectEntity]:
     """
-    Estrae le entità dal testo, le salva nel Knowledge Graph
+    Estrae entità e relazioni dal testo, le salva nel Knowledge Graph
     e aggiorna la topologia della sottostazione.
     """
 
@@ -318,6 +400,15 @@ def ingest_document(
         )
 
         processed_entities.append(entity)
+
+    relationships = extract_relationships(text)
+
+    ingest_relationships(
+        db=db,
+        project_id=project_id,
+        relationships=relationships,
+        source_document=source_document,
+    )
 
     from app.services.topology.builder import build_substation_topology
 
