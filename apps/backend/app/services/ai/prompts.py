@@ -108,22 +108,45 @@ L'output deve essere ESCLUSIVAMENTE un array JSON valido.
 
 def build_entity_extraction_prompt(text: str) -> str:
     return f"""
-Analizza il seguente testo estratto da un PDF.
+Il seguente contenuto proviene dall'OCR di uno schema funzionale di una
+sottostazione elettrica AT/MT.
 
-Identifica tutte le apparecchiature elettriche.
+NON è un documento descrittivo.
 
-Per ogni apparecchiatura estrai:
+È normale trovare:
 
-- entity_type
-- name
-- description
-- confidence
-- attributes
+- parole sparse
+- simboli
+- sigle
+- codici
+- intestazioni
+- testo disordinato
 
-Se un attributo non è presente nel documento,
-non inventarlo.
+NON limitarti al titolo del documento.
 
-TESTO:
+Scansiona TUTTO il contenuto.
+
+Estrai OGNI apparecchiatura elettrica riconoscibile.
+
+Sono considerate apparecchiature:
+
+- Linee
+- Sbarre
+- Trasformatori
+- Interruttori
+- Sezionatori
+- Trasformatori di corrente (TA)
+- Trasformatori di tensione (TV)
+- Relè
+- Pannelli
+- Bay
+- Cavi
+
+Ignora intestazioni, cartigli, revisioni, loghi e testi amministrativi.
+
+Restituisci una entità per ogni componente individuato.
+
+TESTO OCR:
 
 {text}
 """

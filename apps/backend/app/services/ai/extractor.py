@@ -23,11 +23,24 @@ class AIEntityExtractor:
         """
 
         if not text or not text.strip():
+            print("\n===== TESTO INVIATO A CLAUDE =====")
+            print("Testo vuoto: nessun contenuto ricevuto.")
+            print("==================================\n")
             return []
+
+        prompt = build_entity_extraction_prompt(text)
+
+        print("\n===== TESTO INVIATO A CLAUDE =====")
+        print(prompt[:5000])
+
+        if len(prompt) > 5000:
+            print("\n[Output interrotto dopo 5000 caratteri]")
+
+        print("==================================\n")
 
         response = self.provider.generate(
             system_prompt=ENTITY_EXTRACTION_SYSTEM_PROMPT,
-            user_prompt=build_entity_extraction_prompt(text),
+            user_prompt=prompt,
             temperature=0.0,
         )
 
@@ -174,6 +187,9 @@ def extract_entities(
     entities = _get_extractor().extract(text)
 
     print("\n===== DEBUG CLAUDE =====")
+
+    if not entities:
+        print("Nessuna entità estratta.")
 
     for entity in entities:
         print("-" * 60)
