@@ -167,6 +167,7 @@ def create_topology_relation(
         return existing_relation
 
     relation = EntityRelation(
+        project_id=source.project_id,
         source_entity_id=source.id,
         target_entity_id=target.id,
         relation_type=connection.relation_type,

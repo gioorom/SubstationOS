@@ -380,8 +380,8 @@ def ingest_document(
     source_document: str | None = None,
 ) -> list[ProjectEntity]:
     """
-    Estrae entità e relazioni dal testo, le salva nel Knowledge Graph
-    e aggiorna la topologia della sottostazione.
+    Estrae le entità dal testo e costruisce la topologia.
+    (Relazioni AI temporaneamente disabilitate.)
     """
 
     processed_entities: list[ProjectEntity] = []
@@ -400,15 +400,6 @@ def ingest_document(
         )
 
         processed_entities.append(entity)
-
-    relationships = extract_relationships(text)
-
-    ingest_relationships(
-        db=db,
-        project_id=project_id,
-        relationships=relationships,
-        source_document=source_document,
-    )
 
     from app.services.topology.builder import build_substation_topology
 
