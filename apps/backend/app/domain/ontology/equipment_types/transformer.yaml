@@ -1,0 +1,14 @@
+id: transformer
+name: Power Transformer
+category: primary_equipment
+description: Electrical machine used to transfer electrical energy between circuits through electromagnetic induction.
+aliases:
+  - Transformer
+  - Power Transformer
+  - TR
+  - Trasformatore
+  - Trasformatore di potenza
+tags:
+  - transformation
+  - power
+  - high_voltage

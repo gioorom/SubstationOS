@@ -1,0 +1,14 @@
+id: surge_arrester
+name: Surge Arrester
+category: protection
+description: Protective device used to limit transient overvoltages and divert surge current to earth.
+aliases:
+  - Surge Arrester
+  - Lightning Arrester
+  - SA
+  - Scaricatore
+  - Scaricatore di sovratensione
+tags:
+  - protection
+  - overvoltage
+  - earthing

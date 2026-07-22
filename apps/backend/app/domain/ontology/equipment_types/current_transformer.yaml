@@ -1,0 +1,13 @@
+id: current_transformer
+name: Current Transformer
+category: measurement
+description: Instrument transformer used to reproduce a scaled representation of the primary current.
+aliases:
+  - CT
+  - TA
+  - Current Transformer
+  - Trasformatore di corrente
+tags:
+  - measurement
+  - protection
+  - instrument_transformer

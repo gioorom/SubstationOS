@@ -1,0 +1,14 @@
+id: busbar
+name: Busbar
+category: conductor
+description: Conductive element used to collect and distribute electrical power within a substation.
+aliases:
+  - Busbar
+  - Bus
+  - Barra
+  - Sbarra
+  - Sbarra AT
+tags:
+  - conductor
+  - distribution
+  - high_voltage

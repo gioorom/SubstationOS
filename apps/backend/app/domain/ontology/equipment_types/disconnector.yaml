@@ -1,0 +1,13 @@
+id: disconnector
+name: Disconnector
+category: primary_equipment
+description: Mechanical switching device used to provide visible electrical isolation.
+aliases:
+  - Disconnector
+  - Disconnect Switch
+  - Isolator
+  - Sezionatore
+tags:
+  - switching
+  - isolation
+  - high_voltage

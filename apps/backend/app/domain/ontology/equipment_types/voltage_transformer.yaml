@@ -1,0 +1,14 @@
+id: voltage_transformer
+name: Voltage Transformer
+category: measurement
+description: Instrument transformer used to reproduce a scaled representation of the primary voltage.
+aliases:
+  - VT
+  - TV
+  - PT
+  - Voltage Transformer
+  - Trasformatore di tensione
+tags:
+  - measurement
+  - protection
+  - instrument_transformer

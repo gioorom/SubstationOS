@@ -1,0 +1,14 @@
+id: relay
+name: Protection Relay
+category: protection
+description: Intelligent electronic device used to detect abnormal electrical conditions and initiate protection actions.
+aliases:
+  - Protection Relay
+  - Protective Relay
+  - Relay
+  - Relè
+  - Relè di protezione
+tags:
+  - protection
+  - secondary_equipment
+  - automation

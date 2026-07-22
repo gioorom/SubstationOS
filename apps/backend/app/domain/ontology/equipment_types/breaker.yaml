@@ -1,0 +1,13 @@
+id: breaker
+name: Circuit Breaker
+category: primary_equipment
+description: Device capable of making, carrying and interrupting electrical current under normal and fault conditions.
+aliases:
+  - CB
+  - Circuit Breaker
+  - Interruttore
+  - Interruttore AT
+tags:
+  - switching
+  - protection
+  - high_voltage

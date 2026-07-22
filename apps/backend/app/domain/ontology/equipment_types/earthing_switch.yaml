@@ -1,0 +1,13 @@
+id: earthing_switch
+name: Earthing Switch
+category: primary_equipment
+description: Mechanical switching device used to connect isolated conductors or equipment to earth.
+aliases:
+  - Earthing Switch
+  - Grounding Switch
+  - ES
+  - Sezionatore di terra
+tags:
+  - earthing
+  - safety
+  - switching
