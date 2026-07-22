@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.domain.ontology.exceptions import (
     DuplicateEquipmentTypeError,
     InvalidEquipmentDefinitionError,
+    UnknownRelationError,
 )
 from app.domain.ontology.models import EquipmentType
 
@@ -17,8 +18,10 @@ class OntologyValidator:
         equipment_types: list[EquipmentType],
     ) -> None:
         self._validate_duplicate_ids(equipment_types)
+        self._validate_ids(equipment_types)
         self._validate_names(equipment_types)
         self._validate_parents(equipment_types)
+        self._validate_relations(equipment_types)
 
     @staticmethod
     def _validate_duplicate_ids(
@@ -33,6 +36,20 @@ class OntologyValidator:
                 )
 
             seen.add(equipment.id)
+
+    @staticmethod
+    def _validate_ids(
+        equipment_types: list[EquipmentType],
+    ) -> None:
+        """
+        Verifica che tutti gli identificativi siano valorizzati.
+        """
+
+        for equipment in equipment_types:
+            if not equipment.id.strip():
+                raise InvalidEquipmentDefinitionError(
+                    "Equipment id cannot be empty."
+                )
 
     @staticmethod
     def _validate_names(
@@ -62,3 +79,38 @@ class OntologyValidator:
                     f"Equipment '{equipment.id}' references "
                     f"unknown parent '{equipment.parent}'."
                 )
+
+    @staticmethod
+    def _validate_relations(
+        equipment_types: list[EquipmentType],
+    ) -> None:
+        """
+        Verifica la consistenza delle relazioni.
+        """
+
+        ids = {
+            equipment.id
+            for equipment in equipment_types
+        }
+
+        for equipment in equipment_types:
+            for relation in equipment.relations:
+
+                if not relation.relation_type.strip():
+                    raise InvalidEquipmentDefinitionError(
+                        f"Equipment '{equipment.id}' "
+                        "has a relation with an empty type."
+                    )
+
+                if not relation.target_types:
+                    raise InvalidEquipmentDefinitionError(
+                        f"Equipment '{equipment.id}' "
+                        "has a relation without target types."
+                    )
+
+                for target in relation.target_types:
+                    if target not in ids:
+                        raise UnknownRelationError(
+                            f"Equipment '{equipment.id}' "
+                            f"references unknown target '{target}'."
+                        )
