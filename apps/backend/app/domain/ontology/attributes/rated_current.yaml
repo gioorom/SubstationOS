@@ -1,0 +1,7 @@
+id: rated_current
+name: Rated Current
+data_type: float
+description: Current that equipment can carry continuously under specified operating conditions.
+unit: A
+metadata:
+  domain: electrical_rating

@@ -1,0 +1,10 @@
+id: frequency
+name: Rated Frequency
+data_type: float
+description: Nominal frequency of the electrical system.
+unit: Hz
+allowed_values:
+  - 50
+  - 60
+metadata:
+  domain: electrical_rating

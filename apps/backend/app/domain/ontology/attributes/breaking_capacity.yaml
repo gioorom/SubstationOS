@@ -1,0 +1,7 @@
+id: breaking_capacity
+name: Breaking Capacity
+data_type: float
+description: Maximum prospective fault current that switching equipment can interrupt safely.
+unit: kA
+metadata:
+  domain: switching_rating

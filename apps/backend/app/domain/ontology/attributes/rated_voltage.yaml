@@ -1,0 +1,7 @@
+id: rated_voltage
+name: Rated Voltage
+data_type: float
+description: Nominal voltage assigned to equipment under specified operating conditions.
+unit: kV
+metadata:
+  domain: electrical_rating
