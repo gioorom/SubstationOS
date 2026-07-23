@@ -1,0 +1,6 @@
+id: model
+name: Model
+data_type: string
+description: Manufacturer model or product designation.
+metadata:
+  domain: identification

@@ -12,6 +12,8 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.database.database import SessionLocal
+from app.domain.project.project_document_scope import DocumentScope
+from app.domain.project.project_lifecycle import MUTABLE_STATES
 from app.models.document import Document
 from app.models.project import Project
 from app.services.knowledge_graph import ingest_document
@@ -41,8 +43,26 @@ def get_db():
 async def upload_document(
     file: UploadFile = File(...),
     project_id: int | None = Form(default=None),
+    scope: DocumentScope = Form(default=DocumentScope.PROJECT),
     db: Session = Depends(get_db),
 ):
+    # Repository rule (ADR-0005): every document belongs to exactly one
+    # Project, or to the Canonical Library - never both, never neither.
+    if scope is DocumentScope.PROJECT and project_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail="A project_id is required for scope 'project'",
+        )
+
+    if scope is DocumentScope.CANONICAL_LIBRARY and project_id is not None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Canonical Library documents must not reference a "
+                "project"
+            ),
+        )
+
     project = None
 
     if project_id is not None:
@@ -58,6 +78,16 @@ async def upload_document(
                 detail="Project not found",
             )
 
+        if project.lifecycle_state not in MUTABLE_STATES:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Project '{project.code}' is "
+                    f"'{project.lifecycle_state.value}' and is "
+                    "read-only"
+                ),
+            )
+
     filename = file.filename or "unnamed_document"
 
     saved_path = save_file(
@@ -70,6 +100,7 @@ async def upload_document(
         file_path=str(saved_path),
         project_id=project.id if project else None,
         project_name=project.name if project else "Unknown",
+        scope=scope,
     )
 
     db.add(document)
@@ -120,6 +151,7 @@ async def upload_document(
         "category": document.category,
         "revision": document.revision,
         "project_name": document.project_name,
+        "scope": document.scope,
         "uploaded_at": document.uploaded_at,
         "knowledge_graph": {
             "status": knowledge_graph_status,

@@ -1,12 +1,17 @@
 # Extraction Pipeline
 
-This document is the authoritative specification of how SubstationOS turns an
-engineering PDF into knowledge the ontology is allowed to trust. Every prompt
-in `prompts/`, every template in `templates/`, and every manifest in
+This document specifies how SubstationOS turns an engineering document into
+knowledge a Project's own Knowledge Graph is allowed to trust. It is the
+implementation of the methodology defined in
+[`../protocol/CANONICAL_KNOWLEDGE_PROTOCOL.md`](../protocol/CANONICAL_KNOWLEDGE_PROTOCOL.md)
+— the constitution — and must never contradict it (see
+[`../README.md`](../README.md), "Governing rule"). Every prompt in
+`prompts/`, every template in `templates/`, and every manifest in
 `manifests/` exists to enforce what is written here. If any of those files
-ever appears to contradict this README, this README wins — fix the other
-file, per `CLAUDE.md` §11 ("when code and documentation disagree, that is a
-bug").
+ever appears to contradict this README, this README wins for matters of
+pipeline mechanics; if this README ever appears to contradict the Protocol,
+the Protocol wins and this file is corrected — per `CLAUDE.md` §11 ("when
+code and documentation disagree, that is a bug").
 
 ## 1. Purpose
 
@@ -27,104 +32,166 @@ by a named engineer, not by an algorithm.
 
 ## 2. The complete workflow
 
+**Aligned to Architecture Freeze v1.0.** This workflow describes the
+*routine* path a document takes: one Project's engineering document,
+processed into that Project's own knowledge. It is not the path by which
+the shared Canonical Domain vocabulary itself grows — see
+[§2.1](#21-how-this-relates-to-the-canonical-knowledge-protocols-own-lifecycle)
+for exactly how the two relate; nothing below contradicts the Canonical
+Knowledge Protocol, but earlier wording in this file blurred the two paths
+together, and that is corrected here.
+
 ```
-Engineering PDF
+Engineering Document
       ↓  (1)
-AI Extraction
+Raw Extraction
       ↓  (2)
 Engineering Review
       ↓  (3)
-Canonical Knowledge
+Project Canonical Knowledge
       ↓  (4)
-Ontology
+Domain Mapping
       ↓  (5)
-YAML Definitions
+Project Knowledge Graph
       ↓  (6)
-Python Domain Model
+Query Services
       ↓  (7)
 Application
 ```
 
-### Stage 1 — Engineering PDF
+### Stage 1 — Engineering Document
 
-The source of truth. Lives in `storage/documents/`. Never modified by this
-pipeline. A PDF is never "consumed" or deleted — it remains the permanent
-reference every downstream fact points back to.
+The source of truth: a PDF, Excel sheet, DWG drawing, image, or other
+supported document family (see
+`docs/architecture/project_intelligence_architecture.md` §3), living in a
+Project's Document Repository under `storage/documents/`. Never modified by
+this pipeline. A document is never "consumed" or deleted — it remains the
+permanent reference every downstream fact points back to.
 
-### Stage 2 — AI Extraction
+### Stage 2 — Raw Extraction
 
-An AI session reads one source PDF, using one prompt from
+An AI session reads one source document, using one prompt from
 [`prompts/`](prompts/) at a time (one prompt per knowledge category — an
 extraction pass for "equipment" does not also extract "signals"). The
-output is a Markdown file per category, following the matching template from
-[`templates/`](templates/), written into
-[`outputs/raw/`](outputs/raw/README.md).
+output is a Markdown file per category, following the matching template
+from [`templates/`](templates/), written into
+[`outputs/raw/`](outputs/raw/README.md). Every entry starts in review state
+`RAW`, per the Canonical Knowledge Protocol §6.
 
-This stage produces **candidate** knowledge only. It is exhaustive but
-unreviewed, and it is explicitly disallowed from resolving any ambiguity —
-see [§4 Extraction Rules](#4-extraction-rules). Nothing in `outputs/raw/` is
-ever cited by the domain model.
+This stage produces **candidate** knowledge only, scoped to one Project. It
+is exhaustive but unreviewed, and it is explicitly disallowed from
+resolving any ambiguity — see [§4 Extraction Rules](#4-extraction-rules).
+Nothing in `outputs/raw/` is ever cited by the domain model, and nothing
+this stage produces ever creates or edits a Canonical Domain concept — see
+[§2.1](#21-how-this-relates-to-the-canonical-knowledge-protocols-own-lifecycle).
 
 ### Stage 3 — Engineering Review
 
-A qualified engineer reads the raw extraction alongside the source PDF and
-fills in the template's `Engineering review` field for every entry: confirm,
-correct, reject, or flag as an open question. Reviewed files are written to
-[`outputs/reviewed/`](outputs/reviewed/README.md), preserving the same
-filename as the raw file they originate from so the two can always be
-diffed.
+A qualified engineer reads the raw extraction alongside the source document
+and assigns each entry a formal review state, per the Canonical Knowledge
+Protocol §6:
+
+- `UNDER_REVIEW` — evaluation has started but not reached a verdict (most
+  often because an open question is unresolved).
+- `APPROVED` — the entry accurately reflects the source, possibly after a
+  correction (the correction is recorded; the original extracted text
+  stays visible).
+- `REJECTED` — the entry should not proceed (mis-extraction, inferred
+  rather than stated, or otherwise invalid).
+
+Reviewed files are written to [`outputs/reviewed/`](outputs/reviewed/README.md),
+preserving the same filename as the raw file they originate from so the two
+can always be diffed. `SUPERSEDED` is not assigned at this stage — it only
+ever applies to a fact that was already `APPROVED` and is later replaced
+(Protocol §6, §9).
 
 Review is mandatory for every extracted statement, not spot-checked. A file
-with any entry still lacking an `Engineering review` verdict has not
-completed this stage.
+with any entry still in `RAW` or `UNDER_REVIEW` has not completed this
+stage.
 
-### Stage 4 — Canonical Knowledge
+### Stage 4 — Project Canonical Knowledge
 
-Once reviewed, an engineer (or a designated knowledge owner) makes the
-**canonicalization decision**: when multiple documents, or multiple
-reviewed entries, describe the same real-world entity, exactly one canonical
-record is produced, with every contributing source still listed in its
-`References` field. Conflicting values are never silently averaged, picked
-by recency, or picked by confidence score — the decision and its reasoning
-are written into the template's `Canonical decision` field by name.
+Once `APPROVED`, an engineer (or a designated knowledge owner) makes the
+**project-level canonicalization decision**: when multiple documents, or
+multiple reviewed entries *within this Project*, describe the same
+real-world entity, exactly one canonical record is produced for that
+Project, with every contributing source still listed in its `References`
+field. Conflicting values are never silently averaged, picked by recency,
+or picked by confidence score — the decision and its reasoning are written
+into the template's `Canonical decision` field by name, per the Protocol's
+Conflict Resolution workflow (§7 of that document).
 
-Canonical files live in [`outputs/canonical/`](outputs/canonical/README.md)
-and are the **only** artifacts in `knowledge/` the next stage is allowed to
-read from.
+Canonical files live in [`outputs/canonical/`](outputs/canonical/README.md).
+This canonicalization is scoped to one Project — it is a distinct
+step from, and never modifies, the shared Canonical Domain
+(`app/domain/ontology/**`). See
+[§2.1](#21-how-this-relates-to-the-canonical-knowledge-protocols-own-lifecycle).
 
-### Stage 5 — Ontology
+### Stage 5 — Domain Mapping
 
-Canonical knowledge is mapped onto SubstationOS's Electrical Ontology
-concepts as defined in `CLAUDE.md` §4.3 (`app/domain/ontology/`):
-`AttributeDefinition`, `EquipmentDefinition`, and their relationships. This
-is a modelling step — deciding which canonical facts become which ontology
-concepts — done by an engineer familiar with both the canonical knowledge
-and the existing ontology, to avoid duplicating a concept that already
-exists under a different name.
+Project canonical facts are mapped onto **existing** Canonical Domain
+concepts — `EquipmentDefinition`, `AttributeDefinition`, and (once
+implemented) the Relationship Vocabulary and Domain Constraints described
+in `docs/architecture/project_intelligence_architecture.md` §1 — by
+reference (`id`), never by authoring a new concept. This is a modelling
+step: *which existing canonical concept does this project fact
+instantiate?*
 
-### Stage 6 — YAML Definitions
+If a project fact does not match any existing canonical concept, this stage
+does **not** invent one. The fact is recorded with an explicit open
+question (no matching canonical concept) and carried forward unmapped —
+extending the Canonical Domain is a separate, rare, deliberately
+human-governed process (§2.1), never an automatic consequence of mapping
+one project's facts.
 
-Ontology concepts are authored as YAML domain data, following the shapes
-and rules in `CLAUDE.md` §7, under `app/domain/ontology/attributes/*.yaml`
-and `app/domain/ontology/equipment_definitions/**/*.yaml`. Every field in
-that YAML must be traceable to a canonical knowledge file, which is in turn
-traceable to a source PDF and page. This is the first stage where this
-pipeline's output touches version-controlled domain data — and, per
-`CLAUDE.md` §16, once an `id` is published here it is a contract.
+### Stage 6 — Project Knowledge Graph
 
-### Stage 7 — Python Domain Model
+Successfully mapped, approved, project-canonical facts become nodes and
+edges in that Project's Knowledge Graph — conceptually specified in
+`docs/architecture/project_intelligence_architecture.md` §7. This is the
+**only** stage output the next stage may query. Every node and edge still
+carries its full traceability chain back through Stages 1–4 (§6 below).
 
-The existing Python domain layer (`AttributeDefinitionFactory`,
-`EquipmentDefinitionFactory`, `AttributeCatalog`, `EquipmentDefinitionCatalog`,
-`AttributeDefinitionValidator`, `EquipmentDefinitionValidator`, the
-`*Engine` classes — all already implemented per `CLAUDE.md` §4.3) loads,
-validates and serves the YAML definitions produced in Stage 6. This
-pipeline does not modify that code; it only feeds it correct data.
+### Stage 7 — Query Services
+
+The Semantic Query Engine (`docs/architecture/project_intelligence_architecture.md`
+§8) answers natural-language questions by querying the Project Knowledge
+Graph — never by asking an AI model to recall or infer an answer. Every
+result carries the traceability record (Project, Document, Drawing, Page,
+Revision, Confidence) forward to the next stage.
 
 ### Stage 8 — Application
 
-Routers, services, and eventually the Knowledge Graph and comprehension
-engine consume the domain model. Out of scope for `knowledge/`.
+The AI Assistant and any other consuming surface present query results to
+the user, always with their traceability record attached. Out of scope for
+`knowledge/` itself.
+
+### 2.1 How this relates to the Canonical Knowledge Protocol's own lifecycle
+
+The Canonical Knowledge Protocol (§2 of that document) defines a *ten*-stage
+lifecycle ending in `Domain Concepts → Ontology → Attribute Definitions →
+Equipment Definitions → Python Domain Model → Application`. That is
+**not** a contradiction of the eight-stage workflow above — it is a
+different, rarer path, and both share the same first three stages
+(Engineering Document → Raw Extraction → Engineering Review) exactly.
+
+- **The path above (routine, this file):** taken every time a document is
+  processed for a Project. It ends by *mapping* facts onto the Canonical
+  Domain as it already exists, and by populating that Project's own
+  Knowledge Graph. It never authors new canonical YAML.
+- **The Protocol's own path (rare, `CANONICAL_KNOWLEDGE_PROTOCOL.md` §2):**
+  taken only when Stage 5 (Domain Mapping) surfaces a genuinely new
+  concept with no existing canonical match, and a human deliberately
+  decides the Canonical Domain itself should be extended. That decision is
+  never made inside a routine extraction session — it is its own,
+  separately governed process, using the Protocol's Stages 5–10 verbatim.
+
+An earlier version of this file described only one lifecycle, ending in
+`Ontology → YAML Definitions → Python Domain Model`, as if that were the
+routine outcome of processing project documents. It was not: routine
+project extraction was always meant to enrich one Project's knowledge, not
+to author shared vocabulary. That conflation is what this section, and the
+renamed Stages 4–7 above, correct.
 
 ## 3. Directory responsibilities
 
@@ -205,8 +272,8 @@ itself.
    entity appears to be described in two places — even within the same
    document, even by the same extraction pass — both extractions are kept
    as separate entries with their own source references. Merging is a
-   Stage 4 (Canonical Knowledge) decision made by a named engineer, never an
-   automatic step of Stage 2 or Stage 3.
+   Stage 4 (Project Canonical Knowledge) decision made by a named engineer,
+   never an automatic step of Stage 2 or Stage 3.
 7. **Conflicts between documents must be preserved for review.** If two
    documents state different values for what might be the same fact, both
    values, both sources, and the apparent conflict are recorded explicitly
@@ -239,8 +306,9 @@ raw counterpart under `raw/`, so the two can be diffed directly to see
 exactly what review changed.
 
 **Canonical outputs.** Organized **by category, then by canonical entity
-id** — not by document — because Stage 4 output describes real-world
-entities, which may be attested by several documents at once:
+id** — not by document — because Stage 4 (Project Canonical Knowledge)
+output describes real-world entities, which may be attested by several
+documents at once:
 
 ```
 outputs/canonical/<category>/<entity-id>.md
@@ -258,19 +326,23 @@ as sub-folder names under `outputs/canonical/`.
 
 ## 6. Traceability Philosophy
 
-Every fact in the eventual Knowledge Graph must answer, without ambiguity:
+Every fact in the Project Knowledge Graph must answer, without ambiguity:
 *"how do we know this, and how sure are we?"*
 
 That answer is a chain, and every link in the chain must be inspectable by a
 human, forever:
 
 ```
-YAML field (Stage 6)
-  → cites →  Canonical entity file (Stage 4, outputs/canonical/)
+Project Knowledge Graph node/edge (Stage 6)
+  → cites →  Project canonical entity file (Stage 4, outputs/canonical/)
                 → cites →  Reviewed entry (Stage 3, outputs/reviewed/)
                               → cites →  Raw extraction (Stage 2, outputs/raw/)
                                             → cites →  Source document + page (Stage 1)
 ```
+
+(On the separate, rare canonical-domain-extension path — §2.1 — the
+equivalent chain ends one stage further, in a YAML field under
+`app/domain/ontology/`, per the Canonical Knowledge Protocol §2.)
 
 Nothing is permitted to break this chain. A canonical entity with no
 `References` back to a reviewed entry, or a reviewed entry with no

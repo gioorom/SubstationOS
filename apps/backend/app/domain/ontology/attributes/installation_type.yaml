@@ -1,0 +1,10 @@
+id: installation_type
+name: Installation Type
+data_type: string
+description: Environmental installation arrangement.
+allowed_values:
+  - indoor
+  - outdoor
+  - indoor_outdoor
+metadata:
+  domain: installation

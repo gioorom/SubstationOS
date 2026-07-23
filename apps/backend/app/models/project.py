@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -8,6 +10,8 @@ from sqlalchemy import Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.database import Base
+from app.domain.project.project_lifecycle import ProjectLifecycleState
+from app.domain.project.project_models import UNVERSIONED_CANONICAL_DOMAIN
 
 if TYPE_CHECKING:
     from app.models.document import Document
@@ -54,6 +58,11 @@ class Project(Base):
         nullable=True,
     )
 
+    country: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+    )
+
     location: Mapped[str | None] = mapped_column(
         String(150),
         nullable=True,
@@ -75,10 +84,44 @@ class Project(Base):
         nullable=True,
     )
 
+    lifecycle_state: Mapped[ProjectLifecycleState] = mapped_column(
+        SqlEnum(ProjectLifecycleState),
+        nullable=False,
+        default=ProjectLifecycleState.DRAFT,
+    )
+
+    canonical_domain_version: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default=UNVERSIONED_CANONICAL_DOMAIN,
+    )
+
+    created_by: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
         nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
     )
 
     documents: Mapped[list["Document"]] = relationship(

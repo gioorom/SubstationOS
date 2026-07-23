@@ -1,0 +1,7 @@
+id: insulation_level
+name: Insulation Level
+data_type: string
+description: Rated insulation level of the equipment.
+metadata:
+  domain: electrical_rating
+  iec_name: rated_insulation_level

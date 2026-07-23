@@ -1,0 +1,7 @@
+id: short_time_withstand_duration
+name: Short-Time Withstand Duration
+data_type: float
+description: Duration associated with the short-time withstand current.
+unit: s
+metadata:
+  domain: short_circuit

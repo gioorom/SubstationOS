@@ -1,0 +1,8 @@
+id: short_time_withstand_current
+name: Short-Time Withstand Current
+data_type: float
+description: RMS current the equipment can withstand for a specified short duration.
+unit: kA
+metadata:
+  domain: short_circuit
+  abbreviation: Ik

@@ -1,0 +1,8 @@
+id: peak_withstand_current
+name: Peak Withstand Current
+data_type: float
+description: Peak current the equipment can withstand during a short-circuit event.
+unit: kA
+metadata:
+  domain: short_circuit
+  abbreviation: Ip

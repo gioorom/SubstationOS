@@ -1,0 +1,6 @@
+id: year_of_manufacture
+name: Year of Manufacture
+data_type: integer
+description: Calendar year in which the equipment was manufactured.
+metadata:
+  domain: identification

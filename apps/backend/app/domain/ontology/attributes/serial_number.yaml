@@ -1,0 +1,6 @@
+id: serial_number
+name: Serial Number
+data_type: string
+description: Unique serial number assigned by the manufacturer.
+metadata:
+  domain: identification

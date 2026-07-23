@@ -1,0 +1,6 @@
+id: manufacturer
+name: Manufacturer
+data_type: string
+description: Manufacturer of the equipment.
+metadata:
+  domain: identification

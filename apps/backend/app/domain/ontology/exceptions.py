@@ -55,6 +55,20 @@ class DuplicateEquipmentTypeError(OntologyValidationError):
     """
 
 
+class DuplicateEquipmentDefinitionError(OntologyValidationError):
+    """
+    Sono presenti due o più EquipmentDefinition con lo stesso id
+    (confronto case-insensitive).
+    """
+
+    def __init__(self, duplicate_ids: str) -> None:
+        self.duplicate_ids = duplicate_ids
+
+        super().__init__(
+            f"Duplicate equipment definitions found: {duplicate_ids}"
+        )
+
+
 class InvalidEquipmentDefinitionError(OntologyValidationError):
     """
     Definizione di EquipmentType non valida.
@@ -88,6 +102,19 @@ class EquipmentTypeNotFoundError(OntologyError):
 
         super().__init__(
             f"Equipment type '{equipment_type_id}' not found."
+        )
+
+
+class EquipmentDefinitionNotFoundError(OntologyError):
+    """
+    EquipmentDefinition richiesta ma inesistente.
+    """
+
+    def __init__(self, equipment_id: str):
+        self.equipment_id = equipment_id
+
+        super().__init__(
+            f"Equipment definition '{equipment_id}' not found."
         )
 
 

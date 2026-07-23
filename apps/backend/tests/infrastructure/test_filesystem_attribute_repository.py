@@ -1,69 +1,69 @@
 from pathlib import Path
 
+from app.domain.ontology.attribute_models import (
+    AttributeDefinition,
+)
 from app.infrastructure.ontology.filesystem_attribute_repository import (
     FilesystemAttributeRepository,
 )
+
 
 ATTRIBUTES_PATH = Path(
     "app/domain/ontology/attributes"
 )
 
 
-def test_repository_loads_attributes():
-    """
-    Il repository deve caricare tutte
-    le definizioni degli attributi.
-    """
-
+def load_attributes() -> list[AttributeDefinition]:
     repository = FilesystemAttributeRepository(
         ATTRIBUTES_PATH
     )
 
-    attributes = (
-        repository.load_attribute_definitions()
-    )
-
-    assert len(attributes) == 4
+    return repository.load_attribute_definitions()
 
 
-def test_repository_loads_rated_voltage():
-    """
-    rated_voltage deve essere presente.
-    """
+def test_repository_loads_all_attributes():
+    attributes = load_attributes()
 
-    repository = FilesystemAttributeRepository(
-        ATTRIBUTES_PATH
-    )
+    assert len(attributes) == 18
 
-    attributes = (
-        repository.load_attribute_definitions()
-    )
+
+def test_repository_loads_expected_attribute_ids():
+    attributes = load_attributes()
 
     ids = {
         attribute.id
         for attribute in attributes
     }
 
-    assert "rated_voltage" in ids
+    assert ids == {
+        "breaking_capacity",
+        "frequency",
+        "installation_type",
+        "insulation_level",
+        "lightning_impulse_withstand_voltage",
+        "manufacturer",
+        "model",
+        "neutral_configuration",
+        "number_of_phases",
+        "peak_withstand_current",
+        "power_frequency_withstand_voltage",
+        "rated_current",
+        "rated_voltage",
+        "serial_number",
+        "short_time_withstand_current",
+        "short_time_withstand_duration",
+        "technology",
+        "year_of_manufacture",
+    }
 
 
 def test_repository_loads_frequency():
-    """
-    frequency deve essere presente.
-    """
-
-    repository = FilesystemAttributeRepository(
-        ATTRIBUTES_PATH
-    )
-
-    attributes = (
-        repository.load_attribute_definitions()
-    )
+    attributes = load_attributes()
 
     frequency = next(
-        a
-        for a in attributes
-        if a.id == "frequency"
+        attribute
+        for attribute in attributes
+        if attribute.id == "frequency"
     )
 
     assert frequency.unit == "Hz"
@@ -73,21 +73,29 @@ def test_repository_loads_frequency():
     )
 
 
+def test_repository_loads_number_of_phases():
+    attributes = load_attributes()
+
+    number_of_phases = next(
+        attribute
+        for attribute in attributes
+        if attribute.id == "number_of_phases"
+    )
+
+    assert number_of_phases.allowed_values == (
+        1,
+        3,
+    )
+    assert number_of_phases.default_value == 3
+
+
 def test_repository_returns_domain_objects():
-    """
-    Il repository deve restituire
-    oggetti di dominio.
-    """
-
-    repository = FilesystemAttributeRepository(
-        ATTRIBUTES_PATH
-    )
-
-    attributes = (
-        repository.load_attribute_definitions()
-    )
+    attributes = load_attributes()
 
     assert all(
-        hasattr(attribute, "data_type")
+        isinstance(
+            attribute,
+            AttributeDefinition,
+        )
         for attribute in attributes
     )

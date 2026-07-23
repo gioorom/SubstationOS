@@ -1,0 +1,10 @@
+id: number_of_phases
+name: Number of Phases
+data_type: integer
+description: Number of electrical phases.
+allowed_values:
+  - 1
+  - 3
+default_value: 3
+metadata:
+  domain: electrical_configuration

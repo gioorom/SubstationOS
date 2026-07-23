@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -8,6 +10,7 @@ from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.database import Base
+from app.domain.project.project_document_scope import DocumentScope
 
 if TYPE_CHECKING:
     from app.models.project import Project
@@ -79,6 +82,12 @@ class Document(Base):
         String(150),
         nullable=False,
         default="Unknown",
+    )
+
+    scope: Mapped[DocumentScope] = mapped_column(
+        SqlEnum(DocumentScope),
+        nullable=False,
+        default=DocumentScope.PROJECT,
     )
 
     uploaded_at: Mapped[datetime] = mapped_column(

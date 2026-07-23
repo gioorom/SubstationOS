@@ -5,11 +5,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.database.database import Base, SessionLocal, engine
-from app.models import document, project, knowledge_graph
+from app.models import (
+    document,
+    engineering_index,
+    project,
+    knowledge_graph,
+    proposed_claims,
+    review_workflow,
+)
 from app.routers import (
     documents,
+    engineering_index as engineering_index_router,
     knowledge_graph,
     projects,
+    proposed_claims as proposed_claims_router,
+    review_workflow as review_workflow_router,
 )
 
 load_dotenv()
@@ -39,6 +49,9 @@ app.add_middleware(
 app.include_router(documents.router)
 app.include_router(projects.router)
 app.include_router(knowledge_graph.router)
+app.include_router(engineering_index_router.router)
+app.include_router(proposed_claims_router.router)
+app.include_router(review_workflow_router.router)
 
 
 @app.get("/")

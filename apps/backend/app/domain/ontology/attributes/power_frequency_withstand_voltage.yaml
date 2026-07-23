@@ -1,0 +1,7 @@
+id: power_frequency_withstand_voltage
+name: Power Frequency Withstand Voltage
+data_type: float
+description: RMS power-frequency voltage withstand capability.
+unit: kV
+metadata:
+  domain: insulation

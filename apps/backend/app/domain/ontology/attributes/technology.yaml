@@ -1,0 +1,14 @@
+id: technology
+name: Technology
+data_type: string
+description: Main construction or insulation technology of the equipment.
+allowed_values:
+  - air_insulated
+  - gas_insulated
+  - solid_insulated
+  - oil_insulated
+  - vacuum
+  - hybrid
+  - dry_type
+metadata:
+  domain: technology

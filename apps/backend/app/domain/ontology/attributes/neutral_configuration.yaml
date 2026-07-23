@@ -1,0 +1,13 @@
+id: neutral_configuration
+name: Neutral Configuration
+data_type: string
+description: Neutral-point configuration of the electrical system or equipment.
+allowed_values:
+  - isolated
+  - solidly_grounded
+  - resistance_grounded
+  - reactance_grounded
+  - resonant_grounded
+  - not_applicable
+metadata:
+  domain: electrical_configuration

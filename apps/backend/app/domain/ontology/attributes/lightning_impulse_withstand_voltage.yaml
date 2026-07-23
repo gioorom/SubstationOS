@@ -1,0 +1,8 @@
+id: lightning_impulse_withstand_voltage
+name: Lightning Impulse Withstand Voltage
+data_type: float
+description: Peak voltage withstand capability under a standard lightning impulse.
+unit: kV
+metadata:
+  domain: insulation
+  abbreviation: LIWV

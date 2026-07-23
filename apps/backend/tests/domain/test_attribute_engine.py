@@ -22,6 +22,6 @@ def test_engine_loads_attribute_catalog():
 
     catalog = engine.load()
 
-    assert len(catalog) == 4
+    assert len(catalog) == 18
     assert "rated_voltage" in catalog
     assert catalog.require("frequency").unit == "Hz"
