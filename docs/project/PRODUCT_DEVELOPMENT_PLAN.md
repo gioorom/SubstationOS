@@ -117,10 +117,13 @@ readiness declaration)
 | Canonical Domain (ontology) | Mature — implemented, tested, versioned by git |
 | Project Platform (lifecycle, scope) | Mature — implemented, tested |
 | Document Repository | Functional — upload/storage/scope work; classification unpopulated |
-| Engineering Index | Does not exist |
-| Knowledge Extraction | Functional but ungoverned — writes directly into graph storage, bypassing the mandatory review gate (ADR-0004 violation, tracked and accepted, not yet remediated) |
-| Project Knowledge Graph | Storage/query exist; review-state, canonicalization, and versioning fields are missing |
-| Semantic Query Engine | Query layer exists; NL interpretation and answer generation are not built |
+| Engineering Index | Implemented — idempotent, project-scoped, document-traceable (Milestones 9, 9.1) |
+| Review Workflow | Implemented — `ProposedClaim`/`ReviewCandidate` state machine; the ADR-0004 mandatory review gate is closed for this pipeline (Milestone 10) |
+| Canonicalization | Implemented — deterministic normalization of `APPROVED` claims into `CanonicalFact`s (Milestone 11) |
+| Project Knowledge Graph | Implemented — Graph Builder translates facts into operations, Graph Persistence executes them atomically and idempotently against a project-scoped SQL-backed store (Milestones 11.1, 11.2, ADR-0007); schema lifecycle is now Alembic-managed rather than `create_all()` (Milestone 12, ADR-0008); the legacy `ingest_document`/`ProjectEntity`/`EntityRelation` path is retained, isolated, and marked deprecated rather than merged or deleted (Milestone 12, ADR-0009) |
+| Graph Query | Implemented — deterministic, read-only queries (by id, by type, by attribute presence, 1-hop adjacency, statistics, orphan detection) over current graph state through its own read port (Milestone 11.3); NL interpretation, semantic ranking, and answer generation are not yet built (see [knowledge_pipeline_overview.md](../architecture/knowledge_pipeline_overview.md)) |
+| Structured Retrieval | Implemented — deterministic, explainable `KnowledgeCandidate` ranking from structured criteria (entity lookup, entity type, attribute, relationship, lexical, combined) over Graph Query's read model, with fixed scoring weights and deterministic candidate identity (Milestone 13, ADR-0010); no embeddings, vector search, or NL interpretation |
+| Context Builder | Does not exist — expected next (Milestone 13's own follow-up) |
 | AI Assistant | Does not exist |
 | Web frontend | Early — project listing/detail pages exist (`apps/frontend`), no auth, no review UI |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
@@ -280,7 +283,7 @@ Enterprise layers to complete first.
 **Scope:** Engineering Index, Review Workflow, Knowledge Graph,
 Traceability Engine.
 
-**Status:** Next
+**Status:** In Progress
 
 - **Goal:** Close the architecture's single most important open gap —
   today, AI-extracted facts are written directly into queryable storage
@@ -298,15 +301,33 @@ Traceability Engine.
   state, reviewer, and review date; every fact can answer all six
   Traceability fields (architecture doc §9) on demand; Architecture
   Freeze Checklist items 4, 5, and 6 move to `READY`.
-- **Expected deliverables:** `app/domain/engineering_index/**` (new
-  bounded context); review-state fields on `ProjectEntity`/
-  `EntityRelation` or their replacements; a canonicalization service
-  that promotes `APPROVED` facts into the graph; Mandatory Metadata
-  fields (Drawing Number, Discipline, Page, Extraction Session,
-  Reviewer, Review Date, Canonical Version).
-- **Implementation maturity:** Not started. Fully designed
-  (`project_intelligence_architecture.md` §§4–7, ADR-0002/0004,
-  `CANONICAL_KNOWLEDGE_PROTOCOL.md` §§4–6), zero percent built.
+- **Delivered so far:** `app/domain/engineering_index/**` (Engineering
+  Index, with idempotent replace/clear hardening); `app/domain/proposed_claims/**`
+  and `app/domain/review_workflow/**` (the mandatory review gate —
+  `ProposedClaim`s reviewed via `ReviewCandidate`s through a
+  `PENDING`/`APPROVED`/`REJECTED`/`NEEDS_CHANGES` state machine, closing
+  the ADR-0004 violation this EPIC's Goal names); `app/domain/canonicalization/**`
+  (deterministic entity/predicate/attribute normalization of `APPROVED`
+  claims into `CanonicalFact`s, idempotent by review candidate);
+  `app/domain/graph_builder/**` (translates `CanonicalFact`s into a
+  deterministic, deduplicated `GraphOperationBatch` — no persistence,
+  no database); `app/domain/project_knowledge_graph/**` (executes a
+  batch atomically against a project-scoped graph, idempotent by a
+  deterministic content fingerprint, via a database-agnostic
+  `GraphStore` port with a SQL reference adapter — ADR-0007).
+- **Not yet delivered:** Document Classification (nothing populates
+  `Document.category` yet, so indexing still runs unclassified); the
+  remaining Mandatory Metadata fields (Drawing Number, Discipline,
+  per-fact Page, Extraction Session, Canonical Version); the Canonical
+  Domain versioning *scheme* itself (`Project.canonical_domain_version`
+  is a real field, still holding only the `"unversioned"` sentinel);
+  deterministic graph queries and inspection (Milestone 11.3).
+- **Implementation maturity:** Substantially built. Every stage from
+  "engineer approves a claim" through "that fact exists as queryable
+  graph state" now works end-to-end, backed by a SQL reference store;
+  the review gate itself has been fully closed. What remains is
+  Traceability metadata completeness, Canonical Domain versioning, and
+  the query layer on top of the graph this EPIC now actually has.
 
 ### EPIC 4 — Engineering Query Engine
 
@@ -455,54 +476,156 @@ interruptions, and are ranges, not commitments.
 
 ### EPIC 3 — Project Intelligence
 
-**Milestone 9 — Engineering Index**
+**Milestone 9 — Engineering Index** — *Completed*
 - Objective: build the fast, unreviewed, per-document inventory of
   candidate mentions (ADR-0002) as a new bounded context.
-- Expected duration: 2–3 weeks.
-- Dependencies: EPIC 2 (Project boundary); Document Classification
-  populating `Document.category` (currently an unused field).
-- Architecture impact: none — this is designed, not decided, by
-  ADR-0002 and architecture doc §5; implementation must not
-  reinterpret the design.
-- Implementation impact: new `app/domain/engineering_index/**` and
-  `app/infrastructure/engineering_index/**`; a new indexing step
-  triggered on upload, separate from and prior to extraction.
+- Delivered: `app/domain/engineering_index/**` +
+  `app/infrastructure/engineering_index/**`; entries registered per
+  document/project, `PROJECT`-scope-only (ADR-0005), lifecycle-mutability
+  guarded.
+- Architecture impact: none — implemented ADR-0002 and architecture doc
+  §5 as designed.
+- Deferred out of this milestone (unchanged): Document Classification
+  still does not populate `Document.category`; indexing still runs
+  unclassified.
 
-**Milestone 10 — Mandatory Review Gate Closure**
-- Objective: stop `ingest_document` from writing directly into
-  queryable graph storage; route all extraction output through the
-  Canonical Knowledge Protocol's review-state machine before anything
-  reaches the graph. Closes the ADR-0004 violation.
-- Expected duration: 3–4 weeks.
-- Dependencies: Milestone 9 (the Index is where unreviewed output goes
-  instead).
-- Architecture impact: none — implements an already-accepted, not-yet-
-  implemented decision (ADR-0004).
-- Implementation impact: review-state, reviewer, and review-date fields
-  on the extraction output model; a review action (approve/reject) as a
-  first-class application service; `ingest_document` rewritten to write
-  to the Index, not the Graph.
+**Milestone 9.1 — Engineering Index Hardening** — *Completed*
+- Objective: make the Index actually satisfy ADR-0002's "freely
+  rebuildable, idempotent" properties in practice, not just in
+  principle.
+- Delivered: atomic per-document replace/clear operations, a
+  database-enforced idempotency/uniqueness safety net, and a typed
+  source-locator abstraction (page, sheet, cell range, drawing layout,
+  ...) so indexing is not conceptually restricted to PDF pages.
+- Architecture impact: none — hardening of Milestone 9's own contract.
 
-**Milestone 11 — Project Knowledge Graph Canonicalization & Versioning**
-- Objective: populate the Project Knowledge Graph only from `APPROVED`,
-  canonicalized facts; add per-entity versioning and supersession links
-  (Canonical Knowledge Protocol §9).
-- Expected duration: 3–4 weeks.
-- Dependencies: Milestone 10 (a review gate producing `APPROVED` facts
-  to canonicalize).
-- Architecture impact: none — implements ADR-0002's second layer and
-  the Protocol's existing versioning design.
-- Implementation impact: a canonicalization service; `canonical_version`
-  and `Supersedes`/`Superseded by` fields on graph entities; graph
-  writes become append-only.
+**Milestone 10 — Mandatory Review Gate Closure** — *Completed*
+- Objective: stop unreviewed extraction output from reaching queryable
+  graph storage; route it through a real review-state machine first.
+  Closes the ADR-0004 violation.
+- Delivered: `app/domain/proposed_claims/**` (a `ProposedClaim` —
+  subject/predicate/object, cited evidence from the Engineering Index)
+  and `app/domain/review_workflow/**` (a `ReviewCandidate` per claim,
+  moving through `PENDING`/`APPROVED`/`REJECTED`/`NEEDS_CHANGES`, with
+  an append-only review history ledger). Nothing reaches the Project
+  Knowledge Graph without first being an `APPROVED` `ReviewCandidate`.
+- Architecture impact: none — implements an already-accepted decision
+  (ADR-0004), reshaped once (Milestone 10.1) so Review Workflow reviews
+  Proposed Claims rather than raw Engineering Index entries directly,
+  since one claim can be built from more than one entry.
+
+**Milestone 11 — Canonicalization Pipeline** — *Completed*
+- Objective: convert `APPROVED` Proposed Claims into canonical
+  engineering facts — deterministic entity/predicate/attribute
+  normalization, no AI, no fuzzy matching.
+- Delivered: `app/domain/canonicalization/**` — `CanonicalEntityReference`/
+  `CanonicalPredicate`/`CanonicalAttribute`/`CanonicalValue` built from
+  small, explicit, documented normalization tables; a `CanonicalFact`
+  per approved candidate, idempotent by review candidate id (re-running
+  never duplicates a fact).
+- Architecture impact: none — implements ADR-0002's second layer.
+  Canonicalization does not yet reference the real Canonical Domain
+  (`app/domain/ontology/**`) for entity-type recognition; its
+  vocabulary is self-contained and provisional (see Technical Debt).
+- Implementation impact: `CanonicalFact` persists no graph identifier
+  and no graph edge — it is an intermediate object the next milestone
+  consumes, not the graph itself.
+
+**Milestone 11.1 — Graph Builder** — *Completed*
+- Objective: translate `CanonicalFact`s into deterministic graph
+  mutation instructions, with no persistence and no database of any
+  kind.
+- Delivered: `app/domain/graph_builder/**` — `GraphEntityId`/
+  `GraphRelationshipType` built exclusively from Canonicalization's own
+  types; `CREATE_NODE`/`UPDATE_NODE`/`CREATE_RELATIONSHIP` operations
+  assembled into a deterministically ordered, deduplicated
+  `GraphOperationBatch`, itself persisted as Graph Builder's own output
+  artifact (not graph persistence).
+- Architecture impact: none.
+
+**Milestone 11.2 — Project Knowledge Graph Persistence** — *Completed*
+- Objective: execute a persisted `GraphOperationBatch` against an
+  actual project-scoped graph, atomically and idempotently, behind a
+  database-agnostic port.
+- Delivered: `app/domain/project_knowledge_graph/**` — a `GraphStore`
+  port with a SQL reference adapter (`project_graph_nodes`/
+  `project_graph_relationships`; natural-key identity, no surrogate-id
+  dependence); atomic batch execution via a `GraphUnitOfWork` seam;
+  idempotent retries via a deterministic batch content fingerprint
+  (`ADR-0007`). Neo4j and every other native graph technology are
+  deliberately deferred — see ADR-0007.
+- Architecture impact: **new ADR (0007)** — Graph Builder vs. Graph
+  Persistence separation, project-scoped graph identity, the
+  database-agnostic `GraphStore` port, and why Neo4j is deferred.
+- Contract defect found and fixed in Milestone 11.1's own service (not
+  its domain semantics): a project-scoped `GraphOperationBatch` built
+  for a project with zero Canonical Facts lost its `project_id`
+  (`GraphOperationBatchFactory.build` can only infer a project from its
+  facts), making a freshly created project's batch permanently
+  un-executable. Fixed by having `build_batch_for_project` supply its
+  already-known, already-validated `project_id` when the factory
+  cannot infer one — not a change to the factory's tested logic.
+
+**Milestone 11.3 — Knowledge Graph Query Foundation** — *Completed*
+- Objective: deterministic project graph queries and inspection
+  semantics on top of the now-real graph state — still no LLM, no
+  semantic/vector search.
+- Delivered: `app/domain/graph_query/**` — a `GraphQueryRepository`
+  read port (never `GraphStore`, the write-side port) with a
+  SQLAlchemy adapter; node/relationship lookups by id and by type,
+  attribute-presence filtering, 1-hop neighborhood queries
+  (`GraphQueryValidator` hard-rejects any other depth), orphan
+  detection, and project-wide statistics — every query deterministic
+  and exact, no ranking or NL interpretation of any kind.
+- Architecture impact: none — implements the read side of ADR-0007's
+  already-accepted design.
+- Dependencies: Milestone 11.2 (a persisted, queryable graph to build
+  on).
+
+**Milestone 12 — Knowledge Platform Hardening** — *Completed*
+- Objective: harden the completed deterministic pipeline (Documents →
+  Engineering Index → Proposed Claims → Review Workflow →
+  Canonicalization → Graph Builder → Project Knowledge Graph → Graph
+  Query) — database lifecycle, bounded-context governance, legacy-path
+  isolation, transaction consistency, API consistency, performance
+  visibility, operational reliability — with no new product
+  functionality. Not part of the original plan below; inserted as an
+  unplanned hardening pass once EPIC 3's pipeline reached its first
+  fully-queryable state (Milestone 11.3).
+- Delivered: Alembic-managed schema lifecycle replacing
+  `create_all()` (ADR-0008); the legacy Knowledge Graph path marked
+  deprecated, isolated, and proven never imported by the governed
+  graph path (ADR-0009); a documented repository transaction
+  convention (`repository_transaction_conventions.md`) plus a
+  real-database regression test proving Project Knowledge Graph
+  execution atomicity; an OpenAPI integrity test suite; a lightweight,
+  `ast`-based bounded-context dependency architecture test; a
+  synthetic-data performance baseline for the graph write/read paths
+  (`performance_baseline.md`); an `.env.example` and an operational
+  reliability review (`operational_reliability.md`); this document's
+  own knowledge-pipeline overview
+  (`knowledge_pipeline_overview.md`).
+- Architecture impact: **two new ADRs** (0008, 0009). No existing ADR
+  superseded, no bounded context renamed or merged, no new product
+  behavior.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 12" for
+  Traceability Metadata Completion. That entry's number is left
+  unchanged here rather than cascading a renumber through every
+  subsequent milestone (13–17) — a large, purely cosmetic rewrite this
+  hardening pass deliberately avoided. Whoever schedules Traceability
+  Metadata Completion next should assign it the next free number at
+  that time.
+- Dependencies: Milestone 11.3 (a complete, queryable pipeline to
+  harden).
 
 **Milestone 12 — Traceability Metadata Completion**
 - Objective: make every graph fact able to answer all six Traceability
   fields (Project, Document, Drawing, Page, Revision, Confidence) on
   demand.
 - Expected duration: 1–2 weeks.
-- Dependencies: Milestone 11 (a graph structure to attach the remaining
-  fields to).
+- Dependencies: Milestone 11.2 (a graph structure to attach the
+  remaining fields to).
 - Architecture impact: none — implements architecture doc §9 and
   Protocol §4's Mandatory Metadata, already fully specified.
 - Implementation impact: add Drawing Number, Discipline, per-fact Page,
@@ -524,6 +647,38 @@ interruptions, and are ranges, not commitments.
   values instead of the `"unversioned"` sentinel.
 
 ### EPIC 4 — Engineering Query Engine
+
+**Milestone 13 — Structured Retrieval Foundation** — *Completed*
+- Objective: the first retrieval capability over the governed knowledge
+  pipeline — deterministic, explainable `KnowledgeCandidate`s from
+  structured (non-NL) criteria, consumable by a future frontend and a
+  future Context Builder. No LLM, no embeddings, no vector database,
+  no natural-language interpretation.
+- Delivered: `app/domain/structured_retrieval/**` — six retrieval
+  modes (`ENTITY_LOOKUP`, `ENTITY_TYPE_SEARCH`, `ATTRIBUTE_SEARCH`,
+  `RELATIONSHIP_SEARCH`, `LEXICAL_SEARCH`, `COMBINED`); deterministic
+  query planning, candidate construction, deduplication/aggregation,
+  and a fixed, documented scoring policy; deterministic candidate
+  identity (no random UUIDs); `POST /projects/{id}/structured-retrieval/plan`
+  and `.../search`. Consumes Graph Query exclusively (`GraphQueryRepository`/
+  `graph_query_service`) — never `GraphStore`, never the legacy
+  Knowledge Graph path. Graph Query's own read model was extended with
+  `created_by_execution_id`/`updated_by_execution_id` (previously
+  persisted but not projected) so candidates can carry honest
+  execution-provenance identifiers.
+- Architecture impact: **new ADR (0010)** — why retrieval operates on
+  governed graph state rather than raw chunks, why the first
+  implementation is deterministic, why embeddings are deferred, and
+  the Graph Query → Structured Retrieval → Context Builder → AI
+  Assistant layering.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 13" for Canonical
+  Domain Versioning Scheme (EPIC 3). That entry's number is left
+  unchanged here, for the same reason Milestone 12's numbering
+  collision was left unchanged rather than cascade-renumbering
+  subsequent milestones — see that milestone's own numbering note.
+- Dependencies: Milestone 12 (a hardened, tested Graph Query read
+  model to build on).
 
 **Milestone 14 — Semantic Query Engine**
 - Objective: implement the interpret → identify project → query graph
@@ -704,22 +859,24 @@ Transmission, Rail, Renewables, and any future discipline)
 
 ## Technical Debt
 
-- **Migration infrastructure.** Schema changes rely entirely on
-  `Base.metadata.create_all()`, which only creates missing tables and
-  never alters existing ones. The Project Lifecycle columns added in
-  EPIC 2 do not appear on any pre-existing on-disk database until it is
-  recreated from empty. No rollback path exists for any schema change
-  made so far. Addressed in Milestone 28, but every EPIC 3–7 milestone
-  that changes the schema will accumulate more of this debt until then.
+- **Migration infrastructure.** ~~Schema changes rely entirely on
+  `Base.metadata.create_all()`...~~ **Resolved in Milestone 12** —
+  Alembic now manages schema lifecycle (ADR-0008); `create_all()`
+  remains only for the isolated, disposable, per-test in-memory
+  database. See `database_migrations.md`.
 - **Engineering Index.** Does not exist. Its absence is why extraction
   currently has nowhere ungoverned to land except the graph itself —
   the root cause behind the next item. Addressed in Milestone 9.
-- **Mandatory review gate (ADR-0004 violation).** `ingest_document`
-  currently writes AI-extracted entities and relationships directly
-  into queryable graph storage, with no review state of any kind. This
-  is the single highest-priority gap in the entire roadmap — every
-  traceability and versioning guarantee elsewhere in the system is
-  moot while it stands. Addressed in Milestone 10.
+- **Mandatory review gate (ADR-0004 violation) — legacy path only.**
+  Milestone 10 closed this gap for the governed pipeline (Proposed
+  Claims → Review Workflow). It remains open for the original,
+  pre-existing `ingest_document` path: every document upload still
+  writes AI-extracted entities and relationships directly into
+  queryable graph storage (`ProjectEntity`/`EntityRelation`), with no
+  review state of any kind. Milestone 12 isolated and documented this
+  (ADR-0009) — marked deprecated, proven not to leak into the governed
+  path — but did not remediate it; still the single highest-priority
+  functional gap in the roadmap.
 - **Canonical Domain versioning.** No scheme exists for versioning
   `app/domain/ontology/**` itself; `Project.canonical_domain_version`
   exists only as a documented extension point holding a sentinel value.
@@ -749,6 +906,68 @@ Transmission, Rail, Renewables, and any future discipline)
   every EPIC 3–6 milestone that writes state currently does so with no
   access control of any kind, which the Web Platform and Enterprise
   EPICs must close, not merely add to.
+- **No dependency manifest.** Neither `requirements.txt` nor
+  `pyproject.toml` exists anywhere in `apps/backend` — dependencies are
+  installed ad hoc into `.venv`. Predates Milestone 12; noted, not
+  reconstructed, during that milestone's own Alembic setup (out of
+  scope: risk of mis-pinning versions not personally installed).
+- **`DATABASE_URL` is not environment-driven for the running
+  application.** `app/database/database.py`'s `DATABASE_URL` is a
+  fixed value; only Alembic invocations can be pointed elsewhere (via
+  `SUBSTATIONOS_DATABASE_URL`, Milestone 12). Making the application's
+  own connection string configurable is reasonable future work but was
+  not made in Milestone 12 — no defect in current single-environment
+  behavior was demonstrated. See `operational_reliability.md`.
+- **Graph write path has no bulk/batch upsert.** Every operation in a
+  `GraphOperationBatch`, however large, costs one Python-level call and
+  1–3 SQL round-trips in `SqlAlchemyGraphStore` — the dominant cost in
+  Milestone 12's performance baseline (`performance_baseline.md`).
+  Acceptable at current dataset sizes; the clearest candidate for a
+  future, dedicated performance milestone.
+- **Two Graph Query operations filter in Python after an unfiltered
+  fetch.** `list_nodes_with_attribute` (attribute filtering) and
+  `list_orphan_nodes` (orphan detection, also used by `get_statistics`)
+  both fetch broader data than needed and filter/aggregate in Python —
+  O(all nodes/relationships in project) per call. Documented as an
+  algorithmic risk area in `performance_baseline.md`, not fixed, since
+  no real performance problem has been demonstrated at current scale.
+- **Graph Query cannot distinguish a syntactically valid but
+  nonexistent entity type from a real one.** `GraphQueryValidator`
+  validates entity-type strings syntactically only — Canonicalization's
+  entity-type registry is private and Graph Query has no public port
+  onto it. A query for a made-up type returns an empty result rather
+  than an explicit error. Deliberately not fixed in Milestone 12 (see
+  "Public vocabulary boundary" in `knowledge_pipeline_overview.md`) —
+  low severity, no shared-vocabulary contract introduced without a
+  demonstrated need.
+- **Structured Retrieval's `source_fact_ids` is always empty.** A
+  `GraphOperationBatch`'s per-operation `source_fact_id` is ephemeral
+  at execution time and is never persisted onto the node/relationship
+  row itself, so `KnowledgeCandidate.source_fact_ids` has nothing to
+  report today. Represented as honestly absent, not fixed this
+  milestone (would require a `GraphStore`/schema change, out of scope
+  for a retrieval-layer milestone) — see ADR-0010 and
+  `structured_retrieval.md`'s Provenance section.
+- **Structured Retrieval's lexical matching has no substring/contains
+  rule.** Only exact-token, normalized-identifier, and prefix matching
+  are implemented — searching `"295"` will not find `"C-295"`. A
+  deliberate, documented scope boundary (not fuzzy matching), not an
+  oversight — see `structured_retrieval.md`'s Matching Rules.
+- **`LEXICAL_SEARCH`/`COMBINED`/value-only `ATTRIBUTE_SEARCH` require a
+  full node and/or relationship scan.** No SQL-side lexical or
+  attribute-value index exists, so these modes inherit Graph Query's
+  own Python-side filtering costs (see `performance_baseline.md`,
+  risks 1 and 6). Acceptable at current dataset sizes; a future
+  performance milestone's natural starting point alongside Graph
+  Query's own risks 1–3.
+- **Legacy scratch tooling retained, not cleaned up.**
+  `migrate_project_documents.py` (a pre-Alembic, ad hoc `sqlite3`
+  migration script) and `test_claude.py`/`test_ingest.py` (manual,
+  non-pytest-discovered smoke scripts for the legacy extraction path)
+  remain at the repository root. None are proven dead by Milestone 12's
+  inventory (see ADR-0009), so none were removed — candidates for
+  deletion once the legacy Knowledge Graph path itself is remediated or
+  retired.
 
 ---
 

@@ -82,3 +82,7 @@ one.
 | [0004](0004-reviewed-facts-only-in-queryable-graph.md) | Reviewed Facts Only in the Queryable Project Knowledge Graph | Accepted |
 | [0005](0005-project-vs-canonical-library-document-scope.md) | Explicit PROJECT versus CANONICAL_LIBRARY Document Scope | Accepted |
 | [0006](0006-ai-as-interpretation-presentation-layer.md) | AI as Interpretation/Presentation Layer, Never Source of Engineering Truth | Accepted |
+| [0007](0007-project-knowledge-graph-persistence.md) | Project Knowledge Graph Persistence — Execution Semantics, Database-Agnostic Store, and Deferred Neo4j | Accepted |
+| [0008](0008-database-migration-governance.md) | Database Migration Governance — Alembic Replaces `create_all()` | Accepted |
+| [0009](0009-legacy-knowledge-graph-isolation.md) | Legacy Knowledge Graph Isolation | Accepted |
+| [0010](0010-structured-retrieval-foundation.md) | Structured Retrieval Foundation | Accepted |
