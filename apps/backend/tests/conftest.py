@@ -10,11 +10,20 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database.database import Base
+from app.routers import canonicalization as canonicalization_router_module
 from app.routers import documents as documents_router_module
 from app.routers import engineering_index as engineering_index_router_module
+from app.routers import graph_builder as graph_builder_router_module
+from app.routers import graph_query as graph_query_router_module
+from app.routers import (
+    project_knowledge_graph as project_knowledge_graph_router_module,
+)
 from app.routers import projects as projects_router_module
 from app.routers import proposed_claims as proposed_claims_router_module
 from app.routers import review_workflow as review_workflow_router_module
+from app.routers import (
+    structured_retrieval as structured_retrieval_router_module,
+)
 
 
 @pytest.fixture()
@@ -49,8 +58,9 @@ def db_session() -> Iterator[Session]:
 def api_client(db_session: Session) -> Iterator[TestClient]:
     """
     A FastAPI TestClient wired to the real Projects, Documents,
-    Engineering Index, Proposed Claims, and Review Workflow routers,
-    backed by the isolated ``db_session``. Deliberately builds a minimal
+    Engineering Index, Proposed Claims, Review Workflow, and
+    Canonicalization routers, backed by the isolated ``db_session``.
+    Deliberately builds a minimal
     app rather than importing ``app.main``, since ``app.main`` creates
     tables against the real on-disk dev database as an import-time side
     effect.
@@ -62,6 +72,11 @@ def api_client(db_session: Session) -> Iterator[TestClient]:
     test_app.include_router(engineering_index_router_module.router)
     test_app.include_router(proposed_claims_router_module.router)
     test_app.include_router(review_workflow_router_module.router)
+    test_app.include_router(canonicalization_router_module.router)
+    test_app.include_router(graph_builder_router_module.router)
+    test_app.include_router(project_knowledge_graph_router_module.router)
+    test_app.include_router(graph_query_router_module.router)
+    test_app.include_router(structured_retrieval_router_module.router)
 
     def _override_get_db() -> Iterator[Session]:
         yield db_session
@@ -80,6 +95,21 @@ def api_client(db_session: Session) -> Iterator[TestClient]:
     ] = _override_get_db
     test_app.dependency_overrides[
         review_workflow_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        canonicalization_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        graph_builder_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        project_knowledge_graph_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        graph_query_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        structured_retrieval_router_module.get_db
     ] = _override_get_db
 
     with TestClient(test_app) as client:

@@ -1,3 +1,13 @@
+"""
+LEGACY - see app/models/knowledge_graph.py's module docstring and
+ADR-0009 (Legacy Knowledge Graph Isolation). ``ingest_document`` is
+still called by ``app.routers.documents.upload_document`` on every PDF
+upload to a project and writes AI-extracted entities/relationships
+directly into ``ProjectEntity``/``EntityRelation`` with no review gate
+- a live ADR-0004 violation, tracked and accepted, not remediated by
+this milestone. No governed bounded context may import this module.
+"""
+
 from typing import Any
 
 from sqlalchemy import or_, select

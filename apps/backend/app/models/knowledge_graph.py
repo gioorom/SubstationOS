@@ -1,3 +1,25 @@
+"""
+LEGACY - pre-dates the governed knowledge pipeline (Engineering Index ->
+Proposed Claims -> Review Workflow -> Canonicalization -> Graph Builder ->
+Project Knowledge Graph -> Graph Query, see
+docs/architecture/knowledge_pipeline_overview.md). ``ProjectEntity``/
+``EntityRelation`` are written directly by
+``app.services.knowledge_graph.ingest_document`` with no review gate -
+a live, tracked violation of ADR-0004, not a design this module claims
+to be correct.
+
+Still referenced (do not delete): ``app.routers.documents.upload_document``
+calls ``ingest_document`` on every PDF upload to a project;
+``app.routers.knowledge_graph`` serves reads from these tables. See
+ADR-0009 (Legacy Knowledge Graph Isolation) for the full inventory and
+the isolation rule this module is governed by:
+
+No governed bounded context (Engineering Index, Proposed Claims, Review
+Workflow, Canonicalization, Graph Builder, Project Knowledge Graph, Graph
+Query) may import anything from this module. Enforced by
+tests/architecture/test_bounded_context_dependencies.py.
+"""
+
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any

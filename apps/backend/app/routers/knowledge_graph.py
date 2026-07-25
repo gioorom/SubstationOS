@@ -1,3 +1,16 @@
+"""
+LEGACY - see app/models/knowledge_graph.py's module docstring and
+ADR-0009 (Legacy Knowledge Graph Isolation). Serves unreviewed
+``ProjectEntity``/``EntityRelation`` reads. The governed equivalent is
+``app.routers.project_knowledge_graph`` (execution) and
+``app.routers.graph_query`` (deterministic reads at
+``/projects/{id}/graph/**``) - a different URL namespace by design, not
+an oversight. Retained (not deleted) because
+``app.routers.documents.upload_document`` still writes to the tables
+this router reads. Marked ``deprecated`` in the OpenAPI schema so new
+API consumers are steered toward the governed path.
+"""
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -28,7 +41,8 @@ from app.services.knowledge_graph import (
 
 router = APIRouter(
     prefix="/projects",
-    tags=["Knowledge Graph"],
+    tags=["Knowledge Graph (Legacy)"],
+    deprecated=True,
 )
 
 

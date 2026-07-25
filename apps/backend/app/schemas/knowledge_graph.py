@@ -1,3 +1,6 @@
+"""LEGACY - schemas for app.routers.knowledge_graph. See that module's
+docstring and ADR-0009 (Legacy Knowledge Graph Isolation)."""
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict

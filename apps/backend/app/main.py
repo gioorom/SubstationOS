@@ -4,26 +4,49 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.database.database import Base, SessionLocal, engine
-from app.models import (
+from app.database.database import SessionLocal
+
+# Imported for their side effect of registering every table/relationship
+# with the ORM mapper before any request is handled - not for schema
+# creation (see the Alembic note below). Kept explicit, rather than
+# relying on routers transitively importing the same modules, so mapper
+# configuration does not depend on router import order.
+from app.models import (  # noqa: F401
+    canonicalization,
     document,
     engineering_index,
-    project,
+    graph_builder,
     knowledge_graph,
+    project,
+    project_knowledge_graph,
     proposed_claims,
     review_workflow,
 )
 from app.routers import (
+    canonicalization as canonicalization_router,
     documents,
     engineering_index as engineering_index_router,
+    graph_builder as graph_builder_router,
+    graph_query as graph_query_router,
     knowledge_graph,
+    project_knowledge_graph as project_knowledge_graph_router,
     projects,
     proposed_claims as proposed_claims_router,
     review_workflow as review_workflow_router,
+    structured_retrieval as structured_retrieval_router,
 )
 
 load_dotenv()
-Base.metadata.create_all(bind=engine)
+
+# Schema lifecycle is managed by Alembic (see
+# docs/architecture/database_migrations.md), not by application startup.
+# Startup deliberately does not create or alter tables - a database that
+# has not been migrated (`alembic upgrade head`) is expected to fail
+# loudly at first query, not be silently patched into shape. The one
+# exception is the isolated, in-memory test database
+# (tests/conftest.py's `db_session` fixture), which still uses
+# `Base.metadata.create_all()` because it is disposable and rebuilt
+# fresh for every test - never this application's real schema.
 
 
 app = FastAPI(
@@ -52,6 +75,11 @@ app.include_router(knowledge_graph.router)
 app.include_router(engineering_index_router.router)
 app.include_router(proposed_claims_router.router)
 app.include_router(review_workflow_router.router)
+app.include_router(canonicalization_router.router)
+app.include_router(graph_builder_router.router)
+app.include_router(project_knowledge_graph_router.router)
+app.include_router(graph_query_router.router)
+app.include_router(structured_retrieval_router.router)
 
 
 @app.get("/")
