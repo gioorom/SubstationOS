@@ -1,13 +1,14 @@
 """
-End-to-end proof that the full governed knowledge pipeline reaches a
-normalized ``LLMResponseEnvelope`` (EPIC 4, Milestones 13-17):
+End-to-end proof that the full governed knowledge pipeline reaches an
+``EngineeringSession`` owning a structured, traceable
+``EngineeringResponse`` (EPIC 4-5, Milestones 13-19):
 
     ProposedClaim -> approval -> CanonicalFact -> GraphOperationBatch ->
     GraphExecution -> Project Knowledge Graph -> Graph Query ->
     Structured Retrieval Result -> Context Builder ContextPackage ->
     Prompt Builder PromptPackage -> neutral LLMRequest ->
     AnthropicPreparedRequest -> mocked Anthropic invocation ->
-    LLMResponseEnvelope
+    LLMResponseEnvelope -> EngineeringResponse -> EngineeringSession
 
 Every earlier stage already has its own dedicated test suite (domain,
 service, and API tests per bounded context); this file exists purely
@@ -316,3 +317,93 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
     assert envelope["finish_reason"] == "completed"
     assert len(envelope["attempts"]) == 1
     assert invocation_result["validation"]["valid"] is True
+
+    # 14. Engineering Response - the same LLMResponseEnvelope, normalized
+    # into a structured, traceable EngineeringResponse. Engineering
+    # Response never calls the LLM Invocation Runtime itself; it
+    # consumes exactly the envelope the prior call returned, alongside
+    # the ContextPackage/PromptPackage already built above. No AI
+    # invocation happens in this stage.
+    engineering_response_response = api_client.post(
+        f"/projects/{project['id']}/engineering-response/build",
+        json={
+            "context_package": package,
+            "prompt_package": prompt_package,
+            "llm_response_envelope": envelope,
+        },
+    )
+    assert engineering_response_response.status_code == 200
+    engineering_response_result = engineering_response_response.json()
+
+    engineering_response = engineering_response_result["response"]
+    assert engineering_response["project_id"] == project["id"]
+    assert engineering_response["status"] == "complete"
+    assert len(engineering_response["sections"]) == 9
+    assert engineering_response["direct_answer"]["body"] == [
+        "End-to-end deterministic answer."
+    ]
+    assert engineering_response["direct_answer"]["enabled"] is True
+    assert engineering_response["overall_uncertainty"] in {
+        "low",
+        "medium",
+        "high",
+        "unknown",
+    }
+    assert engineering_response_result["validation"]["valid"] is True
+
+    # Deterministic: the same envelope always builds the same
+    # EngineeringResponse.
+    repeat_engineering_response = api_client.post(
+        f"/projects/{project['id']}/engineering-response/build",
+        json={
+            "context_package": package,
+            "prompt_package": prompt_package,
+            "llm_response_envelope": envelope,
+        },
+    )
+    assert (
+        repeat_engineering_response.json()["response"]["sections"]
+        == engineering_response["sections"]
+    )
+
+    # 15. Engineering Session - the root aggregate that will own every
+    # future conversation, tool, and agent. Creating a session, moving
+    # it to ACTIVE, and appending the EngineeringResponse produced above
+    # never invokes an AI provider or Context Builder/Prompt Builder/the
+    # LLM Invocation Runtime itself - pure, in-memory domain operations.
+    session_response = api_client.post(
+        f"/projects/{project['id']}/engineering-session",
+        json={"title": "End-to-end session"},
+    )
+    assert session_response.status_code == 200
+    session_body = session_response.json()
+    assert session_body["session"]["state"]["status"] == "created"
+    assert session_body["validation"]["valid"] is True
+
+    activate_response = api_client.post(
+        f"/projects/{project['id']}/engineering-session/change-state",
+        json={
+            "session": session_body["session"],
+            "target_status": "active",
+        },
+    )
+    assert activate_response.status_code == 200
+    active_session = activate_response.json()["session"]
+    assert active_session["state"]["status"] == "active"
+
+    append_session_response = api_client.post(
+        f"/projects/{project['id']}/engineering-session/append-response",
+        json={
+            "session": active_session,
+            "response": engineering_response,
+        },
+    )
+    assert append_session_response.status_code == 200
+    append_session_body = append_session_response.json()
+    assert append_session_body["validation"]["valid"] is True
+
+    final_session = append_session_body["session"]
+    assert final_session["statistics"]["response_count"] == 1
+    assert final_session["engineering_responses"][0]["direct_answer"]["body"] == [
+        "End-to-end deterministic answer."
+    ]

@@ -90,3 +90,5 @@ one.
 | [0012](0012-prompt-builder-foundation.md) | Prompt Builder Foundation | Accepted |
 | [0013](0013-llm-provider-abstraction-layer.md) | LLM Provider Abstraction Layer | Accepted |
 | [0014](0014-llm-invocation-runtime.md) | LLM Invocation Runtime | Accepted |
+| [0015](0015-engineering-response-foundation.md) | Engineering Response Foundation | Accepted |
+| [0016](0016-engineering-session-foundation.md) | Engineering Session Foundation | Accepted |

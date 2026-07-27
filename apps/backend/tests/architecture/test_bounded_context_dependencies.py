@@ -132,6 +132,33 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
     "prompt_builder": frozenset(
         {"project", "context_builder", "structured_retrieval"}
     ),
+    # Engineering Response (Milestone 18) consumes Prompt Builder's own
+    # output type (PromptPackage) as its shared, stable input vocabulary
+    # - the same pattern one level further downstream - and Context
+    # Builder's ContextPackage directly (for coverage/retrieval-summary
+    # fields PromptPackage does not itself expose as structured data).
+    # It also reads structured_retrieval's own vocabulary transitively,
+    # the same "shared, stable type reused across contexts" chain
+    # prompt_builder already established. It never imports graph_query
+    # or graph_builder directly. Critically, it never imports
+    # app.application.** (LLMResponseEnvelope, an application-layer
+    # type) either - see the dedicated boundary test below, which is
+    # this milestone's own new architectural guarantee.
+    "engineering_response": frozenset(
+        {"project", "context_builder", "prompt_builder", "structured_retrieval"}
+    ),
+    # Engineering Session (Milestone 19) consumes Engineering Response's
+    # own output type (EngineeringResponse) as its shared, stable
+    # vocabulary - it owns a tuple of them directly. It depends on
+    # nothing else: no Context Builder, Prompt Builder, Structured
+    # Retrieval, Graph Query, or Graph Builder import of its own - it
+    # never constructs a new KnowledgeCandidate/ContextPackage/
+    # PromptPackage, only holds references to EngineeringResponse
+    # objects a caller already built. "Project identity" is carried as
+    # a plain `project_id: int`, the same convention every context in
+    # this pipeline already uses - no import of `app.domain.project`
+    # is needed or present.
+    "engineering_session": frozenset({"engineering_response"}),
 }
 
 # Contexts outside app/domain/ontology - not part of the knowledge
@@ -481,6 +508,256 @@ def test_prompt_builder_surface_has_no_ai_or_provider_dependency() -> None:
             if any(
                 module == forbidden or module.startswith(f"{forbidden}.")
                 for forbidden in _FORBIDDEN_PROVIDER_MODULE_PREFIXES
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+# --- Engineering Response boundaries (Milestone 18) ---------------------
+
+# Unlike every other file in this section, app/services/engineering_response_service.py
+# is deliberately EXCLUDED from the domain-purity surface below - it is
+# the one seam allowed to import app.application.** (to translate
+# LLMResponseEnvelope into the domain's own restatement); see
+# ADR-0015. Only app/domain/engineering_response/** and the router are
+# held to "never touches a provider SDK, runtime, or application-layer
+# type" here.
+_ENGINEERING_RESPONSE_DOMAIN_SURFACE = (
+    DOMAIN_ROOT / "engineering_response",
+    APP_ROOT / "routers" / "engineering_response.py",
+)
+
+# Engineering Response must never perform I/O, query the graph,
+# re-derive retrieval/context/prompt assembly, or invoke a provider
+# itself - it consumes an already-built ContextPackage, PromptPackage,
+# and (via its own domain-owned restatement) LLMResponseEnvelope only.
+# No SQLAlchemy, no write or read graph port, no legacy Knowledge Graph
+# path, no Proposed Claims/Review Workflow, no Structured
+# Retrieval/Context Builder/Prompt Builder *service or router* (their
+# domain models are the one allowed, shared-vocabulary exception,
+# enforced separately by ALLOWED_DOMAIN_DEPENDENCIES above), and -
+# critically, this milestone's own new guarantee - no
+# app.application.** of any kind (LLMResponseEnvelope and every other
+# application-layer type), no provider SDK, and no LLM Invocation
+# Runtime module.
+_FORBIDDEN_FOR_ENGINEERING_RESPONSE = (
+    "sqlalchemy",
+    "app.domain.project_knowledge_graph.graph_store",
+    "app.infrastructure.project_knowledge_graph.sqlalchemy_graph_store",
+    "app.domain.graph_query.graph_query_repository",
+    "app.infrastructure.graph_query",
+    "app.services.graph_query_service",
+    "app.routers.graph_query",
+    "app.services.structured_retrieval_service",
+    "app.routers.structured_retrieval",
+    "app.services.context_builder_service",
+    "app.routers.context_builder",
+    "app.services.prompt_builder_service",
+    "app.routers.prompt_builder",
+    "app.models.knowledge_graph",
+    "app.services.knowledge_graph",
+    "app.routers.knowledge_graph",
+    "app.schemas.knowledge_graph",
+    "app.domain.proposed_claims",
+    "app.domain.review_workflow",
+    "app.application",
+    "app.infrastructure.llm",
+    "app.services.llm_runtime",
+    "app.services.engineering_response_service",
+)
+
+
+def test_engineering_response_domain_does_not_import_forbidden_modules() -> (
+    None
+):
+    offenders: list[str] = []
+
+    for path in _files_under(*_ENGINEERING_RESPONSE_DOMAIN_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_FOR_ENGINEERING_RESPONSE
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+# No LLM provider SDK, vector search, embedding, or external AI SDK may
+# appear anywhere in this bounded context - Engineering Response
+# performs no AI usage of its own; it normalizes an already-produced
+# LLMResponseEnvelope only (Milestone 18's own explicit non-goal: no
+# provider adapters, no new invocation of any kind).
+_FORBIDDEN_ENGINEERING_RESPONSE_AI_MODULE_PREFIXES = (
+    "anthropic",
+    "openai",
+    "app.services.ai",
+    "ollama",
+    "azure",
+)
+
+
+def test_engineering_response_surface_has_no_ai_or_provider_dependency() -> (
+    None
+):
+    offenders: list[str] = []
+
+    for path in _files_under(*_ENGINEERING_RESPONSE_DOMAIN_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_ENGINEERING_RESPONSE_AI_MODULE_PREFIXES
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+def test_engineering_response_domain_never_imports_the_application_layer() -> (
+    None
+):
+    """The dedicated, explicit form of this milestone's own architectural
+    guarantee: app/domain/engineering_response/** never imports
+    app.application.** (LLMResponseEnvelope or any other
+    application-layer type) - the translation happens exactly once, in
+    app/services/engineering_response_service.py, never in the domain
+    itself (see ADR-0015)."""
+
+    offenders: list[str] = []
+
+    for path in _python_files(DOMAIN_ROOT / "engineering_response"):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if module == "app.application" or module.startswith(
+                "app.application."
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+# --- Engineering Session boundaries (Milestone 19) ----------------------
+
+_ENGINEERING_SESSION_SURFACE = (
+    DOMAIN_ROOT / "engineering_session",
+    APP_ROOT / "services" / "engineering_session_service.py",
+    APP_ROOT / "routers" / "engineering_session.py",
+)
+
+# Engineering Session must never perform I/O, query the graph, invoke a
+# provider, or re-derive retrieval/context/prompt assembly - it owns
+# already-built EngineeringResponse objects only. No SQLAlchemy, no
+# graph ports, no legacy Knowledge Graph path, no Proposed Claims/
+# Review Workflow, no Structured Retrieval/Context Builder/Prompt
+# Builder/Engineering Response *service or router* (their domain models
+# are the one allowed, shared-vocabulary exception, enforced separately
+# by ALLOWED_DOMAIN_DEPENDENCIES above), no app.application.** of any
+# kind, no provider SDK, and no LLM Invocation Runtime module - unlike
+# Engineering Response, Engineering Session has no application-layer
+# input at all to translate, so it needs no exception for its own
+# service module either.
+_FORBIDDEN_FOR_ENGINEERING_SESSION = (
+    "sqlalchemy",
+    "app.domain.project_knowledge_graph.graph_store",
+    "app.infrastructure.project_knowledge_graph.sqlalchemy_graph_store",
+    "app.domain.graph_query.graph_query_repository",
+    "app.infrastructure.graph_query",
+    "app.services.graph_query_service",
+    "app.routers.graph_query",
+    "app.services.structured_retrieval_service",
+    "app.routers.structured_retrieval",
+    "app.services.context_builder_service",
+    "app.routers.context_builder",
+    "app.services.prompt_builder_service",
+    "app.routers.prompt_builder",
+    "app.services.engineering_response_service",
+    "app.routers.engineering_response",
+    "app.models.knowledge_graph",
+    "app.services.knowledge_graph",
+    "app.routers.knowledge_graph",
+    "app.schemas.knowledge_graph",
+    "app.domain.proposed_claims",
+    "app.domain.review_workflow",
+    "app.application",
+    "app.infrastructure.llm",
+    "app.services.llm_runtime",
+)
+
+
+def test_engineering_session_does_not_import_forbidden_modules() -> None:
+    offenders: list[str] = []
+
+    for path in _files_under(*_ENGINEERING_SESSION_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_FOR_ENGINEERING_SESSION
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+def test_engineering_session_surface_has_no_ai_or_provider_dependency() -> (
+    None
+):
+    offenders: list[str] = []
+
+    for path in _files_under(*_ENGINEERING_SESSION_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_ENGINEERING_RESPONSE_AI_MODULE_PREFIXES
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+def test_engineering_session_domain_never_imports_the_application_layer() -> (
+    None
+):
+    """Engineering Session has no application-layer input at all (unlike
+    Engineering Response, which translates LLMResponseEnvelope) - so
+    app/domain/engineering_session/** never imports app.application.**,
+    with no exception anywhere, not even in its own service module."""
+
+    offenders: list[str] = []
+
+    for path in _python_files(DOMAIN_ROOT / "engineering_session"):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if module == "app.application" or module.startswith(
+                "app.application."
             ):
                 offenders.append(
                     f"{path.relative_to(APP_ROOT.parent)} imports "

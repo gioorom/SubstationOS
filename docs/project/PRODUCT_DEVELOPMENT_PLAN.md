@@ -127,6 +127,8 @@ readiness declaration)
 | Prompt Builder | Implemented — deterministic, provider-independent `PromptPackage` composition (nine fixed-order sections, versioned constraints/instructions, approximate token estimates, statistics, self-validation) from a `ContextPackage` (Milestone 15, ADR-0012); no persistence, no AI, no provider serialization |
 | LLM Provider Abstraction Layer | Implemented — provider-neutral `LLMProviderPort`/`LLMRequest` contract, deterministic `PromptPackage` → `LLMRequest` mapping, an Anthropic adapter (zero SDK dependency) and a fake test adapter, an explicit provider registry, runtime-configured provider/model selection (Milestone 16, ADR-0013); no invocation, no network call, no persistence |
 | LLM Invocation Runtime | Implemented — attempt/retry/deadline/cancellation-governed execution of a real Anthropic call, provider-neutral `LLMResponseEnvelope` normalization, disabled by default (Milestone 17, ADR-0014); no automated test calls a real provider; no persistence, no streaming, no conversation memory |
+| Engineering Response | Implemented — deterministic, domain-owned `EngineeringResponse` (typed sections, structured warnings, uncertainty declarations, preserved evidence/version provenance) normalized from an `LLMResponseEnvelope`, no AI usage of its own (Milestone 18, ADR-0015); `SUMMARY`/`TECHNICAL_EXPLANATION`/`ASSUMPTIONS`/`NEXT_ACTIONS` sections always empty (no semantic parsing of provider prose); no conversation, no persistence |
+| Engineering Session | Implemented — the root aggregate for one engineering work session: project identity, a validated state machine (`CREATED`/`ACTIVE`/`PAUSED`/`COMPLETED`/`ARCHIVED`), an ordered `EngineeringResponse` history, an append-only timeline, statistics, version metadata (Milestone 19, ADR-0016); smallest dependency surface of any context in this pipeline (only `engineering_response`); no conversation/chat/memory/tools/agents yet; no persistence - each API call accepts and returns the full session, nothing is held server-side |
 | AI Assistant | Does not exist |
 | Web frontend | Early — project listing/detail pages exist (`apps/frontend`), no auth, no review UI |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
@@ -363,7 +365,7 @@ Services.
 
 **Scope:** AI Assistant, Prompt Orchestration, Multi-model, Reasoning.
 
-**Status:** Planned
+**Status:** In Progress
 
 - **Goal:** Provide the conversational, user-facing surface over the
   Query Engine, with a prompt infrastructure disciplined enough to
@@ -378,9 +380,22 @@ Services.
 - **Expected deliverables:** AI Assistant conversational service;
   versioned, testable prompt templates; a second `AIProvider`
   implementation; a model-selection/fallback mechanism.
-- **Implementation maturity:** Not started. The `AIProvider` port and
-  one adapter (`app/services/ai/claude_provider.py`) already exist and
-  are the foundation this EPIC extends, not replaces.
+- **Delivered so far:** `app/domain/engineering_response/**` (Engineering
+  Response Foundation, Milestone 18, ADR-0015) — the canonical,
+  deterministic, domain-owned normalization of an `LLMResponseEnvelope`
+  into a structured `EngineeringResponse` every future AI-facing
+  capability consumes; `app/domain/engineering_session/**` (Engineering
+  Session Foundation, Milestone 19, ADR-0016) — the root aggregate
+  every future conversation, tool, and agent will execute inside:
+  project identity, a validated session state machine, an ordered
+  `EngineeringResponse` history, an append-only timeline, statistics,
+  and version metadata.
+- **Implementation maturity:** Early. The `AIProvider` port and one
+  legacy adapter (`app/services/ai/claude_provider.py`) already existed
+  and remain the foundation this EPIC extends, not replaces; Engineering
+  Response and Engineering Session Foundations are now delivered on top
+  of the governed EPIC 4 pipeline. No conversation, chat, memory, tool,
+  or agent surface exists yet.
 
 ### EPIC 6 — Web Platform
 
@@ -919,6 +934,100 @@ interruptions, and are ranges, not commitments.
 
 ### EPIC 5 — AI Platform
 
+**Milestone 18 — Engineering Response Foundation** — *Completed*
+- Objective: the first domain-oriented representation of an AI answer -
+  transform a provider-neutral `LLMResponseEnvelope` into a structured,
+  traceable `EngineeringResponse`, the canonical output contract every
+  future AI-facing capability consumes. Explicitly not the
+  conversational assistant itself.
+- Delivered: `app/domain/engineering_response/**` — a genuine domain
+  bounded context (unlike the LLM Runtime, ADR-0013/0014) following the
+  same reference pattern every other context in this pipeline uses:
+  `EngineeringResponse`/`EngineeringResponseStatus`
+  (`COMPLETE`/`PARTIAL`/`UNSUPPORTED`/`EMPTY`, an engineering-native
+  completeness assessment derived from structural signals, never a copy
+  of `LLMInvocationStatus`); nine fixed `EngineeringSectionType`
+  sections in canonical order (`SUMMARY`/`DIRECT_ANSWER`/
+  `TECHNICAL_EXPLANATION`/`ASSUMPTIONS`/`WARNINGS`/`LIMITATIONS`/
+  `NEXT_ACTIONS`/`REFERENCES`/`UNKNOWN`) - `DIRECT_ANSWER`/`WARNINGS`/
+  `LIMITATIONS`/`REFERENCES`/`UNKNOWN` populated from structural
+  signals only, `SUMMARY`/`TECHNICAL_EXPLANATION`/`ASSUMPTIONS`/
+  `NEXT_ACTIONS` always empty by deliberate design (no AI usage, no
+  semantic parsing of provider prose - see ADR-0015); structured
+  `EngineeringWarning`/`EngineeringWarningCategory` and
+  `EngineeringUncertainty`/`EngineeringUncertaintyLevel` (never model
+  confidence - derived from knowledge-coverage and response-completeness
+  signals, worst-wins ranked into one `overall_uncertainty`);
+  `EngineeringEvidenceReference` preserving `PromptPackage.references`
+  verbatim; versioned `EngineeringResponseMetadata`/
+  `EngineeringResponseVersion` echoing the full version chain from
+  Context Builder through the LLM Invocation Runtime; a self-validating
+  `EngineeringResponseValidator`. `app/services/engineering_response_service.py` —
+  the **one** file in the codebase allowed to import both
+  `LLMResponseEnvelope` (application layer) and this domain, translating
+  the former into the domain's own `EngineeringResponseSourceEnvelope`
+  restatement before ever calling the pure domain assembler,
+  reconciling this milestone's own "Engineering Response is a domain
+  concept" instruction with CLAUDE.md's Dependency Rule. `POST /projects/{id}/engineering-response/build` —
+  performs no AI invocation of its own.
+- Architecture impact: **new ADR (0015)** — why Engineering Response is
+  a genuine domain bounded context despite consuming an application-layer
+  artifact, why that Dependency Rule tension is resolved by restatement
+  in one translation seam rather than by exception, why uncertainty is
+  not confidence, why evidence preservation is mandatory, and why
+  warnings are structured data rather than free text.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 18" for Prompt
+  Orchestration Framework. That entry's number is left unchanged here,
+  for the same reason Milestones 12-17's numbering collisions were left
+  unchanged rather than cascade-renumbering subsequent milestones — see
+  those milestones' own numbering notes.
+- Dependencies: Milestone 17 (a real, normalized `LLMResponseEnvelope`
+  to transform).
+
+**Milestone 19 — Engineering Session Foundation** — *Completed*
+- Objective: introduce the root aggregate representing a complete
+  engineering work session on a project - project identity, session
+  state, the ordered `EngineeringResponse` history, an append-only
+  timeline, statistics, and version metadata. Explicitly not a chat;
+  future conversations, tools, assistants, and agents will all execute
+  inside an `EngineeringSession`, never stand as their own root.
+- Delivered: `app/domain/engineering_session/**` — the smallest
+  dependency surface of any bounded context in this pipeline (only
+  `app.domain.engineering_response`, to own `EngineeringResponse`
+  objects directly; no Prompt Builder, Context Builder, Structured
+  Retrieval, Graph Query, provider SDK, or `app.application.**` of any
+  kind). `EngineeringSessionStatus` (`CREATED`/`ACTIVE`/`PAUSED`/
+  `COMPLETED`/`ARCHIVED`) with an explicit, validated transition table
+  (the same convention `app.domain.project.project_lifecycle` already
+  established); `EngineeringSessionTimeline` - an append-only,
+  strictly-sequenced ledger of `EngineeringSessionEvent`s
+  (`SESSION_CREATED`/`ENGINEERING_RESPONSE_ADDED`/`STATE_CHANGED`/
+  `CONFIGURATION_UPDATED`); `EngineeringSessionBuilder`
+  (`build_initial_session`/`append_engineering_response`/
+  `change_session_state`/`update_session_configuration`), each a pure
+  function returning a new `EngineeringSessionBuilderResult`, never
+  mutating its input; a self-validating `EngineeringSessionValidator`.
+  `app/services/engineering_session_service.py` - thin orchestration
+  needing no application-layer translation seam at all (unlike
+  Engineering Response), since its input is already a domain type.
+  `POST /projects/{id}/engineering-session`
+  (`+/append-response`/`/change-state`/`/update-configuration`) - no
+  persistence: each endpoint accepts the current session as part of its
+  own request body and returns the updated one, `session_id` generated
+  only at the router (`uuid.uuid4()`), never inside the domain layer.
+- Architecture impact: **new ADR (0016)** — why Session precedes
+  Conversation, why Conversation will not be the aggregate root, why
+  `EngineeringResponse` belongs to Session rather than the reverse, and
+  why no persistence exists yet.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 19" for
+  Multi-model & Reasoning. That entry's number is left unchanged here,
+  for the same reason Milestones 12-18's numbering collisions were left
+  unchanged rather than cascade-renumbering subsequent milestones — see
+  those milestones' own numbering notes.
+- Dependencies: Milestone 18 (an `EngineeringResponse` to own).
+
 **Milestone 17 — AI Assistant**
 - Objective: build the conversational, user-facing surface over the
   Query Engine.
@@ -1247,6 +1356,40 @@ Transmission, Rail, Renewables, and any future discipline)
   inventory (see ADR-0009), so none were removed — candidates for
   deletion once the legacy Knowledge Graph path itself is remediated or
   retired.
+- **Engineering Response's `SUMMARY`/`TECHNICAL_EXPLANATION`/
+  `ASSUMPTIONS`/`NEXT_ACTIONS` sections are always empty.** Populating
+  them honestly requires either genuine semantic segmentation of the
+  provider's own free text (out of scope - this builder performs no AI
+  usage) or a future provider capability emitting genuinely structured,
+  machine-parseable output. Deliberate and documented, not an
+  oversight — see ADR-0015 and `engineering_response.md`'s Sections
+  table.
+- **Engineering Response produces nothing for a failed or cancelled
+  invocation.** Only a successful `LLMResponseEnvelope` ever reaches
+  this builder (per `LLMInvocationResult`'s own invariant); how a
+  `terminal_error` is ever shown to an engineer is left to a future
+  milestone - not solved speculatively here.
+- **Engineering Response is the first domain bounded context whose
+  primary input originates from the application layer
+  (`LLMResponseEnvelope`) rather than an upstream domain context.**
+  Resolved by a single, explicit translation seam
+  (`app/services/engineering_response_service.py`) that restates the
+  application type into a domain-owned shape before the domain ever
+  sees it - see ADR-0015. Any future domain context with a similar need
+  should follow the same pattern rather than inventing a new one, or
+  worse, importing `app.application.**` directly into `app/domain/**`.
+- **Engineering Session has no persistence.** A session's lifetime
+  today is exactly one client's own request/response chain - each API
+  call accepts and returns the full session; nothing is held
+  server-side between calls. A real, multi-request session store is
+  explicit future work (likely alongside Milestone 20's Conversation
+  Foundation), not solved speculatively in Milestone 19 - see ADR-0016.
+- **Engineering Session's `update-configuration` endpoint was not
+  literally named in Milestone 19's own "equivalent to" endpoint list.**
+  Added because `CONFIGURATION_UPDATED` is an explicitly required
+  timeline event type that no other endpoint could ever exercise - a
+  small, documented, in-scope extension, not scope creep - see
+  `engineering_session.md`.
 
 ---
 

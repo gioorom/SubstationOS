@@ -2,7 +2,9 @@
 Deterministic performance baseline for the Project Knowledge Graph
 execution path, the Graph Query read model (Milestone 12, Workstream
 6), Structured Retrieval (Milestone 13), Context Builder (Milestone
-14), and Prompt Builder (Milestone 15).
+14), Prompt Builder (Milestone 15), the LLM Provider Abstraction Layer
+and LLM Invocation Runtime (Milestones 16-17), and Engineering Response
+(Milestone 18).
 
 This is a *measurement* script, not a correctness test and not a
 performance-optimization milestone. It generates synthetic, non-
@@ -80,6 +82,7 @@ from app.domain.structured_retrieval.structured_retrieval_factory import (
     StructuredRetrievalRequestFactory,
 )
 from app.domain.structured_retrieval.structured_retrieval_models import (
+    KnowledgeCandidateCollection,
     LexicalMatchMode,
     RetrievalMode,
 )
@@ -123,6 +126,25 @@ from app.application.models.llm_invocation import (
     LLMTimeoutPolicy,
 )
 from app.application.services.llm_runtime import run_invocation
+from app.domain.engineering_response.engineering_response_assembler import (
+    assemble_engineering_response,
+)
+from app.domain.engineering_response.engineering_response_factory import (
+    EngineeringResponseBuildRequestFactory,
+)
+from app.domain.engineering_response.engineering_response_models import (
+    EngineeringResponseSourceContent,
+    EngineeringResponseSourceEnvelope,
+    EngineeringSourceFinishReason,
+)
+from app.domain.engineering_session.engineering_session_builder import (
+    append_engineering_response,
+    build_initial_session,
+    change_session_state,
+)
+from app.domain.engineering_session.engineering_session_models import (
+    EngineeringSessionStatus,
+)
 from app.infrastructure.graph_builder.sqlalchemy_graph_operation_batch_repository import (
     SqlAlchemyGraphOperationBatchRepository,
 )
@@ -1228,6 +1250,156 @@ def run_llm_invocation_runtime_benchmarks() -> list[BenchmarkMeasurement]:
     return measurements
 
 
+def run_engineering_response_benchmarks() -> list[BenchmarkMeasurement]:
+    """
+    Measures Engineering Response Builder overhead (Milestone 18) -
+    dataset-independent, since building never queries the database or
+    calls a provider: it consumes an already-assembled
+    ``ContextPackage``/``PromptPackage`` (built here from an empty
+    ``KnowledgeCandidateCollection``, the cheapest legitimate input) and
+    a synthetic ``EngineeringResponseSourceEnvelope`` fixture, never a
+    real ``LLMResponseEnvelope`` or a real provider call.
+    """
+
+    measurements: list[BenchmarkMeasurement] = []
+
+    empty_candidates = KnowledgeCandidateCollection(
+        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
+    )
+    context_request = ContextBuildRequestFactory.create(
+        project_id=1, candidates=empty_candidates
+    )
+    context_package = assemble_context_package(context_request, now=NOW)
+
+    prompt_request = PromptBuildRequestFactory.create(
+        project_id=1, context_package=context_package
+    )
+    prompt_result = assemble_prompt_package(prompt_request, now=NOW)
+
+    source = EngineeringResponseSourceEnvelope(
+        provider_id="fake",
+        configured_model_identifier="benchmark-model",
+        returned_model_identifier="benchmark-model",
+        content=(
+            EngineeringResponseSourceContent(
+                sequence_index=0,
+                is_supported_text=True,
+                text="Synthetic benchmark answer.",
+                provider_block_type=None,
+            ),
+        ),
+        finish_reason=EngineeringSourceFinishReason.COMPLETED,
+        request_correlation_id="benchmark-engineering-response",
+        attempt_count=1,
+        warnings=(),
+        input_tokens=50,
+        output_tokens=20,
+        runtime_version="1.0",
+        adapter_version="1.0",
+        request_preparation_policy_version="1.0",
+    )
+
+    request = EngineeringResponseBuildRequestFactory.create(
+        project_id=1,
+        context_package=context_package,
+        prompt_package=prompt_result.package,
+        source=source,
+    )
+
+    measurements.append(
+        _timed(
+            "engineering_response_build",
+            "n/a",
+            1,
+            lambda: assemble_engineering_response(request, now=NOW),
+        )
+    )
+
+    return measurements
+
+
+def run_engineering_session_benchmarks() -> list[BenchmarkMeasurement]:
+    """
+    Measures Engineering Session Builder overhead (Milestone 19) -
+    dataset-independent and provider-independent: creating a session,
+    transitioning it to ACTIVE, and appending one already-built
+    ``EngineeringResponse`` (reusing the same synthetic
+    ContextPackage/PromptPackage fixture
+    ``run_engineering_response_benchmarks`` builds) - never a real
+    provider call, never a database query, never persistence of any
+    kind.
+    """
+
+    measurements: list[BenchmarkMeasurement] = []
+
+    empty_candidates = KnowledgeCandidateCollection(
+        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
+    )
+    context_request = ContextBuildRequestFactory.create(
+        project_id=1, candidates=empty_candidates
+    )
+    context_package = assemble_context_package(context_request, now=NOW)
+
+    prompt_request = PromptBuildRequestFactory.create(
+        project_id=1, context_package=context_package
+    )
+    prompt_result = assemble_prompt_package(prompt_request, now=NOW)
+
+    source = EngineeringResponseSourceEnvelope(
+        provider_id="fake",
+        configured_model_identifier="benchmark-model",
+        returned_model_identifier="benchmark-model",
+        content=(
+            EngineeringResponseSourceContent(
+                sequence_index=0,
+                is_supported_text=True,
+                text="Synthetic benchmark answer.",
+                provider_block_type=None,
+            ),
+        ),
+        finish_reason=EngineeringSourceFinishReason.COMPLETED,
+        request_correlation_id="benchmark-engineering-session",
+        attempt_count=1,
+        warnings=(),
+        input_tokens=50,
+        output_tokens=20,
+        runtime_version="1.0",
+        adapter_version="1.0",
+        request_preparation_policy_version="1.0",
+    )
+    engineering_response_request = EngineeringResponseBuildRequestFactory.create(
+        project_id=1,
+        context_package=context_package,
+        prompt_package=prompt_result.package,
+        source=source,
+    )
+    engineering_response = assemble_engineering_response(
+        engineering_response_request, now=NOW
+    ).response
+
+    def _run_session_lifecycle() -> None:
+        create_result = build_initial_session(
+            project_id=1, session_id="benchmark-session", now=NOW
+        )
+        active_result = change_session_state(
+            create_result.session, EngineeringSessionStatus.ACTIVE, now=NOW
+        )
+        append_engineering_response(
+            active_result.session, engineering_response, now=NOW
+        )
+
+    measurements.append(
+        _timed(
+            "engineering_session_lifecycle",
+            "n/a",
+            1,
+            _run_session_lifecycle,
+        )
+    )
+
+    return measurements
+
+
 def run_all(specs: tuple[DatasetSpec, ...]) -> list[BenchmarkMeasurement]:
     measurements: list[BenchmarkMeasurement] = []
 
@@ -1240,6 +1412,8 @@ def run_all(specs: tuple[DatasetSpec, ...]) -> list[BenchmarkMeasurement]:
         measurements.extend(run_llm_provider_benchmarks(spec))
 
     measurements.extend(run_llm_invocation_runtime_benchmarks())
+    measurements.extend(run_engineering_response_benchmarks())
+    measurements.extend(run_engineering_session_benchmarks())
 
     return measurements
 

@@ -4,7 +4,9 @@
 Platform Hardening), extended by Milestone 13 (Structured Retrieval
 Foundation), Milestone 14 (Context Builder Foundation), Milestone 15
 (Prompt Builder Foundation), Milestone 16 (LLM Provider
-Abstraction Layer), and Milestone 17 (LLM Invocation Runtime).
+Abstraction Layer), Milestone 17 (LLM Invocation Runtime),
+Milestone 18 (Engineering Response Foundation, EPIC 5), and Milestone
+19 (Engineering Session Foundation, EPIC 5).
 Describes the governed knowledge pipeline as it
 exists today — not the product vision
 (`project_intelligence_architecture.md` describes vision and roadmap;
@@ -19,11 +21,17 @@ its own.
 Documents → Engineering Index → Proposed Claims → Review Workflow →
 Canonicalization → Graph Builder → Project Knowledge Graph → Graph Query →
 Structured Retrieval → Context Builder → Prompt Builder →
-LLM Provider Abstraction Layer → LLM Invocation Runtime
+LLM Provider Abstraction Layer → LLM Invocation Runtime →
+Engineering Response → Engineering Session
 ```
 
-The last two stages are deliberately not another `app/domain/**`
-bounded context - see the note below the pipeline table.
+The LLM Provider Abstraction Layer and LLM Invocation Runtime stages
+are deliberately not another `app/domain/**` bounded context - see the
+note below the pipeline table. Engineering Response, one stage further,
+*is* a genuine `app/domain/**` bounded context again, despite consuming
+the LLM Invocation Runtime's own application-layer output - see
+[ADR-0015](adr/0015-engineering-response-foundation.md) for how that
+Dependency Rule boundary is resolved.
 
 Each stage trusts the stage before it completely and adds exactly one
 new responsibility — no stage re-derives or second-guesses a decision
@@ -47,6 +55,8 @@ across the whole pipeline).
 | Prompt Builder | Prompt Builder | A deterministic, provider-independent `PromptPackage` composed from a `ContextPackage` - fixed-order sections, versioned constraints/instructions, token estimates, statistics, self-validation | `app/domain/prompt_builder/**` |
 | LLM Provider Abstraction Layer | *(application/infrastructure capability, not a bounded context)* | A provider-neutral `LLMRequest` mapped from a `PromptPackage`, translated by a provider adapter (Anthropic first) into a local, never-sent prepared request - no invocation, no provider SDK dependency in the application layer | `app/application/**` (contracts, mapper, registry, service), `app/infrastructure/llm/**` (adapters) |
 | LLM Invocation Runtime | *(application/infrastructure capability, not a bounded context)* | Attempt sequencing, total-deadline enforcement, retry decisions, cancellation, and provider-neutral response normalization for exactly one real provider call per invocation | `app/application/services/llm_runtime.py`, `app/application/policies/**`, `app/application/validation/**` (runtime), `app/infrastructure/llm/anthropic/**` (invoker, error mapper, response mapper) |
+| Engineering Response | Engineering Response | A structured, traceable `EngineeringResponse` - typed sections, structured warnings, uncertainty declarations, preserved evidence/version provenance - deterministically normalized from an `LLMResponseEnvelope`, never AI-interpreted | `app/domain/engineering_response/**` (domain), `app/services/engineering_response_service.py` (the one translation seam) |
+| Engineering Session | Engineering Session | The root aggregate for one engineering work session - project identity, session state, an ordered history of `EngineeringResponse`s, an append-only timeline, statistics, version metadata; owns no conversation/chat/memory/tools/agents yet | `app/domain/engineering_session/**` (domain), `app/services/engineering_session_service.py` |
 
 **Note on the last two rows:** unlike every other stage in this table,
 the LLM Provider Abstraction Layer and the LLM Invocation Runtime are
@@ -74,6 +84,8 @@ Context Builder = bounded, provenance-aware context assembly layer over Structur
 Prompt Builder = deterministic, provider-independent prompt-composition layer over a ContextPackage
 LLM Provider Abstraction Layer = provider-neutral request contract + first (Anthropic) adapter over a PromptPackage - request preparation only, no invocation
 LLM Invocation Runtime = attempt/retry/deadline/cancellation-governed execution of exactly one real provider call, behind the same LLMProviderPort - implemented, disabled by default, never exercised with a real provider in the automated test suite
+Engineering Response = the canonical, domain-owned, provider-neutral representation of an AI answer - typed sections, structured warnings, uncertainty, preserved evidence - deterministically normalized from an LLMResponseEnvelope, never AI-interpreted
+Engineering Session = the root aggregate for one engineering work session - owns project identity, session state, an ordered history of EngineeringResponses, a timeline, statistics, and version metadata; not a chat, owns no conversation/memory/tools/agents yet
 Semantic Retrieval = future retrieval and ranking layer
 AI Assistant = future consumer, not owner, of engineering truth
 ```
@@ -98,24 +110,37 @@ cancellation, response normalization) capable of a real Anthropic call
 — but that path is **disabled by default**
 (`LLM_RUNTIME_ENABLED=false`), and no automated test in this repository
 ever calls a real provider: every test exercises either the fake
-adapter or a mocked/monkeypatched Anthropic client (see
+adapter or a mocked/monkeypatched Anthropic client; Engineering
+Response (Milestone 18) adds only a deterministic normalization of an
+already-produced `LLMResponseEnvelope` into a structured
+`EngineeringResponse` (typed sections, structured warnings, uncertainty
+declarations derived from structural signals) on top of that - still no
+AI usage of its own, no semantic parsing of the provider's own prose;
+and Engineering Session (Milestone 19) adds only a deterministic root
+aggregate owning a session's state, its ordered `EngineeringResponse`
+history, and an append-only timeline on top of that - still no
+conversation, chat history, memory, tools, or agents of any kind (see
 [structured_retrieval.md](structured_retrieval.md),
 [context_builder.md](context_builder.md),
 [prompt_builder.md](prompt_builder.md),
 [llm_provider_abstraction.md](llm_provider_abstraction.md),
 [llm_invocation_runtime.md](llm_invocation_runtime.md),
+[engineering_response.md](engineering_response.md),
+[engineering_session.md](engineering_session.md),
 [ADR-0010](adr/0010-structured-retrieval-foundation.md),
 [ADR-0011](adr/0011-context-builder-foundation.md),
 [ADR-0012](adr/0012-prompt-builder-foundation.md),
 [ADR-0013](adr/0013-llm-provider-abstraction-layer.md),
-[ADR-0014](adr/0014-llm-invocation-runtime.md)). Describing Semantic
-Retrieval or the AI Assistant as existing would misrepresent the
-system; they are named here only to mark where a future milestone (the
-AI Assistant, per the Product Development Plan) will attach, and to
-make clear that when it arrives, it consumes the LLM Invocation
-Runtime's normalized response through the same `LLMProviderPort` — it
-does not gain its own path to engineering truth, and Anthropic remains
-one configurable adapter rather than the platform's identity.
+[ADR-0014](adr/0014-llm-invocation-runtime.md),
+[ADR-0015](adr/0015-engineering-response-foundation.md),
+[ADR-0016](adr/0016-engineering-session-foundation.md)). Describing
+Semantic Retrieval or the AI Assistant as existing would misrepresent
+the system; they are named here only to mark where a future milestone
+(the AI Assistant, per the Product Development Plan) will attach, and
+to make clear that when it arrives, it consumes Engineering Session's
+own structured output — it does not gain its own path to engineering
+truth, and Anthropic remains one configurable adapter rather than the
+platform's identity.
 
 ## Bounded-context dependency direction
 
@@ -245,6 +270,40 @@ already-isolated legacy `app/services/ai/**`, per
 ADR-0014's "the SDK is confined to the Anthropic adapter package, and
 the runtime owns retry, not the SDK" decision.
 
+Milestone 18 adds `engineering_response` to `ALLOWED_DOMAIN_DEPENDENCIES`
+above (`{"project", "context_builder", "prompt_builder",
+"structured_retrieval"}`) and a dedicated boundary section in the same
+file: `test_engineering_response_domain_does_not_import_forbidden_modules`
+(no SQLAlchemy, no graph ports, no legacy Knowledge Graph path, no
+Proposed Claims/Review Workflow, no Structured Retrieval/Context
+Builder/Prompt Builder *service or router*, and - this milestone's own
+new guarantee - no `app.application.**` of any kind, no provider SDK,
+no LLM Invocation Runtime module),
+`test_engineering_response_surface_has_no_ai_or_provider_dependency`
+(no `anthropic`/`openai`/`app.services.ai`/`ollama`/`azure`), and the
+explicit, narrowly-scoped
+`test_engineering_response_domain_never_imports_the_application_layer` -
+the codified form of ADR-0015's central architectural claim: this
+domain context consumes an application-layer artifact's *content*
+(via its own domain-owned restatement, built once in
+`app/services/engineering_response_service.py`) without ever importing
+the application layer itself.
+
+Milestone 19 adds `engineering_session` to `ALLOWED_DOMAIN_DEPENDENCIES`
+(`{"engineering_response"}` - the smallest dependency set of any
+context in this pipeline) and its own dedicated boundary section:
+`test_engineering_session_does_not_import_forbidden_modules` (no
+SQLAlchemy, no graph ports, no legacy Knowledge Graph path, no Proposed
+Claims/Review Workflow, no sibling *service or router* modules
+including Engineering Response's own, no `app.application.**`, no
+provider SDK, no LLM Invocation Runtime module),
+`test_engineering_session_surface_has_no_ai_or_provider_dependency`,
+and `test_engineering_session_domain_never_imports_the_application_layer`
+- the last with **no exceptions anywhere**, unlike Engineering
+Response's own equivalent test, since Engineering Session has no
+application-layer input to translate in the first place (see
+ADR-0016).
+
 ## Public vocabulary boundary: entity types (Graph Query ↔ Canonicalization)
 
 `GraphQueryValidator.validate_entity_type` can confirm an entity-type
@@ -305,3 +364,5 @@ into the governed pipeline this milestone.
 - **Prompt Builder:** [prompt_builder.md](prompt_builder.md), [ADR-0012](adr/0012-prompt-builder-foundation.md).
 - **LLM Provider Abstraction Layer:** [llm_provider_abstraction.md](llm_provider_abstraction.md), [ADR-0013](adr/0013-llm-provider-abstraction-layer.md).
 - **LLM Invocation Runtime:** [llm_invocation_runtime.md](llm_invocation_runtime.md), [ADR-0014](adr/0014-llm-invocation-runtime.md).
+- **Engineering Response:** [engineering_response.md](engineering_response.md), [ADR-0015](adr/0015-engineering-response-foundation.md).
+- **Engineering Session:** [engineering_session.md](engineering_session.md), [ADR-0016](adr/0016-engineering-session-foundation.md).

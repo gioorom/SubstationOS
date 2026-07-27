@@ -268,6 +268,26 @@ def test_llm_invoke_endpoint_is_registered() -> None:
     assert "post" in schema["paths"]["/projects/{project_id}/llm/invoke"]
 
 
+def test_engineering_response_build_endpoint_is_registered() -> None:
+    schema = app_instance.openapi()
+    path = "/projects/{project_id}/engineering-response/build"
+    assert path in schema["paths"]
+    assert "post" in schema["paths"][path]
+
+
+def test_engineering_session_endpoints_are_registered() -> None:
+    schema = app_instance.openapi()
+    base = "/projects/{project_id}/engineering-session"
+    for path in (
+        base,
+        f"{base}/append-response",
+        f"{base}/change-state",
+        f"{base}/update-configuration",
+    ):
+        assert path in schema["paths"]
+        assert "post" in schema["paths"][path]
+
+
 def test_llm_provider_neutral_schemas_are_not_anthropic_shaped() -> None:
     """
     The provider-neutral request contract (``LLMMessageRoleRead``-style

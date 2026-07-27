@@ -27,6 +27,8 @@ from app.routers import (
     context_builder as context_builder_router,
     documents,
     engineering_index as engineering_index_router,
+    engineering_response as engineering_response_router,
+    engineering_session as engineering_session_router,
     graph_builder as graph_builder_router,
     graph_query as graph_query_router,
     knowledge_graph,
@@ -86,6 +88,8 @@ app.include_router(structured_retrieval_router.router)
 app.include_router(context_builder_router.router)
 app.include_router(prompt_builder_router.router)
 app.include_router(llm_provider_router.router)
+app.include_router(engineering_response_router.router)
+app.include_router(engineering_session_router.router)
 
 
 @app.get("/")

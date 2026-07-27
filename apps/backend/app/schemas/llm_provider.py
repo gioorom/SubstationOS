@@ -10,11 +10,18 @@ from app.application.models.llm_capabilities import (
 )
 from app.application.models.llm_invocation import (
     LLMFinishReason,
+    LLMInvocationAttempt,
     LLMInvocationAttemptStatus,
     LLMInvocationStatus,
+    LLMProviderError,
     LLMProviderErrorCategory,
+    LLMProviderErrorDetails,
+    LLMResponseContent,
     LLMResponseContentType,
+    LLMResponseEnvelope,
+    LLMResponseMetadata,
     LLMTimeoutPhase,
+    LLMUsage,
 )
 from app.application.models.llm_request import LLMContentType, LLMMessageRole
 from app.schemas.prompt_builder import (
@@ -335,6 +342,88 @@ class LLMResponseValidationResultRead(BaseModel):
     errors: list[str]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+def llm_response_envelope_from_schema(
+    model: LLMResponseEnvelopeRead,
+) -> LLMResponseEnvelope:
+    """
+    Reconstructs a domain-owned ``LLMResponseEnvelope`` from its own API
+    response shape - the same "reuse the upstream response shape as the
+    next stage's request shape" pattern
+    ``prompt_package_from_schema``/``context_package_from_schema``
+    already established. Used by Engineering Response
+    (``app/routers/engineering_response.py``), the first Milestone 18
+    capability to consume a previously-returned ``LLMResponseEnvelope``
+    as its own input.
+    """
+
+    return LLMResponseEnvelope(
+        provider_id=model.provider_id,
+        configured_model_identifier=model.configured_model_identifier,
+        returned_model_identifier=model.returned_model_identifier,
+        content=tuple(
+            LLMResponseContent(
+                sequence_index=c.sequence_index,
+                content_type=c.content_type,
+                text=c.text,
+                provider_block_type=c.provider_block_type,
+                annotations=tuple(c.annotations),
+            )
+            for c in model.content
+        ),
+        finish_reason=model.finish_reason,
+        usage=LLMUsage(
+            input_tokens=model.usage.input_tokens,
+            output_tokens=model.usage.output_tokens,
+            total_tokens=model.usage.total_tokens,
+            cached_input_tokens=model.usage.cached_input_tokens,
+            cache_creation_tokens=model.usage.cache_creation_tokens,
+        ),
+        status=model.status,
+        request_correlation_id=model.request_correlation_id,
+        provider_request_id=model.provider_request_id,
+        started_at=model.started_at,
+        completed_at=model.completed_at,
+        latency_seconds=model.latency_seconds,
+        attempt_count=model.attempt_count,
+        attempts=tuple(
+            LLMInvocationAttempt(
+                attempt_number=a.attempt_number,
+                status=a.status,
+                started_at=a.started_at,
+                completed_at=a.completed_at,
+                latency_seconds=a.latency_seconds,
+                error=(
+                    LLMProviderError(
+                        category=a.error.category,
+                        message=a.error.message,
+                        details=LLMProviderErrorDetails(
+                            http_status=a.error.details.http_status,
+                            provider_error_type=a.error.details.provider_error_type,
+                            provider_request_id=a.error.details.provider_request_id,
+                            retry_after_seconds=a.error.details.retry_after_seconds,
+                            timeout_phase=a.error.details.timeout_phase,
+                        ),
+                    )
+                    if a.error is not None
+                    else None
+                ),
+            )
+            for a in model.attempts
+        ),
+        warnings=tuple(model.warnings),
+        metadata=LLMResponseMetadata(
+            runtime_version=model.metadata.runtime_version,
+            adapter_version=model.metadata.adapter_version,
+            request_preparation_policy_version=(
+                model.metadata.request_preparation_policy_version
+            ),
+            prompt_package_version=model.metadata.prompt_package_version,
+            context_builder_version=model.metadata.context_builder_version,
+            prompt_builder_version=model.metadata.prompt_builder_version,
+        ),
+    )
 
 
 class LLMInvocationResultRead(BaseModel):
