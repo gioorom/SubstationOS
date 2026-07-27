@@ -1,8 +1,8 @@
 """
-End-to-end proof that the full governed knowledge pipeline reaches a
-deterministic ``WorkingMemory`` built from a ``Conversation`` (inside an
-``EngineeringSession``) whose turn references a structured, traceable
-``EngineeringResponse`` (EPIC 4-5, Milestones 13-21):
+End-to-end proof that the full governed knowledge pipeline runs a
+complete engineering workflow through the Engineering Engine, reaching
+an ``EngineeringResponse`` from a deterministically classified
+``EngineeringIntent`` (EPIC 4-5, Milestones 13-23A):
 
     ProposedClaim -> approval -> CanonicalFact -> GraphOperationBatch ->
     GraphExecution -> Project Knowledge Graph -> Graph Query ->
@@ -10,7 +10,9 @@ deterministic ``WorkingMemory`` built from a ``Conversation`` (inside an
     Prompt Builder PromptPackage -> neutral LLMRequest ->
     AnthropicPreparedRequest -> mocked Anthropic invocation ->
     LLMResponseEnvelope -> EngineeringResponse -> EngineeringSession ->
-    Conversation -> ConversationTurn -> WorkingMemory
+    Conversation -> ConversationTurn -> WorkingMemory ->
+    EngineeringIntent -> Engineering Engine (workflow selection, plan,
+    execution) -> EngineeringResponse
 
 Every earlier stage already has its own dedicated test suite (domain,
 service, and API tests per bounded context); this file exists purely
@@ -520,3 +522,161 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
         e["entry_type"] for e in rebuild_response.json()["working_memory"]["entries"]
     ]
     assert rebuilt_entry_types == [e["entry_type"] for e in working_memory["entries"]]
+
+    # 18. Engineering Request Classification - the same user request
+    # that opened the turn above, classified deterministically into a
+    # structured EngineeringIntent a future orchestrator could use to
+    # select a workflow. No LLM, no embeddings, no semantic model - a
+    # fixed rule table over normalized text. Nothing here executes a
+    # workflow, retrieves anything, or modifies the Conversation or
+    # WorkingMemory built above.
+    intent_response = api_client.post(
+        f"/projects/{project['id']}/engineering-intents/classify",
+        json={
+            "engineering_session_id": final_session["session_id"],
+            "conversation_id": final_conversation["conversation_id"],
+            "turn_id": final_turn["turn_id"],
+            "request_text": "What does cable C-295 feed?",
+            "working_memory_has_open_question": any(
+                e["entry_type"] == "open_question"
+                for e in working_memory["entries"]
+            ),
+            "working_memory_active_response_count": (
+                working_memory["statistics"]["recent_engineering_response_count"]
+            ),
+        },
+    )
+    assert intent_response.status_code == 200
+    intent_body = intent_response.json()
+    assert intent_body["validation"]["valid"] is True
+
+    intent = intent_body["intent"]
+    assert intent["project_id"] == project["id"]
+    assert intent["engineering_intent_id"] == (
+        f"{final_conversation['conversation_id']}:{final_turn['turn_id']}:"
+        f"{intent['version']['classification_policy_version']}"
+    )
+    # "What does cable C-295 feed?" carries the interrogative "what" and
+    # the domain term "cable" - a knowledge query about project facts.
+    assert intent["intent_type"] == "knowledge_query"
+    assert intent["evidence"]
+    assert intent["statistics"]["matched_rule_count"] == len(intent["evidence"])
+
+    # Deterministic: reclassifying the same request under the same
+    # policy version yields the same identity and the same result.
+    repeat_intent_response = api_client.post(
+        f"/projects/{project['id']}/engineering-intents/classify",
+        json={
+            "engineering_session_id": final_session["session_id"],
+            "conversation_id": final_conversation["conversation_id"],
+            "turn_id": final_turn["turn_id"],
+            "request_text": "What does cable C-295 feed?",
+        },
+    )
+    repeat_intent = repeat_intent_response.json()["intent"]
+    assert repeat_intent["engineering_intent_id"] == (
+        intent["engineering_intent_id"]
+    )
+    assert repeat_intent["intent_type"] == intent["intent_type"]
+    assert repeat_intent["evidence"] == intent["evidence"]
+
+    # 19. Engineering Engine - the classified KNOWLEDGE_QUERY intent is
+    # coordinated into a complete workflow: selection -> plan ->
+    # validation -> execution, reusing the very same Structured
+    # Retrieval, Context Builder, Prompt Builder, LLM Runtime, and
+    # Engineering Response components exercised individually above. The
+    # Anthropic client is still the fake one monkeypatched at stage 13,
+    # so no live call occurs here either.
+    import app.routers.engineering_engine as engine_router_module
+
+    monkeypatch.setattr(
+        engine_router_module,
+        "build_anthropic_client",
+        lambda **_kwargs: _FakeAnthropicClient(),
+    )
+
+    engine_response = api_client.post(
+        f"/projects/{project['id']}/engineering-engine/execute",
+        json={
+            "engineering_session_id": final_session["session_id"],
+            "conversation_id": final_conversation["conversation_id"],
+            "turn_id": final_turn["turn_id"],
+            "request_text": "What does cable C-295 feed?",
+            "engineering_intent_id": intent["engineering_intent_id"],
+            "intent_type": intent["intent_type"],
+            "retrieval_canonical_entity_id": "CABLE:C-295",
+            "provider_id": "anthropic",
+            "model_identifier": "model-under-test",
+        },
+    )
+    assert engine_response.status_code == 200
+    engine_body = engine_response.json()
+
+    assert engine_body["status"] == "completed"
+    assert engine_body["validation"]["valid"] is True
+    assert engine_body["selection"]["workflow_id"] == "knowledge-query"
+
+    # Every planned step ran, in order, and completed.
+    assert len(engine_body["plan"]["steps"]) == 10
+    assert all(
+        step_result["status"] == "completed"
+        for step_result in engine_body["execution"]["step_results"]
+    )
+
+    # The engine reached a real EngineeringResponse through the whole
+    # governed pipeline - including the actual retrieved candidate.
+    engine_engineering_response = engine_body["engineering_response"]
+    assert engine_engineering_response is not None
+    assert engine_engineering_response["direct_answer"]["body"] == [
+        "End-to-end deterministic answer."
+    ]
+    reference_ids = [
+        r["candidate_id"] for r in engine_engineering_response["references"]
+    ]
+    assert selected["candidate_id"] in reference_ids
+
+    # Aggregate updates are prepared, never applied by the engine.
+    assert engine_body["prepared_updates"]["conversation_update"][
+        "disposition"
+    ] == "prepared"
+    assert engine_body["prepared_updates"]["session_update"][
+        "disposition"
+    ] == "prepared"
+
+    # Planning is deterministic even though runtime output need not be.
+    repeat_engine_response = api_client.post(
+        f"/projects/{project['id']}/engineering-engine/execute",
+        json={
+            "engineering_session_id": final_session["session_id"],
+            "conversation_id": final_conversation["conversation_id"],
+            "turn_id": final_turn["turn_id"],
+            "request_text": "What does cable C-295 feed?",
+            "engineering_intent_id": intent["engineering_intent_id"],
+            "intent_type": intent["intent_type"],
+            "retrieval_canonical_entity_id": "CABLE:C-295",
+            "provider_id": "anthropic",
+            "model_identifier": "model-under-test",
+        },
+    )
+    assert repeat_engine_response.json()["plan"]["plan_id"] == (
+        engine_body["plan"]["plan_id"]
+    )
+
+    # An unsupported intent runs nothing at all.
+    unsupported_engine_response = api_client.post(
+        f"/projects/{project['id']}/engineering-engine/execute",
+        json={
+            "engineering_session_id": final_session["session_id"],
+            "conversation_id": final_conversation["conversation_id"],
+            "turn_id": final_turn["turn_id"],
+            "request_text": "Disegna uno schema funzionale",
+            "engineering_intent_id": "conv-x:turn-x:1.0",
+            "intent_type": "drawing_request",
+        },
+    )
+    assert unsupported_engine_response.status_code == 200
+    unsupported_body = unsupported_engine_response.json()
+    assert unsupported_body["status"] == "unsupported"
+    assert unsupported_body["plan"] is None
+    assert unsupported_body["execution"] is None
+    assert unsupported_body["engineering_response"] is None

@@ -181,6 +181,27 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
     "working_memory": frozenset(
         {"conversation", "engineering_session", "engineering_response"}
     ),
+    # Engineering Request Classification (Milestone 22, package named
+    # `engineering_intent` for roadmap continuity) depends on NO other
+    # domain bounded context at all - the smallest dependency surface
+    # in the entire pipeline. Its classification input carries plain
+    # identifiers and already-extracted structural Working Memory
+    # signals (two booleans/counts), never a Conversation, WorkingMemory,
+    # or EngineeringResponse object, so it needs no import of any of
+    # them (see ADR-0019).
+    "engineering_intent": frozenset(),
+    # The Engineering Engine (Milestone 23A) is an application
+    # coordination capability whose *domain* portion holds only
+    # immutable planning and execution-result models. It reaches into
+    # exactly two other contexts: engineering_intent (the intent type it
+    # selects a workflow for) and engineering_response (the result it
+    # carries). It deliberately depends on no Conversation, Working
+    # Memory, Engineering Session, Structured Retrieval, Context
+    # Builder, or Prompt Builder aggregate - see ADR-0020 and the
+    # dedicated tests/architecture/test_engineering_engine_boundaries.py.
+    "engineering_engine": frozenset(
+        {"engineering_intent", "engineering_response"}
+    ),
 }
 
 # Contexts outside app/domain/ontology - not part of the knowledge
@@ -1004,6 +1025,139 @@ def test_working_memory_domain_never_imports_the_application_layer() -> None:
             if module == "app.application" or module.startswith(
                 "app.application."
             ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+# --- Engineering Request Classification boundaries (Milestone 22) --------
+
+_ENGINEERING_INTENT_SURFACE = (
+    DOMAIN_ROOT / "engineering_intent",
+    APP_ROOT / "services" / "engineering_intent_service.py",
+    APP_ROOT / "routers" / "engineering_intent.py",
+)
+
+# Engineering Request Classification is a pure, deterministic rule
+# engine. It must never perform I/O, query the graph, invoke a
+# provider, or reach any other bounded context - its classification
+# input carries plain identifiers and already-extracted structural
+# signals only. Beyond the usual forbidden list, this milestone
+# explicitly forbids Prompt Builder, Context Builder, Structured
+# Retrieval, Graph Query, the LLM Runtime, provider SDKs, and the
+# application layer - and, uniquely, also forbids the *domain* modules
+# of Conversation/Working Memory/Engineering Response/Engineering
+# Session, since this context depends on no other bounded context at
+# all.
+_FORBIDDEN_FOR_ENGINEERING_INTENT = (
+    "sqlalchemy",
+    "app.domain.project_knowledge_graph",
+    "app.domain.graph_query",
+    "app.domain.graph_builder",
+    "app.domain.structured_retrieval",
+    "app.domain.context_builder",
+    "app.domain.prompt_builder",
+    "app.domain.canonicalization",
+    "app.domain.engineering_index",
+    "app.domain.proposed_claims",
+    "app.domain.review_workflow",
+    "app.infrastructure",
+    "app.models",
+    "app.application",
+    "app.services.graph_query_service",
+    "app.routers.graph_query",
+    "app.services.structured_retrieval_service",
+    "app.routers.structured_retrieval",
+    "app.services.context_builder_service",
+    "app.routers.context_builder",
+    "app.services.prompt_builder_service",
+    "app.routers.prompt_builder",
+    "app.services.engineering_response_service",
+    "app.routers.engineering_response",
+    "app.services.engineering_session_service",
+    "app.routers.engineering_session",
+    "app.services.conversation_service",
+    "app.routers.conversation",
+    "app.services.working_memory_service",
+    "app.routers.working_memory",
+    "app.services.knowledge_graph",
+    "app.routers.knowledge_graph",
+    "app.schemas.knowledge_graph",
+)
+
+
+def test_engineering_intent_does_not_import_forbidden_modules() -> None:
+    offenders: list[str] = []
+
+    for path in _files_under(*_ENGINEERING_INTENT_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_FOR_ENGINEERING_INTENT
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+def test_engineering_intent_surface_has_no_ai_or_provider_dependency() -> None:
+    """The codified form of ADR-0019's central claim: this is a
+    deterministic rule engine, not an LLM classifier. No provider SDK,
+    no embeddings library, no vector store, no external NLP service."""
+
+    offenders: list[str] = []
+
+    forbidden_prefixes = _FORBIDDEN_ENGINEERING_RESPONSE_AI_MODULE_PREFIXES + (
+        "numpy",
+        "scipy",
+        "sklearn",
+        "torch",
+        "transformers",
+        "sentence_transformers",
+        "spacy",
+        "nltk",
+        "gensim",
+        "faiss",
+        "chromadb",
+        "pinecone",
+        "tiktoken",
+    )
+
+    for path in _files_under(*_ENGINEERING_INTENT_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in forbidden_prefixes
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+def test_engineering_intent_domain_imports_no_other_bounded_context() -> None:
+    """This context's own strongest architectural guarantee: it depends
+    on no other `app/domain/**` bounded context at all - the smallest
+    dependency surface in the pipeline (see ADR-0019)."""
+
+    offenders: list[str] = []
+
+    for path in _python_files(DOMAIN_ROOT / "engineering_intent"):
+        for module in _imported_module_names(path):
+            other = _domain_context_of(module)
+            if other is not None and other != "engineering_intent":
                 offenders.append(
                     f"{path.relative_to(APP_ROOT.parent)} imports "
                     f"'{module}'"

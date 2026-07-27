@@ -7,7 +7,9 @@ Foundation), Milestone 14 (Context Builder Foundation), Milestone 15
 Abstraction Layer), Milestone 17 (LLM Invocation Runtime),
 Milestone 18 (Engineering Response Foundation, EPIC 5), Milestone
 19 (Engineering Session Foundation, EPIC 5), Milestone 20
-(Conversation Foundation, EPIC 5), and Milestone 21 (Working Memory
+(Conversation Foundation, EPIC 5), Milestone 21 (Working Memory
+Foundation, EPIC 5), Milestone 22 (Engineering Request
+Classification, EPIC 5), and Milestone 23A (Engineering Engine
 Foundation, EPIC 5).
 Describes the governed knowledge pipeline as it
 exists today — not the product vision
@@ -25,8 +27,13 @@ Canonicalization → Graph Builder → Project Knowledge Graph → Graph Query �
 Structured Retrieval → Context Builder → Prompt Builder →
 LLM Provider Abstraction Layer → LLM Invocation Runtime →
 Engineering Response → Engineering Session → Conversation →
-Working Memory
+Working Memory → Engineering Request Classification →
+Engineering Engine (workflow selection → plan → execution)
 ```
+
+**Only the `KNOWLEDGE_QUERY` workflow is implemented** (Milestone
+23A). Every other classified intent returns an explicit `UNSUPPORTED`
+engine result and runs no downstream component at all.
 
 The LLM Provider Abstraction Layer and LLM Invocation Runtime stages
 are deliberately not another `app/domain/**` bounded context - see the
@@ -62,8 +69,10 @@ across the whole pipeline).
 | Engineering Session | Engineering Session | The root aggregate for one engineering work session - project identity, session state, an ordered history of `EngineeringResponse`s, an append-only timeline, statistics, version metadata; owns no conversation/chat/memory/tools/agents yet | `app/domain/engineering_session/**` (domain), `app/services/engineering_session_service.py` |
 | Conversation | Conversation | Structured engineering dialogue belonging to an `EngineeringSession` (referenced, never embedded) - ordered Turns owning ordered Messages and `EngineeringResponse` references; Turn, not Message, is the primary conversational unit; no memory/tools/agents yet | `app/domain/conversation/**` (domain), `app/services/conversation_service.py` |
 | Working Memory | Working Memory | The temporary, deterministic engineering context needed to continue reasoning - open questions, recent `EngineeringResponse`s, their references/assumptions/constraints, all structurally derived, never AI-edited, never persisted, always rebuildable | `app/domain/working_memory/**` (domain), `app/services/working_memory_service.py` |
+| Engineering Request Classification | Engineering Intent | Deterministic, rule-based classification of one explicit request into a small workflow taxonomy, with first-class evidence, categorical confidence, and ambiguity as a valid result; no LLM, no embeddings, no semantic model; depends on no other bounded context | `app/domain/engineering_intent/**` (domain), `app/services/engineering_intent_service.py` |
+| Engineering Engine | *(application coordination capability; its planning models are a small domain package)* | Registry-driven workflow selection, explicit deterministic `WorkflowPlan`s, step-handler execution with first-failure stop, typed failures, an append-only execution timeline, and explicit (never applied) aggregate update proposals - `KNOWLEDGE_QUERY` only in Milestone 23A | `app/domain/engineering_engine/**` (planning models), `app/services/engineering_engine/**` (registries, handlers, executor, service, composition root) |
 
-**Note on the last two rows:** unlike every other stage in this table,
+**Note on the two LLM rows:** unlike every other stage in this table,
 the LLM Provider Abstraction Layer and the LLM Invocation Runtime are
 intentionally not implemented as new `app/domain/**` bounded contexts
 (Milestone 16's own instruction, reaffirmed unchanged by Milestone 17:
@@ -93,6 +102,8 @@ Engineering Response = the canonical, domain-owned, provider-neutral representat
 Engineering Session = the root aggregate for one engineering work session - owns project identity, session state, an ordered history of EngineeringResponses, a timeline, statistics, and version metadata; not a chat, owns no conversation/memory/tools/agents yet
 Conversation = structured engineering dialogue belonging to an EngineeringSession - ordered Turns (the primary conversational unit, not Messages) owning ordered Messages and EngineeringResponse references; no memory/tools/agents yet
 Working Memory = the temporary, deterministic engineering context needed to continue reasoning during a session - not conversation history, not project knowledge, always rebuildable, never AI-edited
+Engineering Request Classification = deterministic, rule-based routing of one explicit request into a workflow category - request classification, never psychological intent detection; a classification result, never an executable command
+Engineering Engine = the application coordinator that selects, plans and executes one engineering workflow - deterministic workflow structure, not an agent, an LLM brain, a reasoning engine or an orchestrator of agents; KNOWLEDGE_QUERY only today
 Semantic Retrieval = future retrieval and ranking layer
 AI Assistant = future consumer, not owner, of engineering truth
 ```
@@ -128,10 +139,16 @@ aggregate owning a session's state, its ordered `EngineeringResponse`
 history, and an append-only timeline on top of that; Conversation
 (Milestone 20) adds only a deterministic Turn/Message hierarchy
 referencing `EngineeringResponse`s produced during a session on top of
-that; and Working Memory (Milestone 21) adds only a deterministic,
+that; Working Memory (Milestone 21) adds only a deterministic,
 structurally-derived bounded view over a conversation's open question
-and recent responses on top of that - still no memory, tool execution,
-agents, semantic summarization, or assistant reasoning of any kind (see
+and recent responses on top of that; Engineering Request
+Classification (Milestone 22) adds only a deterministic, rule-based
+routing decision over one explicit request's own normalized text on top
+of that; and the Engineering Engine (Milestone 23A) adds only
+deterministic coordination of the already-existing components into one
+explicit, auditable workflow execution - still no memory, tool
+execution, agents, task decomposition, semantic summarization, or
+autonomous behaviour of any kind (see
 [structured_retrieval.md](structured_retrieval.md),
 [context_builder.md](context_builder.md),
 [prompt_builder.md](prompt_builder.md),
@@ -141,6 +158,8 @@ agents, semantic summarization, or assistant reasoning of any kind (see
 [engineering_session.md](engineering_session.md),
 [conversation.md](conversation.md),
 [working_memory.md](working_memory.md),
+[engineering_intent.md](engineering_intent.md),
+[engineering_engine.md](engineering_engine.md),
 [ADR-0010](adr/0010-structured-retrieval-foundation.md),
 [ADR-0011](adr/0011-context-builder-foundation.md),
 [ADR-0012](adr/0012-prompt-builder-foundation.md),
@@ -149,12 +168,15 @@ agents, semantic summarization, or assistant reasoning of any kind (see
 [ADR-0015](adr/0015-engineering-response-foundation.md),
 [ADR-0016](adr/0016-engineering-session-foundation.md),
 [ADR-0017](adr/0017-conversation-foundation.md),
-[ADR-0018](adr/0018-working-memory-foundation.md)). Describing
+[ADR-0018](adr/0018-working-memory-foundation.md),
+[ADR-0019](adr/0019-engineering-request-classification.md),
+[ADR-0020](adr/0020-engineering-engine-foundation.md)). Describing
 Semantic Retrieval or the AI Assistant as existing would misrepresent
 the system; they are named here only to mark where a future milestone
 (the AI Assistant, per the Product Development Plan) will attach, and
 to make clear that when it arrives, it consumes Working Memory's own
-bounded, structurally-derived view — it does not gain its own path to
+bounded view and Engineering Request Classification's own routing
+result — it does not gain its own path to
 engineering truth, and Anthropic remains one configurable adapter
 rather than the platform's identity.
 
@@ -336,6 +358,31 @@ its own dedicated boundary section:
 `test_working_memory_domain_never_imports_the_application_layer` -
 again with no exceptions anywhere (see ADR-0018).
 
+Milestone 22 adds `engineering_intent` to `ALLOWED_DOMAIN_DEPENDENCIES`
+as an **empty** set - the smallest dependency surface in the pipeline -
+plus its own boundary section:
+`test_engineering_intent_does_not_import_forbidden_modules`,
+`test_engineering_intent_surface_has_no_ai_or_provider_dependency`
+(which also forbids `numpy`/`sklearn`/`torch`/`transformers`/`spacy`/
+`faiss`/`tiktoken` and similar, not merely provider SDKs - the codified
+form of ADR-0019's "deterministic rule engine, not an LLM classifier"
+decision), and
+`test_engineering_intent_domain_imports_no_other_bounded_context`.
+
+Milestone 23A adds `engineering_engine` to
+`ALLOWED_DOMAIN_DEPENDENCIES` (`{"engineering_intent",
+"engineering_response"}`) plus a dedicated file,
+`tests/architecture/test_engineering_engine_boundaries.py`, enforcing
+both the engine's layering (its domain imports no router, schema,
+FastAPI, persistence adapter, provider SDK, or application service) and
+- uniquely - that **the engine core never branches over
+`EngineeringIntentType`**: `test_engine_core_never_branches_over_intent_types`
+parses the actual AST for comparisons and `match` statements against
+intent-type members rather than grepping for the word "if", and
+`test_the_engine_core_service_does_not_import_concrete_workflows`
+proves Milestone 23B can register workflows without touching the core
+(see ADR-0020).
+
 ## Public vocabulary boundary: entity types (Graph Query ↔ Canonicalization)
 
 `GraphQueryValidator.validate_entity_type` can confirm an entity-type
@@ -400,3 +447,5 @@ into the governed pipeline this milestone.
 - **Engineering Session:** [engineering_session.md](engineering_session.md), [ADR-0016](adr/0016-engineering-session-foundation.md).
 - **Conversation:** [conversation.md](conversation.md), [ADR-0017](adr/0017-conversation-foundation.md).
 - **Working Memory:** [working_memory.md](working_memory.md), [ADR-0018](adr/0018-working-memory-foundation.md).
+- **Engineering Request Classification:** [engineering_intent.md](engineering_intent.md), [ADR-0019](adr/0019-engineering-request-classification.md).
+- **Engineering Engine:** [engineering_engine.md](engineering_engine.md), [ADR-0020](adr/0020-engineering-engine-foundation.md).

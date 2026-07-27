@@ -131,6 +131,8 @@ readiness declaration)
 | Engineering Session | Implemented — the root aggregate for one engineering work session: project identity, a validated state machine (`CREATED`/`ACTIVE`/`PAUSED`/`COMPLETED`/`ARCHIVED`), an ordered `EngineeringResponse` history, an append-only timeline, statistics, version metadata (Milestone 19, ADR-0016); smallest dependency surface of any context in this pipeline (only `engineering_response`); no conversation/chat/memory/tools/agents yet; no persistence - each API call accepts and returns the full session, nothing is held server-side |
 | Conversation | Implemented — structured engineering dialogue belonging to an `EngineeringSession` (referenced, never embedded): ordered `ConversationTurn`s (the primary conversational unit, not `ConversationMessage`) owning ordered messages and `EngineeringResponse` references (held directly, never copied), a validated Conversation/Turn state machine, an append-only timeline, statistics, version metadata (Milestone 20, ADR-0017); no memory, tool execution, agents, or assistant reasoning yet; no persistence |
 | Working Memory | Implemented — deterministic, structurally-derived temporary engineering context for continued reasoning: open questions, recent `EngineeringResponse`s, their evidence references, and their already-computed assumptions/constraints (Milestone 21, ADR-0018); not conversation history, not project knowledge, never AI-edited, never persisted; `CURRENT_OBJECTIVE`/`CURRENT_EQUIPMENT`/`CURRENT_ELECTRICAL_AREA`/`CURRENT_TASK` reserved but never populated (no structural signal exists yet) |
+| Engineering Request Classification | Implemented — deterministic, rule-based classification of one explicit request into a small workflow taxonomy (10 types), with first-class reproducible evidence, categorical confidence, explicit precedence, and ambiguity as a valid result (Milestone 22, ADR-0019); no LLM, no embeddings, no semantic model, no provider SDK; depends on no other bounded context at all; not executable - a classification result only |
+| Engineering Engine | Implemented (foundation) — registry-driven workflow selection, explicit deterministic `WorkflowPlan`s, step-handler execution with first-failure stop, 14 typed failure codes, an append-only execution timeline, and explicit never-applied aggregate update proposals (Milestone 23A, ADR-0020); **one workflow only** (`KNOWLEDGE_QUERY`) - every other intent returns `UNSUPPORTED` and runs nothing; reuses Structured Retrieval, Context Builder, Prompt Builder, the provider-neutral runtime and Engineering Response rather than reimplementing them; no persistence, no transaction, no retries, no agents |
 | AI Assistant | Does not exist |
 | Web frontend | Early — project listing/detail pages exist (`apps/frontend`), no auth, no review UI |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
@@ -402,14 +404,25 @@ Services.
   needed to continue reasoning during a session: open questions,
   recent `EngineeringResponse`s, their references, and their
   already-computed assumptions/constraints, all structurally derived
-  and always rebuildable, never AI-edited.
-- **Implementation maturity:** Early. The `AIProvider` port and one
-  legacy adapter (`app/services/ai/claude_provider.py`) already existed
-  and remain the foundation this EPIC extends, not replaces; Engineering
-  Response, Engineering Session, Conversation, and Working Memory
-  Foundations are now delivered on top of the governed EPIC 4 pipeline.
-  No long-term memory, tool execution, agent, or assistant-reasoning
-  surface exists yet.
+  and always rebuildable, never AI-edited;
+  `app/domain/engineering_intent/**` (Engineering Request
+  Classification, Milestone 22, ADR-0019) — the deterministic,
+  rule-based routing decision a future orchestrator will use to select
+  a workflow, with first-class evidence and ambiguity as a valid
+  result; `app/domain/engineering_engine/**` +
+  `app/services/engineering_engine/**` (Engineering Engine Foundation,
+  Milestone 23A, ADR-0020) — the application coordinator that selects,
+  plans and executes one complete engineering workflow end to end.
+- **Implementation maturity:** Early but now end-to-end for one
+  workflow. The `AIProvider` port and one legacy adapter
+  (`app/services/ai/claude_provider.py`) already existed and remain the
+  foundation this EPIC extends, not replaces; Engineering Response,
+  Engineering Session, Conversation, Working Memory, Engineering
+  Request Classification, and the Engineering Engine are now delivered
+  on top of the governed EPIC 4 pipeline, and a classified
+  `KNOWLEDGE_QUERY` request now runs a complete coordinated workflow to
+  a validated `EngineeringResponse`. No long-term memory, tool
+  execution, agent, or autonomous-reasoning surface exists yet.
 
 ### EPIC 6 — Web Platform
 
@@ -1142,6 +1155,117 @@ interruptions, and are ranges, not commitments.
 - Dependencies: Milestone 20 (a `Conversation` to derive from) and
   Milestone 19 (its owning `EngineeringSession`).
 
+**Milestone 22 — Engineering Request Classification** — *Completed*
+- Objective: deterministically classify one explicit engineering
+  request into a structured domain result a future orchestration
+  component can use to select a workflow. Explicitly **not** generic
+  chatbot intent detection, **not** semantic understanding, and
+  **not** an LLM-based classifier - an explainable, replaceable rule
+  engine.
+- Delivered: `app/domain/engineering_intent/**` (named for roadmap
+  continuity; its documented responsibility is Engineering Request
+  Classification) - the **smallest dependency surface in the entire
+  pipeline: no other bounded context at all**, since its input carries
+  plain identifiers, the request text, and two already-extracted
+  structural Working Memory signals rather than any `Conversation`/
+  `WorkingMemory`/`EngineeringResponse` object. A 10-type operational
+  taxonomy (`DOCUMENT_LOOKUP`, `KNOWLEDGE_QUERY`,
+  `ENGINEERING_EXPLANATION`, `ENGINEERING_COMPARISON`,
+  `DRAWING_REQUEST`, `VERIFICATION_REQUEST`, `NAVIGATION_REQUEST`,
+  `GENERAL_ENGINEERING_REQUEST`, `UNSUPPORTED_REQUEST`,
+  `AMBIGUOUS_REQUEST`); deterministic Unicode-safe normalization and
+  whole-token/phrase matching (so `aprile` never fires the `apri`
+  navigation rule); an explicit, immutable rule table of 12 rules
+  across Italian and English signals, each independently evaluable and
+  independently testable, never a large if/elif function; an explicit
+  documented precedence order; ambiguity as a first-class result when
+  two or more *materially distinct operations* each have strong
+  evidence; categorical `HIGH`/`MEDIUM`/`LOW`/`UNRESOLVED` confidence
+  from a documented policy, never a fabricated probability;
+  reproducible `EngineeringIntentEvidence` (matched rule, matched
+  text, token position, candidate type, strength, stable
+  machine-readable description code - never hidden reasoning or
+  chain-of-thought); a deterministic `EngineeringIntentId`
+  (`conversation_id:turn_id:policy_version`), never random; an
+  `EngineeringIntentBuilder` that constructs but never re-decides, and
+  an `EngineeringIntentValidator` enforcing identity/precedence/
+  confidence/ambiguity/evidence/statistics consistency structurally.
+  `app/services/engineering_intent_service.py` - deliberately thin, no
+  classification rule lives there.
+  `POST /projects/{id}/engineering-intents/classify` - never accepts a
+  caller-supplied classification result.
+- Architecture impact: **new ADR (0019)** — why this is request
+  classification rather than psychological intent detection, why the
+  first classifier is deterministic, why LLM classification is
+  excluded, why evidence is first-class, why confidence is
+  categorical, why ambiguity is valid, why the result is not
+  executable, how a future classifier replaces this one without
+  changing the domain contract, and how the Engineering Assistant will
+  consume it.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 22" for Review UI
+  (EPIC 6). That entry's number is left unchanged here, for the same
+  reason Milestones 12-21's numbering collisions were left unchanged
+  rather than cascade-renumbering subsequent milestones — see those
+  milestones' own numbering notes.
+- Dependencies: none structurally (this context imports no other
+  bounded context); conceptually it follows Milestone 21, since the
+  structural Working Memory signals it optionally accepts come from
+  there.
+
+**Milestone 23A — Engineering Engine Foundation** — *Completed*
+- Objective: introduce the application-level coordination mechanism
+  that selects, plans and executes engineering workflows - implementing
+  exactly **one** complete workflow (`KNOWLEDGE_QUERY`) to prove the
+  architecture end to end before Milestone 23B expands the catalogue.
+  Explicitly not an autonomous agent, an LLM brain, a reasoning engine,
+  a chatbot, or a multi-agent orchestrator.
+- Delivered: `app/domain/engineering_engine/**` — immutable planning
+  and execution-result models (`WorkflowPlan`/`WorkflowStep`/
+  `WorkflowExecution`/`EngineeringEngineExecutionResult`, 14 typed
+  failure codes, an append-only `WorkflowExecutionTimeline`), a
+  declarative `WorkflowDefinition`, a deterministic planner, and
+  structural validators - importing no router, schema, FastAPI,
+  persistence adapter, provider SDK, or application service, and
+  depending on only two other domain contexts.
+  `app/services/engineering_engine/**` — `WorkflowRegistry` (the one
+  `EngineeringIntentType -> WorkflowDefinition` map, which is what
+  replaces core intent branching), `StepHandlerRegistry`, a **typed**
+  frozen `WorkflowExecutionContext` (never an untyped dict), ten step
+  handlers that adapt to the existing Structured Retrieval, Context
+  Builder, Prompt Builder, provider-neutral LLM Runtime and Engineering
+  Response services without reimplementing any of them, a plan executor
+  that stops at the first failure and records every remaining step as
+  `SKIPPED`, the coordinating `EngineeringEngineService`, and a single
+  composition root. `POST /projects/{id}/engineering-engine/execute` -
+  the body never accepts a workflow plan; an unsupported intent returns
+  HTTP 200 with `status="unsupported"` and runs no downstream component
+  at all.
+  Planning is fully deterministic (`WorkflowPlanId`/`WorkflowStepId`/
+  `ExecutionId` all derived, never random); runtime output determinism
+  is explicitly *not* claimed.
+  Aggregate updates use **Policy B**: the engine returns explicit
+  `PREPARED` proposals and never mutates `Conversation` or
+  `EngineeringSession`, with the validator actively rejecting any
+  result claiming `APPLIED`.
+- Architecture impact: **new ADR (0020)** — why the engine is an
+  application coordinator, why planning and execution are separate, why
+  plans are explicit, why workflow registration replaces core intent
+  branching, why only `KNOWLEDGE_QUERY` is supported initially, why the
+  engine knows no provider details, why aggregate updates are explicit,
+  why runtime nondeterminism differs from planning determinism, why
+  failures and timelines are first-class, and how Milestone 23B adds
+  workflows without changing the core.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 23" for Dashboard
+  (EPIC 6). That entry's number is left unchanged here, for the same
+  reason Milestones 12-22's numbering collisions were left unchanged
+  rather than cascade-renumbering subsequent milestones — see those
+  milestones' own numbering notes.
+- Dependencies: Milestone 22 (a classified `EngineeringIntent` to
+  select a workflow for) and Milestones 13-18 (the components the
+  workflow reuses).
+
 **Milestone 17 — AI Assistant**
 - Objective: build the conversational, user-facing surface over the
   Query Engine.
@@ -1540,6 +1664,44 @@ Transmission, Rail, Renewables, and any future discipline)
   designed to always be rebuildable rather than persisted, so this is
   not merely deferred work but the milestone's own core design choice
   (see ADR-0018).
+- **Engineering Request Classification's rule vocabulary needs ongoing
+  maintenance as real request phrasing is observed.** Novel phrasing
+  falls to `GENERAL_ENGINEERING_REQUEST` or `UNSUPPORTED_REQUEST`
+  rather than being guessed at - the intended trade-off of a
+  deterministic classifier (ADR-0019), but it does make vocabulary
+  coverage an explicit, ongoing task rather than something a model
+  absorbs implicitly.
+- **The classifier's engineering domain vocabulary is limited to
+  SubstationOS's current scope** (primary substations, HV/MV,
+  transformers, switchgear, protection, measurement, cables,
+  equipment, bays/montanti, drawings, project documentation). A
+  request using engineering terms outside that list classifies as
+  `UNSUPPORTED_REQUEST` - correct today, and something EPIC 8's
+  multi-domain expansion must revisit alongside the Canonical Domain
+  itself.
+- **The Engineering Engine has no persistence and no transaction.**
+  Nothing is stored - not the `EngineeringResponse`, not the aggregate
+  update proposals, not the execution record. The *intended future*
+  transaction boundary would atomically persist all of them together;
+  **that transaction does not exist today**, and Milestone 23A neither
+  implements it nor depends on it (ADR-0020).
+- **The Engineering Engine supports one workflow only.** Nine of the
+  ten `EngineeringIntentType` values return `UNSUPPORTED`. This is
+  deliberate (Milestone 23A proves the architecture; 23B expands the
+  catalogue), and there is deliberately no fallback workflow and no
+  "just ask the LLM" path for unknown intents.
+- **The engine does not derive retrieval criteria from request text.**
+  Retrieval configuration is caller-supplied; inferring criteria from
+  the request would be exactly the semantic interpretation ADR-0019
+  excluded. A future milestone may bridge classification evidence to
+  retrieval criteria deterministically.
+- **`EngineeringIntentEvidenceType.STRUCTURAL_CONTEXT` is defined but
+  never produced.** The two structural Working Memory signals the
+  classification input accepts are carried and available but do not
+  currently influence classification or generate evidence - reserved
+  for a future capability with a demonstrated need, not wired
+  speculatively (the same "reserved but honestly unpopulated"
+  precedent ADR-0015 and ADR-0018 already established).
 
 ---
 

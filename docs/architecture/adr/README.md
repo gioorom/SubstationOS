@@ -94,3 +94,5 @@ one.
 | [0016](0016-engineering-session-foundation.md) | Engineering Session Foundation | Accepted |
 | [0017](0017-conversation-foundation.md) | Conversation Foundation | Accepted |
 | [0018](0018-working-memory-foundation.md) | Working Memory Foundation | Accepted |
+| [0019](0019-engineering-request-classification.md) | Engineering Request Classification | Accepted |
+| [0020](0020-engineering-engine-foundation.md) | Engineering Engine Foundation | Accepted |

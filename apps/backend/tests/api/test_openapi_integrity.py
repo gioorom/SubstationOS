@@ -311,6 +311,57 @@ def test_working_memory_endpoints_are_registered() -> None:
         assert "post" in schema["paths"][path]
 
 
+def test_engineering_intent_classify_endpoint_is_registered() -> None:
+    schema = app_instance.openapi()
+    path = "/projects/{project_id}/engineering-intents/classify"
+    assert path in schema["paths"]
+    assert "post" in schema["paths"][path]
+
+
+def test_engineering_engine_execute_endpoint_is_registered() -> None:
+    schema = app_instance.openapi()
+    path = "/projects/{project_id}/engineering-engine/execute"
+    assert path in schema["paths"]
+    assert "post" in schema["paths"][path]
+
+
+def test_engineering_engine_request_body_never_accepts_a_workflow_plan() -> (
+    None
+):
+    """The server selects the workflow and constructs the plan - a
+    caller can never supply one (Milestone 23A's own rule)."""
+
+    schema = app_instance.openapi()
+    body_schema = schema["components"]["schemas"][
+        "EngineeringEngineExecuteRequestBody"
+    ]
+
+    forbidden = {"plan", "workflow_plan", "steps", "workflow_id", "status"}
+    assert forbidden.isdisjoint(body_schema["properties"].keys())
+
+
+def test_engineering_intent_request_body_never_accepts_a_classification() -> (
+    None
+):
+    """The classification API must never accept a caller-supplied
+    result - no intent type, confidence, evidence, or secondary match
+    field exists on its request schema (Milestone 22's own rule)."""
+
+    schema = app_instance.openapi()
+    body_schema = schema["components"]["schemas"][
+        "EngineeringIntentClassifyRequestBody"
+    ]
+
+    forbidden = {
+        "intent_type",
+        "confidence",
+        "evidence",
+        "secondary_intent_types",
+        "engineering_intent_id",
+    }
+    assert forbidden.isdisjoint(body_schema["properties"].keys())
+
+
 def test_llm_provider_neutral_schemas_are_not_anthropic_shaped() -> None:
     """
     The provider-neutral request contract (``LLMMessageRoleRead``-style

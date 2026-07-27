@@ -27,7 +27,9 @@ from app.routers import (
     context_builder as context_builder_router,
     conversation as conversation_router,
     documents,
+    engineering_engine as engineering_engine_router,
     engineering_index as engineering_index_router,
+    engineering_intent as engineering_intent_router,
     engineering_response as engineering_response_router,
     engineering_session as engineering_session_router,
     graph_builder as graph_builder_router,
@@ -94,6 +96,8 @@ app.include_router(engineering_response_router.router)
 app.include_router(engineering_session_router.router)
 app.include_router(conversation_router.router)
 app.include_router(working_memory_router.router)
+app.include_router(engineering_intent_router.router)
+app.include_router(engineering_engine_router.router)
 
 
 @app.get("/")
