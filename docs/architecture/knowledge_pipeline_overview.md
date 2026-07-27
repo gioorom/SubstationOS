@@ -6,8 +6,9 @@ Foundation), Milestone 14 (Context Builder Foundation), Milestone 15
 (Prompt Builder Foundation), Milestone 16 (LLM Provider
 Abstraction Layer), Milestone 17 (LLM Invocation Runtime),
 Milestone 18 (Engineering Response Foundation, EPIC 5), Milestone
-19 (Engineering Session Foundation, EPIC 5), and Milestone 20
-(Conversation Foundation, EPIC 5).
+19 (Engineering Session Foundation, EPIC 5), Milestone 20
+(Conversation Foundation, EPIC 5), and Milestone 21 (Working Memory
+Foundation, EPIC 5).
 Describes the governed knowledge pipeline as it
 exists today — not the product vision
 (`project_intelligence_architecture.md` describes vision and roadmap;
@@ -23,7 +24,8 @@ Documents → Engineering Index → Proposed Claims → Review Workflow →
 Canonicalization → Graph Builder → Project Knowledge Graph → Graph Query →
 Structured Retrieval → Context Builder → Prompt Builder →
 LLM Provider Abstraction Layer → LLM Invocation Runtime →
-Engineering Response → Engineering Session → Conversation
+Engineering Response → Engineering Session → Conversation →
+Working Memory
 ```
 
 The LLM Provider Abstraction Layer and LLM Invocation Runtime stages
@@ -59,6 +61,7 @@ across the whole pipeline).
 | Engineering Response | Engineering Response | A structured, traceable `EngineeringResponse` - typed sections, structured warnings, uncertainty declarations, preserved evidence/version provenance - deterministically normalized from an `LLMResponseEnvelope`, never AI-interpreted | `app/domain/engineering_response/**` (domain), `app/services/engineering_response_service.py` (the one translation seam) |
 | Engineering Session | Engineering Session | The root aggregate for one engineering work session - project identity, session state, an ordered history of `EngineeringResponse`s, an append-only timeline, statistics, version metadata; owns no conversation/chat/memory/tools/agents yet | `app/domain/engineering_session/**` (domain), `app/services/engineering_session_service.py` |
 | Conversation | Conversation | Structured engineering dialogue belonging to an `EngineeringSession` (referenced, never embedded) - ordered Turns owning ordered Messages and `EngineeringResponse` references; Turn, not Message, is the primary conversational unit; no memory/tools/agents yet | `app/domain/conversation/**` (domain), `app/services/conversation_service.py` |
+| Working Memory | Working Memory | The temporary, deterministic engineering context needed to continue reasoning - open questions, recent `EngineeringResponse`s, their references/assumptions/constraints, all structurally derived, never AI-edited, never persisted, always rebuildable | `app/domain/working_memory/**` (domain), `app/services/working_memory_service.py` |
 
 **Note on the last two rows:** unlike every other stage in this table,
 the LLM Provider Abstraction Layer and the LLM Invocation Runtime are
@@ -89,6 +92,7 @@ LLM Invocation Runtime = attempt/retry/deadline/cancellation-governed execution 
 Engineering Response = the canonical, domain-owned, provider-neutral representation of an AI answer - typed sections, structured warnings, uncertainty, preserved evidence - deterministically normalized from an LLMResponseEnvelope, never AI-interpreted
 Engineering Session = the root aggregate for one engineering work session - owns project identity, session state, an ordered history of EngineeringResponses, a timeline, statistics, and version metadata; not a chat, owns no conversation/memory/tools/agents yet
 Conversation = structured engineering dialogue belonging to an EngineeringSession - ordered Turns (the primary conversational unit, not Messages) owning ordered Messages and EngineeringResponse references; no memory/tools/agents yet
+Working Memory = the temporary, deterministic engineering context needed to continue reasoning during a session - not conversation history, not project knowledge, always rebuildable, never AI-edited
 Semantic Retrieval = future retrieval and ranking layer
 AI Assistant = future consumer, not owner, of engineering truth
 ```
@@ -121,11 +125,13 @@ declarations derived from structural signals) on top of that - still no
 AI usage of its own, no semantic parsing of the provider's own prose;
 Engineering Session (Milestone 19) adds only a deterministic root
 aggregate owning a session's state, its ordered `EngineeringResponse`
-history, and an append-only timeline on top of that; and Conversation
+history, and an append-only timeline on top of that; Conversation
 (Milestone 20) adds only a deterministic Turn/Message hierarchy
 referencing `EngineeringResponse`s produced during a session on top of
-that - still no memory, tool execution, agents, or assistant reasoning
-of any kind (see
+that; and Working Memory (Milestone 21) adds only a deterministic,
+structurally-derived bounded view over a conversation's open question
+and recent responses on top of that - still no memory, tool execution,
+agents, semantic summarization, or assistant reasoning of any kind (see
 [structured_retrieval.md](structured_retrieval.md),
 [context_builder.md](context_builder.md),
 [prompt_builder.md](prompt_builder.md),
@@ -134,6 +140,7 @@ of any kind (see
 [engineering_response.md](engineering_response.md),
 [engineering_session.md](engineering_session.md),
 [conversation.md](conversation.md),
+[working_memory.md](working_memory.md),
 [ADR-0010](adr/0010-structured-retrieval-foundation.md),
 [ADR-0011](adr/0011-context-builder-foundation.md),
 [ADR-0012](adr/0012-prompt-builder-foundation.md),
@@ -141,12 +148,13 @@ of any kind (see
 [ADR-0014](adr/0014-llm-invocation-runtime.md),
 [ADR-0015](adr/0015-engineering-response-foundation.md),
 [ADR-0016](adr/0016-engineering-session-foundation.md),
-[ADR-0017](adr/0017-conversation-foundation.md)). Describing
+[ADR-0017](adr/0017-conversation-foundation.md),
+[ADR-0018](adr/0018-working-memory-foundation.md)). Describing
 Semantic Retrieval or the AI Assistant as existing would misrepresent
 the system; they are named here only to mark where a future milestone
 (the AI Assistant, per the Product Development Plan) will attach, and
-to make clear that when it arrives, it consumes Conversation's own
-structured Turn/Message history — it does not gain its own path to
+to make clear that when it arrives, it consumes Working Memory's own
+bounded, structurally-derived view — it does not gain its own path to
 engineering truth, and Anthropic remains one configurable adapter
 rather than the platform's identity.
 
@@ -320,6 +328,14 @@ dedicated boundary section: `test_conversation_does_not_import_forbidden_modules
 with no exceptions anywhere, the same guarantee Engineering Session's
 own equivalent test establishes (see ADR-0017).
 
+Milestone 21 adds `working_memory` to `ALLOWED_DOMAIN_DEPENDENCIES`
+(`{"conversation", "engineering_session", "engineering_response"}`) and
+its own dedicated boundary section:
+`test_working_memory_does_not_import_forbidden_modules`,
+`test_working_memory_surface_has_no_ai_or_provider_dependency`, and
+`test_working_memory_domain_never_imports_the_application_layer` -
+again with no exceptions anywhere (see ADR-0018).
+
 ## Public vocabulary boundary: entity types (Graph Query ↔ Canonicalization)
 
 `GraphQueryValidator.validate_entity_type` can confirm an entity-type
@@ -383,3 +399,4 @@ into the governed pipeline this milestone.
 - **Engineering Response:** [engineering_response.md](engineering_response.md), [ADR-0015](adr/0015-engineering-response-foundation.md).
 - **Engineering Session:** [engineering_session.md](engineering_session.md), [ADR-0016](adr/0016-engineering-session-foundation.md).
 - **Conversation:** [conversation.md](conversation.md), [ADR-0017](adr/0017-conversation-foundation.md).
+- **Working Memory:** [working_memory.md](working_memory.md), [ADR-0018](adr/0018-working-memory-foundation.md).

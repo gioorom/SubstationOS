@@ -93,3 +93,4 @@ one.
 | [0015](0015-engineering-response-foundation.md) | Engineering Response Foundation | Accepted |
 | [0016](0016-engineering-session-foundation.md) | Engineering Session Foundation | Accepted |
 | [0017](0017-conversation-foundation.md) | Conversation Foundation | Accepted |
+| [0018](0018-working-memory-foundation.md) | Working Memory Foundation | Accepted |

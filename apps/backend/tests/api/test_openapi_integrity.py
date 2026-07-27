@@ -303,6 +303,14 @@ def test_conversation_endpoints_are_registered() -> None:
         assert "post" in schema["paths"][path]
 
 
+def test_working_memory_endpoints_are_registered() -> None:
+    schema = app_instance.openapi()
+    base = "/projects/{project_id}/working-memory"
+    for path in (f"{base}/build", f"{base}/rebuild"):
+        assert path in schema["paths"]
+        assert "post" in schema["paths"][path]
+
+
 def test_llm_provider_neutral_schemas_are_not_anthropic_shaped() -> None:
     """
     The provider-neutral request contract (``LLMMessageRoleRead``-style

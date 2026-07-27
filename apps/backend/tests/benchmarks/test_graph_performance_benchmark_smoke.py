@@ -4,8 +4,9 @@ Smoke coverage for scripts/benchmarks/graph_performance_benchmark.py
 Milestone 13, Context Builder in Milestone 14, Prompt Builder in
 Milestone 15, the LLM Provider Abstraction Layer in Milestone 16, the
 LLM Invocation Runtime in Milestone 17, Engineering Response in
-Milestone 18, Engineering Session in Milestone 19, and Conversation in
-Milestone 20). Proves the benchmark code itself runs against the small
+Milestone 18, Engineering Session in Milestone 19, Conversation in
+Milestone 20, and Working Memory in Milestone 21). Proves the
+benchmark code itself runs against the small
 synthetic dataset without error and produces sane row counts - it
 deliberately asserts nothing about wall-clock time, so it cannot become
 flaky under CI load (per the milestone's "no flaky wall-clock
@@ -31,6 +32,7 @@ from scripts.benchmarks.graph_performance_benchmark import (
     run_prompt_builder_benchmarks,
     run_store_level_and_read_benchmarks,
     run_structured_retrieval_benchmarks,
+    run_working_memory_benchmarks,
 )
 
 _EXPECTED_STORE_AND_READ_OPERATIONS = {
@@ -84,6 +86,10 @@ _EXPECTED_ENGINEERING_SESSION_OPERATIONS = {
 
 _EXPECTED_CONVERSATION_OPERATIONS = {
     "conversation_turn_lifecycle",
+}
+
+_EXPECTED_WORKING_MEMORY_OPERATIONS = {
+    "working_memory_build",
 }
 
 
@@ -200,4 +206,12 @@ def test_conversation_benchmarks_run() -> None:
 
     operations = {measurement.operation for measurement in measurements}
     assert operations == _EXPECTED_CONVERSATION_OPERATIONS
+    assert all(measurement.seconds >= 0 for measurement in measurements)
+
+
+def test_working_memory_benchmarks_run() -> None:
+    measurements = run_working_memory_benchmarks()
+
+    operations = {measurement.operation for measurement in measurements}
+    assert operations == _EXPECTED_WORKING_MEMORY_OPERATIONS
     assert all(measurement.seconds >= 0 for measurement in measurements)

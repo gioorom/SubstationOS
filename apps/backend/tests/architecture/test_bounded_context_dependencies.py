@@ -170,6 +170,17 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
     # Prompt Builder, Context Builder, Structured Retrieval, Graph
     # Query, or Graph Builder import of its own.
     "conversation": frozenset({"engineering_session", "engineering_response"}),
+    # Working Memory (Milestone 21) depends on exactly the same two
+    # domain contexts Conversation does, plus Conversation itself:
+    # engineering_session (to validate its EngineeringSessionId echo),
+    # engineering_response (entries reference EngineeringResponse
+    # objects directly, never copied), and conversation (its own
+    # primary input - Turns/Messages are read structurally, never
+    # reinterpreted). No Prompt Builder, Context Builder, Structured
+    # Retrieval, Graph Query, or Graph Builder import of its own.
+    "working_memory": frozenset(
+        {"conversation", "engineering_session", "engineering_response"}
+    ),
 }
 
 # Contexts outside app/domain/ontology - not part of the knowledge
@@ -875,6 +886,118 @@ def test_conversation_domain_never_imports_the_application_layer() -> None:
     offenders: list[str] = []
 
     for path in _python_files(DOMAIN_ROOT / "conversation"):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if module == "app.application" or module.startswith(
+                "app.application."
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+# --- Working Memory boundaries (Milestone 21) ----------------------------
+
+_WORKING_MEMORY_SURFACE = (
+    DOMAIN_ROOT / "working_memory",
+    APP_ROOT / "services" / "working_memory_service.py",
+    APP_ROOT / "routers" / "working_memory.py",
+)
+
+# Working Memory must never perform I/O, query the graph, invoke a
+# provider, or re-derive retrieval/context/prompt assembly - it reads
+# Conversation/EngineeringSession/EngineeringResponse structurally only.
+# No SQLAlchemy, no graph ports, no legacy Knowledge Graph path, no
+# Proposed Claims/Review Workflow, no Structured Retrieval/Context
+# Builder/Prompt Builder *service or router*, no app.application.** of
+# any kind, no provider SDK, and no LLM Invocation Runtime module -
+# Working Memory has no application-layer input at all, so (like
+# Engineering Session and Conversation) it needs no exception anywhere,
+# not even in its own service module.
+_FORBIDDEN_FOR_WORKING_MEMORY = (
+    "sqlalchemy",
+    "app.domain.project_knowledge_graph.graph_store",
+    "app.infrastructure.project_knowledge_graph.sqlalchemy_graph_store",
+    "app.domain.graph_query.graph_query_repository",
+    "app.infrastructure.graph_query",
+    "app.services.graph_query_service",
+    "app.routers.graph_query",
+    "app.services.structured_retrieval_service",
+    "app.routers.structured_retrieval",
+    "app.services.context_builder_service",
+    "app.routers.context_builder",
+    "app.services.prompt_builder_service",
+    "app.routers.prompt_builder",
+    "app.services.engineering_response_service",
+    "app.routers.engineering_response",
+    "app.services.engineering_session_service",
+    "app.routers.engineering_session",
+    "app.services.conversation_service",
+    "app.routers.conversation",
+    "app.models.knowledge_graph",
+    "app.services.knowledge_graph",
+    "app.routers.knowledge_graph",
+    "app.schemas.knowledge_graph",
+    "app.domain.proposed_claims",
+    "app.domain.review_workflow",
+    "app.application",
+    "app.infrastructure.llm",
+    "app.services.llm_runtime",
+)
+
+
+def test_working_memory_does_not_import_forbidden_modules() -> None:
+    offenders: list[str] = []
+
+    for path in _files_under(*_WORKING_MEMORY_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_FOR_WORKING_MEMORY
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+def test_working_memory_surface_has_no_ai_or_provider_dependency() -> None:
+    offenders: list[str] = []
+
+    for path in _files_under(*_WORKING_MEMORY_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_ENGINEERING_RESPONSE_AI_MODULE_PREFIXES
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+def test_working_memory_domain_never_imports_the_application_layer() -> None:
+    """Working Memory has no application-layer input at all - so
+    app/domain/working_memory/** never imports app.application.**, with
+    no exception anywhere, not even in its own service module (the same
+    guarantee Engineering Session's and Conversation's own equivalent
+    tests establish)."""
+
+    offenders: list[str] = []
+
+    for path in _python_files(DOMAIN_ROOT / "working_memory"):
         imported = _imported_module_names(path)
 
         for module in imported:

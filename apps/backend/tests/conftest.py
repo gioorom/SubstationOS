@@ -30,6 +30,7 @@ from app.routers import review_workflow as review_workflow_router_module
 from app.routers import (
     structured_retrieval as structured_retrieval_router_module,
 )
+from app.routers import working_memory as working_memory_router_module
 
 
 @pytest.fixture()
@@ -89,6 +90,7 @@ def api_client(db_session: Session) -> Iterator[TestClient]:
     test_app.include_router(engineering_response_router_module.router)
     test_app.include_router(engineering_session_router_module.router)
     test_app.include_router(conversation_router_module.router)
+    test_app.include_router(working_memory_router_module.router)
 
     def _override_get_db() -> Iterator[Session]:
         yield db_session

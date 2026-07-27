@@ -1,8 +1,8 @@
 """
 End-to-end proof that the full governed knowledge pipeline reaches a
-``Conversation`` (inside an ``EngineeringSession``) whose turn
-references a structured, traceable ``EngineeringResponse`` (EPIC 4-5,
-Milestones 13-20):
+deterministic ``WorkingMemory`` built from a ``Conversation`` (inside an
+``EngineeringSession``) whose turn references a structured, traceable
+``EngineeringResponse`` (EPIC 4-5, Milestones 13-21):
 
     ProposedClaim -> approval -> CanonicalFact -> GraphOperationBatch ->
     GraphExecution -> Project Knowledge Graph -> Graph Query ->
@@ -10,7 +10,7 @@ Milestones 13-20):
     Prompt Builder PromptPackage -> neutral LLMRequest ->
     AnthropicPreparedRequest -> mocked Anthropic invocation ->
     LLMResponseEnvelope -> EngineeringResponse -> EngineeringSession ->
-    Conversation -> ConversationTurn
+    Conversation -> ConversationTurn -> WorkingMemory
 
 Every earlier stage already has its own dedicated test suite (domain,
 service, and API tests per bounded context); this file exists purely
@@ -478,3 +478,45 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
     assert final_turn["engineering_responses"][0]["direct_answer"]["body"] == [
         "End-to-end deterministic answer."
     ]
+
+    # 17. Working Memory - deterministically rebuilt from the
+    # Conversation and EngineeringSession above; never conversation
+    # history, never project knowledge, never AI-edited. No open
+    # question exists (the turn above was completed), so the entries
+    # here come entirely from the attached EngineeringResponse's own
+    # already-computed status/references/warnings - structural facts,
+    # never semantic interpretation of message content.
+    working_memory_response = api_client.post(
+        f"/projects/{project['id']}/working-memory/build",
+        json={
+            "conversation": final_conversation,
+            "engineering_session": final_session,
+        },
+    )
+    assert working_memory_response.status_code == 200
+    working_memory_body = working_memory_response.json()
+    assert working_memory_body["validation"]["valid"] is True
+
+    working_memory = working_memory_body["working_memory"]
+    assert working_memory["working_memory_id"] == (
+        f"{final_conversation['conversation_id']}:working-memory"
+    )
+    entry_types = {e["entry_type"] for e in working_memory["entries"]}
+    assert "open_question" not in entry_types
+    assert "recent_engineering_response" in entry_types
+    assert working_memory["statistics"]["recent_engineering_response_count"] == 1
+
+    # Deterministic: rebuilding from the same Conversation/EngineeringSession
+    # always produces the same entries.
+    rebuild_response = api_client.post(
+        f"/projects/{project['id']}/working-memory/rebuild",
+        json={
+            "conversation": final_conversation,
+            "engineering_session": final_session,
+        },
+    )
+    assert rebuild_response.status_code == 200
+    rebuilt_entry_types = [
+        e["entry_type"] for e in rebuild_response.json()["working_memory"]["entries"]
+    ]
+    assert rebuilt_entry_types == [e["entry_type"] for e in working_memory["entries"]]

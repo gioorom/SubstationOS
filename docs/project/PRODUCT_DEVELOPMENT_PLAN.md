@@ -130,6 +130,7 @@ readiness declaration)
 | Engineering Response | Implemented — deterministic, domain-owned `EngineeringResponse` (typed sections, structured warnings, uncertainty declarations, preserved evidence/version provenance) normalized from an `LLMResponseEnvelope`, no AI usage of its own (Milestone 18, ADR-0015); `SUMMARY`/`TECHNICAL_EXPLANATION`/`ASSUMPTIONS`/`NEXT_ACTIONS` sections always empty (no semantic parsing of provider prose); no conversation, no persistence |
 | Engineering Session | Implemented — the root aggregate for one engineering work session: project identity, a validated state machine (`CREATED`/`ACTIVE`/`PAUSED`/`COMPLETED`/`ARCHIVED`), an ordered `EngineeringResponse` history, an append-only timeline, statistics, version metadata (Milestone 19, ADR-0016); smallest dependency surface of any context in this pipeline (only `engineering_response`); no conversation/chat/memory/tools/agents yet; no persistence - each API call accepts and returns the full session, nothing is held server-side |
 | Conversation | Implemented — structured engineering dialogue belonging to an `EngineeringSession` (referenced, never embedded): ordered `ConversationTurn`s (the primary conversational unit, not `ConversationMessage`) owning ordered messages and `EngineeringResponse` references (held directly, never copied), a validated Conversation/Turn state machine, an append-only timeline, statistics, version metadata (Milestone 20, ADR-0017); no memory, tool execution, agents, or assistant reasoning yet; no persistence |
+| Working Memory | Implemented — deterministic, structurally-derived temporary engineering context for continued reasoning: open questions, recent `EngineeringResponse`s, their evidence references, and their already-computed assumptions/constraints (Milestone 21, ADR-0018); not conversation history, not project knowledge, never AI-edited, never persisted; `CURRENT_OBJECTIVE`/`CURRENT_EQUIPMENT`/`CURRENT_ELECTRICAL_AREA`/`CURRENT_TASK` reserved but never populated (no structural signal exists yet) |
 | AI Assistant | Does not exist |
 | Web frontend | Early — project listing/detail pages exist (`apps/frontend`), no auth, no review UI |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
@@ -395,13 +396,20 @@ Services.
   belonging to an `EngineeringSession`: ordered `ConversationTurn`s (the
   primary conversational unit) owning ordered messages and
   `EngineeringResponse` references, with future tool execution,
-  retrieval, and agent execution all reserved to live inside a Turn.
+  retrieval, and agent execution all reserved to live inside a Turn;
+  `app/domain/working_memory/**` (Working Memory Foundation, Milestone
+  21, ADR-0018) — the temporary, deterministic engineering context
+  needed to continue reasoning during a session: open questions,
+  recent `EngineeringResponse`s, their references, and their
+  already-computed assumptions/constraints, all structurally derived
+  and always rebuildable, never AI-edited.
 - **Implementation maturity:** Early. The `AIProvider` port and one
   legacy adapter (`app/services/ai/claude_provider.py`) already existed
   and remain the foundation this EPIC extends, not replaces; Engineering
-  Response, Engineering Session, and Conversation Foundations are now
-  delivered on top of the governed EPIC 4 pipeline. No memory, tool
-  execution, agent, or assistant-reasoning surface exists yet.
+  Response, Engineering Session, Conversation, and Working Memory
+  Foundations are now delivered on top of the governed EPIC 4 pipeline.
+  No long-term memory, tool execution, agent, or assistant-reasoning
+  surface exists yet.
 
 ### EPIC 6 — Web Platform
 
@@ -1087,6 +1095,53 @@ interruptions, and are ranges, not commitments.
 - Dependencies: Milestone 19 (an `EngineeringSession` to belong to) and
   Milestone 18 (an `EngineeringResponse` to reference).
 
+**Milestone 21 — Working Memory Foundation** — *Completed*
+- Objective: introduce the temporary engineering context required to
+  continue reasoning during a session - explicitly not conversation
+  history and not project knowledge. Fully deterministic; always
+  rebuildable from its own inputs; never edited by an LLM.
+- Delivered: `app/domain/working_memory/**` - depends on exactly three
+  other domain contexts (`conversation`, `engineering_session`,
+  `engineering_response`), no Prompt Builder, Context Builder,
+  Structured Retrieval, Graph Query, provider SDK, or
+  `app.application.**` of any kind. `WorkingMemory` (owned by exactly
+  one `Conversation`, referenced by `ConversationId`, never embedded) ->
+  ordered `WorkingMemoryEntry` objects, each typed
+  (`WorkingMemoryEntryType`), sourced (`WorkingMemorySource`), and
+  assigned a fixed priority/lifetime (`WorkingMemoryPriority`/
+  `WorkingMemoryLifetime`) from a documented policy table, never a
+  per-entry judgment. Entries populated today - `OPEN_QUESTION` (the
+  last unanswered `USER` message in a still-open turn, verbatim),
+  `RECENT_ENGINEERING_RESPONSE` (referenced by object, never copied),
+  `ACTIVE_REFERENCE` (deduplicated evidence references from recent
+  responses), `ASSUMPTION`/`CONSTRAINT` (the most recent response's own
+  uncertainty reasons/warning messages, verbatim) - and entries
+  deliberately reserved but never populated -
+  `CURRENT_OBJECTIVE`/`CURRENT_EQUIPMENT`/`CURRENT_ELECTRICAL_AREA`/
+  `CURRENT_TASK` - since identifying them from free text would require
+  exactly the semantic interpretation this milestone forbids.
+  `WorkingMemoryId` is deterministically derived from `ConversationId`
+  (`f"{conversation_id}:working-memory"`), never caller-supplied or
+  random. `WorkingMemoryBuilder` (`build_working_memory`/
+  `rebuild_working_memory` - the same computation, since nothing is
+  ever persisted); a self-validating `WorkingMemoryValidator` checking
+  structure only, never semantics. `app/services/working_memory_service.py` -
+  no application-layer translation seam needed.
+  `POST /projects/{id}/working-memory/{build,rebuild}` - pure
+  deterministic transformations, no AI invocation, no persistence.
+- Architecture impact: **new ADR (0018)** — why Working Memory is
+  neither Conversation nor Knowledge, why it must be deterministic and
+  always rebuildable, why LLMs never edit it, and why entries are
+  structurally derived rather than semantically interpreted.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 21" for Document
+  Viewer (EPIC 6). That entry's number is left unchanged here, for the
+  same reason Milestones 12-20's numbering collisions were left
+  unchanged rather than cascade-renumbering subsequent milestones — see
+  those milestones' own numbering notes.
+- Dependencies: Milestone 20 (a `Conversation` to derive from) and
+  Milestone 19 (its owning `EngineeringSession`).
+
 **Milestone 17 — AI Assistant**
 - Objective: build the conversational, user-facing surface over the
   Query Engine.
@@ -1468,6 +1523,23 @@ Transmission, Rail, Renewables, and any future discipline)
   future need for concurrent or branching turns emerges (e.g. parallel
   tool calls), it is a documented extension point in ADR-0017, not
   solved speculatively now.
+- **Working Memory's `CURRENT_OBJECTIVE`/`CURRENT_EQUIPMENT`/
+  `CURRENT_ELECTRICAL_AREA`/`CURRENT_TASK` entry types are permanently
+  unpopulated.** No structural signal exists today that identifies
+  them without semantic interpretation of message content, which this
+  milestone forbids. Deliberate and documented, not an oversight - see
+  ADR-0018 and `working_memory.md`'s entry-type table. Populating them
+  requires either a future capability with genuinely structured input
+  (e.g. an explicit field a user sets) or a deliberate, separately
+  justified decision to introduce semantic interpretation - not solved
+  speculatively here.
+- **Working Memory has no persistence**, the same posture every
+  Milestone 19-20 bounded context already takes - a `WorkingMemory`'s
+  lifetime is exactly one client's own request/response chain. This is
+  more load-bearing here than elsewhere: Working Memory is explicitly
+  designed to always be rebuildable rather than persisted, so this is
+  not merely deferred work but the milestone's own core design choice
+  (see ADR-0018).
 
 ---
 

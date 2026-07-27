@@ -40,6 +40,7 @@ from app.routers import (
     proposed_claims as proposed_claims_router,
     review_workflow as review_workflow_router,
     structured_retrieval as structured_retrieval_router,
+    working_memory as working_memory_router,
 )
 
 load_dotenv()
@@ -92,6 +93,7 @@ app.include_router(llm_provider_router.router)
 app.include_router(engineering_response_router.router)
 app.include_router(engineering_session_router.router)
 app.include_router(conversation_router.router)
+app.include_router(working_memory_router.router)
 
 
 @app.get("/")
