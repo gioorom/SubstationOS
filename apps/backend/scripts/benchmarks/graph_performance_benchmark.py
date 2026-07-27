@@ -1,16 +1,21 @@
 """
 Deterministic performance baseline for the Project Knowledge Graph
 execution path, the Graph Query read model (Milestone 12, Workstream
-6), and Structured Retrieval (Milestone 13).
+6), Structured Retrieval (Milestone 13), Context Builder (Milestone
+14), and Prompt Builder (Milestone 15).
 
 This is a *measurement* script, not a correctness test and not a
 performance-optimization milestone. It generates synthetic, non-
 confidential fixtures at two fixed sizes and times: node upsert,
 relationship upsert, a medium GraphOperationBatch execution, list
 nodes, list relationships, statistics, orphan detection, attribute
-filtering, a 1-hop neighborhood query (Milestone 12), and exact entity
+filtering, a 1-hop neighborhood query (Milestone 12), exact entity
 lookup, entity-type, relationship-type, lexical, combined, and
-neighborhood-enriched Structured Retrieval (Milestone 13).
+neighborhood-enriched Structured Retrieval (Milestone 13), Context
+Builder assembly over a combined-mode KnowledgeCandidateCollection,
+both within budget and under a tight budget that forces discards
+(Milestone 14), and Prompt Builder composition over the resulting
+ContextPackage (Milestone 15).
 
 Run directly for a full report (small + medium):
 
@@ -27,6 +32,7 @@ sane row counts - never a wall-clock threshold, per the milestone's
 
 from __future__ import annotations
 
+import asyncio
 import random
 import time
 from collections import Counter
@@ -77,6 +83,46 @@ from app.domain.structured_retrieval.structured_retrieval_models import (
     LexicalMatchMode,
     RetrievalMode,
 )
+from app.domain.context_builder.context_builder_factory import (
+    ContextBuildRequestFactory,
+)
+from app.domain.context_builder.context_package_assembler import (
+    assemble_context_package,
+)
+from app.domain.prompt_builder.prompt_builder_factory import (
+    PromptBuildRequestFactory,
+)
+from app.domain.prompt_builder.prompt_package_assembler import (
+    assemble_prompt_package,
+)
+from app.application.models.llm_request import (
+    LLMCapabilityRequirements,
+    LLMGenerationParameters,
+    LLMModelSelection,
+    LLMProviderSelection,
+    LLMRequest,
+)
+from app.application.models.llm_capabilities import LLMCapability
+from app.application.services.prompt_package_to_llm_request_mapper import (
+    map_prompt_package_to_llm_request,
+)
+from app.infrastructure.llm.anthropic.anthropic_adapter import AnthropicAdapter
+from app.infrastructure.llm.anthropic.anthropic_response_mapper import (
+    map_content,
+    map_finish_reason,
+    map_usage,
+)
+from app.infrastructure.llm.base.fake_llm_provider_adapter import (
+    FakeInvocationOutcome,
+    FakeLLMProviderAdapter,
+)
+from app.application.models.llm_invocation import (
+    LLMInvocationPolicy,
+    LLMProviderErrorCategory,
+    LLMRetryPolicy,
+    LLMTimeoutPolicy,
+)
+from app.application.services.llm_runtime import run_invocation
 from app.infrastructure.graph_builder.sqlalchemy_graph_operation_batch_repository import (
     SqlAlchemyGraphOperationBatchRepository,
 )
@@ -675,6 +721,513 @@ def run_structured_retrieval_benchmarks(
     return measurements
 
 
+def run_context_builder_benchmarks(
+    spec: DatasetSpec, seed: int = 42
+) -> list[BenchmarkMeasurement]:
+    """
+    Measures Context Builder assembly (Milestone 14) over the
+    ``COMBINED``-mode ``KnowledgeCandidateCollection`` Structured
+    Retrieval itself produces for the same populated project -
+    Selection, Aggregation, Coverage Analysis, and Budget Enforcement
+    together, both within a generous budget (nothing discarded) and
+    under a tight budget (forcing discards, warnings, and partial
+    coverage) - proving assembly cost scales with candidate count, not
+    with graph size, since Context Builder never touches Graph Query or
+    the database itself.
+    """
+
+    engine, session = _new_engine_and_session()
+    measurements: list[BenchmarkMeasurement] = []
+
+    try:
+        project_id = _create_project(
+            session,
+            f"Benchmark context builder {spec.name}",
+            f"BENCH-CONTEXT-{spec.name.upper()}",
+        )
+        node_ids, relationships = _generate_dataset(project_id, spec, seed)
+        graph_store = SqlAlchemyGraphStore(session)
+
+        for entity_id in node_ids:
+            graph_store.upsert_node(
+                graph_entity_id=entity_id, execution_id=1, now=NOW
+            )
+        for entity_id in node_ids:
+            if entity_id.entity_type in ATTRIBUTE_BEARING_TYPES:
+                graph_store.merge_node_property(
+                    graph_entity_id=entity_id,
+                    attribute=ATTRIBUTE_NAME,
+                    value=ATTRIBUTE_VALUE,
+                    execution_id=1,
+                    now=NOW,
+                )
+        for source, relationship_type, target in relationships:
+            graph_store.upsert_relationship(
+                source_entity_id=source,
+                relationship_type=GraphRelationshipType(value=relationship_type),
+                target_entity_id=target,
+                execution_id=1,
+                now=NOW,
+            )
+        session.commit()
+
+        repository = SqlAlchemyGraphQueryRepository(session)
+        combined_request = StructuredRetrievalRequestFactory.create(
+            project_id=project_id,
+            mode=RetrievalMode.COMBINED,
+            limit=200,
+            include_neighborhood=False,
+            neighborhood_depth=0,
+            entity_type=ENTITY_TYPES[0],
+            attribute_name=ATTRIBUTE_NAME,
+        )
+        retrieval_result = structured_retrieval_service.retrieve(
+            repository, combined_request, now=NOW
+        )
+        candidates = retrieval_result.candidates
+
+        within_budget_request = ContextBuildRequestFactory.create(
+            project_id=project_id,
+            candidates=candidates,
+            max_candidates=len(candidates.candidates) or 1,
+            max_entities=len(candidates.candidates) or 1,
+            max_attributes=len(candidates.candidates) or 1,
+        )
+        measurements.append(
+            _timed(
+                "context_builder_within_budget",
+                spec.name,
+                len(candidates.candidates),
+                lambda: assemble_context_package(
+                    within_budget_request, now=NOW
+                ),
+            )
+        )
+
+        tight_budget_request = ContextBuildRequestFactory.create(
+            project_id=project_id,
+            candidates=candidates,
+            max_candidates=max(1, len(candidates.candidates) // 4),
+            max_entities=max(1, len(candidates.candidates) // 8),
+        )
+        measurements.append(
+            _timed(
+                "context_builder_tight_budget",
+                spec.name,
+                len(candidates.candidates),
+                lambda: assemble_context_package(
+                    tight_budget_request, now=NOW
+                ),
+            )
+        )
+    finally:
+        session.close()
+        engine.dispose()
+
+    return measurements
+
+
+def run_prompt_builder_benchmarks(
+    spec: DatasetSpec, seed: int = 42
+) -> list[BenchmarkMeasurement]:
+    """
+    Measures Prompt Builder composition (Milestone 15) over the
+    ``ContextPackage`` Context Builder itself produces for the same
+    populated project's ``COMBINED``-mode retrieval - Composition,
+    Statistics, Metadata/Versioning, and Validation together. Prompt
+    Builder never touches Graph Query, Structured Retrieval, or the
+    database itself, so assembly cost scales only with the size of the
+    input ``ContextPackage``, never with graph size.
+    """
+
+    engine, session = _new_engine_and_session()
+    measurements: list[BenchmarkMeasurement] = []
+
+    try:
+        project_id = _create_project(
+            session,
+            f"Benchmark prompt builder {spec.name}",
+            f"BENCH-PROMPT-{spec.name.upper()}",
+        )
+        node_ids, relationships = _generate_dataset(project_id, spec, seed)
+        graph_store = SqlAlchemyGraphStore(session)
+
+        for entity_id in node_ids:
+            graph_store.upsert_node(
+                graph_entity_id=entity_id, execution_id=1, now=NOW
+            )
+        for entity_id in node_ids:
+            if entity_id.entity_type in ATTRIBUTE_BEARING_TYPES:
+                graph_store.merge_node_property(
+                    graph_entity_id=entity_id,
+                    attribute=ATTRIBUTE_NAME,
+                    value=ATTRIBUTE_VALUE,
+                    execution_id=1,
+                    now=NOW,
+                )
+        for source, relationship_type, target in relationships:
+            graph_store.upsert_relationship(
+                source_entity_id=source,
+                relationship_type=GraphRelationshipType(value=relationship_type),
+                target_entity_id=target,
+                execution_id=1,
+                now=NOW,
+            )
+        session.commit()
+
+        repository = SqlAlchemyGraphQueryRepository(session)
+        combined_request = StructuredRetrievalRequestFactory.create(
+            project_id=project_id,
+            mode=RetrievalMode.COMBINED,
+            limit=200,
+            include_neighborhood=False,
+            neighborhood_depth=0,
+            entity_type=ENTITY_TYPES[0],
+            attribute_name=ATTRIBUTE_NAME,
+        )
+        retrieval_result = structured_retrieval_service.retrieve(
+            repository, combined_request, now=NOW
+        )
+
+        context_request = ContextBuildRequestFactory.create(
+            project_id=project_id,
+            candidates=retrieval_result.candidates,
+            max_candidates=len(retrieval_result.candidates.candidates) or 1,
+            max_entities=len(retrieval_result.candidates.candidates) or 1,
+            max_attributes=len(retrieval_result.candidates.candidates) or 1,
+        )
+        context_package = assemble_context_package(context_request, now=NOW)
+
+        prompt_request = PromptBuildRequestFactory.create(
+            project_id=project_id, context_package=context_package
+        )
+        measurements.append(
+            _timed(
+                "prompt_builder_composition",
+                spec.name,
+                len(context_package.selected_candidates),
+                lambda: assemble_prompt_package(prompt_request, now=NOW),
+            )
+        )
+    finally:
+        session.close()
+        engine.dispose()
+
+    return measurements
+
+
+def run_llm_provider_benchmarks(
+    spec: DatasetSpec, seed: int = 42
+) -> list[BenchmarkMeasurement]:
+    """
+    Measures the LLM Provider Abstraction Layer (Milestone 16): mapping
+    a ``PromptPackage`` into a neutral ``LLMRequest``, then translating
+    that request into a local ``AnthropicPreparedRequest`` - over the
+    same ``PromptPackage`` Prompt Builder itself produces for the
+    populated project's ``COMBINED``-mode retrieval. No network I/O of
+    any kind; cost scales only with the size of the input
+    ``PromptPackage``, never with graph size or an external API call.
+    """
+
+    engine, session = _new_engine_and_session()
+    measurements: list[BenchmarkMeasurement] = []
+
+    try:
+        project_id = _create_project(
+            session,
+            f"Benchmark llm provider {spec.name}",
+            f"BENCH-LLM-{spec.name.upper()}",
+        )
+        node_ids, relationships = _generate_dataset(project_id, spec, seed)
+        graph_store = SqlAlchemyGraphStore(session)
+
+        for entity_id in node_ids:
+            graph_store.upsert_node(
+                graph_entity_id=entity_id, execution_id=1, now=NOW
+            )
+        for entity_id in node_ids:
+            if entity_id.entity_type in ATTRIBUTE_BEARING_TYPES:
+                graph_store.merge_node_property(
+                    graph_entity_id=entity_id,
+                    attribute=ATTRIBUTE_NAME,
+                    value=ATTRIBUTE_VALUE,
+                    execution_id=1,
+                    now=NOW,
+                )
+        for source, relationship_type, target in relationships:
+            graph_store.upsert_relationship(
+                source_entity_id=source,
+                relationship_type=GraphRelationshipType(value=relationship_type),
+                target_entity_id=target,
+                execution_id=1,
+                now=NOW,
+            )
+        session.commit()
+
+        repository = SqlAlchemyGraphQueryRepository(session)
+        combined_request = StructuredRetrievalRequestFactory.create(
+            project_id=project_id,
+            mode=RetrievalMode.COMBINED,
+            limit=200,
+            include_neighborhood=False,
+            neighborhood_depth=0,
+            entity_type=ENTITY_TYPES[0],
+            attribute_name=ATTRIBUTE_NAME,
+        )
+        retrieval_result = structured_retrieval_service.retrieve(
+            repository, combined_request, now=NOW
+        )
+
+        context_request = ContextBuildRequestFactory.create(
+            project_id=project_id,
+            candidates=retrieval_result.candidates,
+            max_candidates=len(retrieval_result.candidates.candidates) or 1,
+            max_entities=len(retrieval_result.candidates.candidates) or 1,
+            max_attributes=len(retrieval_result.candidates.candidates) or 1,
+        )
+        context_package = assemble_context_package(context_request, now=NOW)
+
+        prompt_request = PromptBuildRequestFactory.create(
+            project_id=project_id, context_package=context_package
+        )
+        prompt_result = assemble_prompt_package(prompt_request, now=NOW)
+
+        provider_selection = LLMProviderSelection(provider_id="anthropic")
+        model_selection = LLMModelSelection(model_identifier="benchmark-model")
+        generation_parameters = LLMGenerationParameters(max_output_tokens=1024)
+        capability_requirements = LLMCapabilityRequirements(
+            required_capabilities=(LLMCapability.TEXT_INPUT,)
+        )
+
+        llm_request_holder: dict[str, object] = {}
+
+        def _map() -> None:
+            llm_request_holder["request"] = map_prompt_package_to_llm_request(
+                prompt_result.package,
+                provider_selection=provider_selection,
+                model_selection=model_selection,
+                generation_parameters=generation_parameters,
+                capability_requirements=capability_requirements,
+                provider_abstraction_version="1.0",
+                request_preparation_policy_version="1.0",
+                request_correlation_id="benchmark-correlation-id",
+                now=NOW,
+            )
+
+        measurements.append(
+            _timed(
+                "llm_request_mapping",
+                spec.name,
+                len(prompt_result.package.sections),
+                _map,
+            )
+        )
+
+        adapter = AnthropicAdapter(
+            model_identifier="benchmark-model", default_max_output_tokens=1024
+        )
+        measurements.append(
+            _timed(
+                "llm_anthropic_request_preparation",
+                spec.name,
+                len(prompt_result.package.sections),
+                lambda: adapter.prepare_request(llm_request_holder["request"]),
+            )
+        )
+    finally:
+        session.close()
+        engine.dispose()
+
+    return measurements
+
+
+def _synthetic_llm_request():
+    """A minimal, self-contained ``LLMRequest`` fixture for benchmarking
+    the invocation runtime's own orchestration overhead - deliberately
+    not built from a real ``PromptPackage`` (this benchmark measures
+    the runtime loop, not composition), and never depends on any
+    ``tests/**`` module (a production script must stand on its own)."""
+
+    from app.application.models.llm_request import (
+        LLMContentBlock,
+        LLMContentType,
+        LLMMessage,
+        LLMMessageRole,
+        LLMRequestMetadata,
+        LLMRequestVersion,
+    )
+
+    metadata = LLMRequestMetadata(
+        project_id=0,
+        context_builder_version="1.0",
+        prompt_builder_version="1.0",
+        composition_policy_version="1.0",
+        prompt_package_version="1.0",
+        provider_abstraction_version="1.0",
+        request_preparation_policy_version="1.0",
+        provider_id="fake",
+        model_identifier="benchmark-model",
+        request_correlation_id="benchmark-corr",
+        excluded_section_types=(),
+        prepared_at=NOW,
+    )
+    return LLMRequest(
+        project_id=0,
+        provider_selection=LLMProviderSelection(provider_id="fake"),
+        model_selection=LLMModelSelection(model_identifier="benchmark-model"),
+        messages=(
+            LLMMessage(
+                role=LLMMessageRole.INSTRUCTION,
+                section_type="system_context",
+                content_blocks=(
+                    LLMContentBlock(content_type=LLMContentType.TEXT, text="Be precise."),
+                ),
+            ),
+            LLMMessage(
+                role=LLMMessageRole.CONTEXT,
+                section_type="engineering_context",
+                content_blocks=(
+                    LLMContentBlock(content_type=LLMContentType.TEXT, text="Project id: 0"),
+                ),
+            ),
+        ),
+        references=(),
+        generation_parameters=LLMGenerationParameters(),
+        capability_requirements=LLMCapabilityRequirements(
+            required_capabilities=(LLMCapability.TEXT_INPUT,)
+        ),
+        metadata=metadata,
+        version=LLMRequestVersion(
+            provider_abstraction_version="1.0",
+            request_preparation_policy_version="1.0",
+        ),
+    )
+
+
+def _synthetic_anthropic_message(text: str = "Synthetic benchmark response."):
+    """A local, in-memory ``anthropic.types.Message`` fixture - never a
+    network call, never a mock of the SDK's own types (the same real
+    SDK object used by ``tests/infrastructure/test_anthropic_response_mapper.py``)."""
+
+    from anthropic.types import Message, TextBlock, Usage
+
+    return Message(
+        id="msg_benchmark",
+        content=[TextBlock(type="text", text=text)],
+        model="benchmark-model",
+        role="assistant",
+        stop_reason="end_turn",
+        stop_sequence=None,
+        type="message",
+        usage=Usage(input_tokens=50, output_tokens=20),
+    )
+
+
+def run_llm_invocation_runtime_benchmarks() -> list[BenchmarkMeasurement]:
+    """
+    Measures the LLM Invocation Runtime's own orchestration overhead
+    (Milestone 17) - independent of graph size, since the runtime never
+    queries the database: a successful fake-provider invocation
+    (single attempt), one transient failure followed by a successful
+    retry, and Anthropic response normalization from a local
+    ``anthropic.types.Message`` fixture. Never benchmarks the live
+    provider API and never sleeps a real wall-clock delay (an
+    injected, no-op sleeper stands in for retry backoff).
+    """
+
+    measurements: list[BenchmarkMeasurement] = []
+
+    async def _no_op_sleeper(_seconds: float) -> None:
+        return None
+
+    policy = LLMInvocationPolicy(
+        retry_policy=LLMRetryPolicy(
+            version="1.0",
+            max_attempts=3,
+            base_delay_seconds=0.01,
+            max_delay_seconds=0.05,
+            jitter_enabled=False,
+        ),
+        timeout_policy=LLMTimeoutPolicy(
+            connect_timeout_seconds=5.0,
+            read_timeout_seconds=30.0,
+            total_deadline_seconds=60.0,
+        ),
+        runtime_version="1.0",
+    )
+
+    success_adapter = FakeLLMProviderAdapter(
+        outcomes=(FakeInvocationOutcome(succeeds=True),)
+    )
+    success_request = _synthetic_llm_request()
+    success_prepared = success_adapter.prepare_request(success_request)
+
+    def _run_success() -> None:
+        asyncio.run(
+            run_invocation(
+                adapter=success_adapter,
+                request=success_request,
+                prepared_request=success_prepared,
+                policy=policy,
+                request_correlation_id="benchmark-success",
+                clock=lambda: NOW,
+                sleeper=_no_op_sleeper,
+                random_source=random.Random(1),
+            )
+        )
+
+    measurements.append(
+        _timed("llm_invocation_fake_success", "n/a", 1, _run_success)
+    )
+
+    retry_adapter = FakeLLMProviderAdapter(
+        outcomes=(
+            FakeInvocationOutcome(
+                succeeds=False,
+                error_category=LLMProviderErrorCategory.TRANSIENT_PROVIDER_FAILURE,
+            ),
+            FakeInvocationOutcome(succeeds=True),
+        )
+    )
+    retry_prepared = retry_adapter.prepare_request(success_request)
+
+    def _run_retry() -> None:
+        asyncio.run(
+            run_invocation(
+                adapter=retry_adapter,
+                request=success_request,
+                prepared_request=retry_prepared,
+                policy=policy,
+                request_correlation_id="benchmark-retry",
+                clock=lambda: NOW,
+                sleeper=_no_op_sleeper,
+                random_source=random.Random(1),
+            )
+        )
+
+    measurements.append(
+        _timed("llm_invocation_transient_then_success", "n/a", 2, _run_retry)
+    )
+
+    message = _synthetic_anthropic_message()
+
+    def _run_response_normalization() -> None:
+        map_content(message)
+        map_finish_reason(message.stop_reason)
+        map_usage(message)
+
+    measurements.append(
+        _timed(
+            "anthropic_response_normalization",
+            "n/a",
+            len(message.content),
+            _run_response_normalization,
+        )
+    )
+
+    return measurements
+
+
 def run_all(specs: tuple[DatasetSpec, ...]) -> list[BenchmarkMeasurement]:
     measurements: list[BenchmarkMeasurement] = []
 
@@ -682,6 +1235,11 @@ def run_all(specs: tuple[DatasetSpec, ...]) -> list[BenchmarkMeasurement]:
         measurements.extend(run_store_level_and_read_benchmarks(spec))
         measurements.extend(run_batch_execution_benchmark(spec))
         measurements.extend(run_structured_retrieval_benchmarks(spec))
+        measurements.extend(run_context_builder_benchmarks(spec))
+        measurements.extend(run_prompt_builder_benchmarks(spec))
+        measurements.extend(run_llm_provider_benchmarks(spec))
+
+    measurements.extend(run_llm_invocation_runtime_benchmarks())
 
     return measurements
 

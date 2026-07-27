@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database.database import Base
 from app.routers import canonicalization as canonicalization_router_module
+from app.routers import context_builder as context_builder_router_module
 from app.routers import documents as documents_router_module
 from app.routers import engineering_index as engineering_index_router_module
 from app.routers import graph_builder as graph_builder_router_module
@@ -18,7 +19,9 @@ from app.routers import graph_query as graph_query_router_module
 from app.routers import (
     project_knowledge_graph as project_knowledge_graph_router_module,
 )
+from app.routers import llm_provider as llm_provider_router_module
 from app.routers import projects as projects_router_module
+from app.routers import prompt_builder as prompt_builder_router_module
 from app.routers import proposed_claims as proposed_claims_router_module
 from app.routers import review_workflow as review_workflow_router_module
 from app.routers import (
@@ -77,6 +80,9 @@ def api_client(db_session: Session) -> Iterator[TestClient]:
     test_app.include_router(project_knowledge_graph_router_module.router)
     test_app.include_router(graph_query_router_module.router)
     test_app.include_router(structured_retrieval_router_module.router)
+    test_app.include_router(context_builder_router_module.router)
+    test_app.include_router(prompt_builder_router_module.router)
+    test_app.include_router(llm_provider_router_module.router)
 
     def _override_get_db() -> Iterator[Session]:
         yield db_session

@@ -145,6 +145,9 @@ def test_every_active_router_contributes_at_least_one_route() -> None:
         "Project Knowledge Graph",
         "Graph Query",
         "Structured Retrieval",
+        "Context Builder",
+        "Prompt Builder",
+        "LLM Provider",
     }
 
     missing = expected_tags - tags_seen
@@ -169,6 +172,9 @@ def test_governed_graph_routes_are_not_deprecated() -> None:
         "Graph Query",
         "Graph Builder",
         "Structured Retrieval",
+        "Context Builder",
+        "Prompt Builder",
+        "LLM Provider",
     }
 
     governed_routes = [
@@ -208,6 +214,9 @@ def test_governed_knowledge_pipeline_routes_declare_response_models() -> (
         "Project Knowledge Graph",
         "Graph Query",
         "Structured Retrieval",
+        "Context Builder",
+        "Prompt Builder",
+        "LLM Provider",
     }
 
     governed_routes = [
@@ -224,3 +233,61 @@ def test_governed_knowledge_pipeline_routes_declare_response_models() -> (
     ]
 
     assert missing_response_model == []
+
+
+def test_llm_provider_schemas_have_no_credential_fields() -> None:
+    """
+    No response schema anywhere in the OpenAPI document may expose an
+    API key, credential, secret, or password field (Milestone 16's own
+    "no credential fields in output schemas" requirement) - checked
+    across every schema, not only the LLM Provider ones, since a leak
+    could in principle appear anywhere.
+    """
+
+    schema = app_instance.openapi()
+    forbidden_substrings = ("api_key", "apikey", "credential", "secret", "password")
+
+    offenders = [
+        f"{name}.{property_name}"
+        for name, definition in schema.get("components", {})
+        .get("schemas", {})
+        .items()
+        for property_name in definition.get("properties", {})
+        if any(
+            forbidden in property_name.lower()
+            for forbidden in forbidden_substrings
+        )
+    ]
+
+    assert offenders == []
+
+
+def test_llm_invoke_endpoint_is_registered() -> None:
+    schema = app_instance.openapi()
+    assert "/projects/{project_id}/llm/invoke" in schema["paths"]
+    assert "post" in schema["paths"]["/projects/{project_id}/llm/invoke"]
+
+
+def test_llm_provider_neutral_schemas_are_not_anthropic_shaped() -> None:
+    """
+    The provider-neutral request contract (``LLMMessageRoleRead``-style
+    enum, ``LLMMessage``, ``LLMRequest``) must not merely relabel
+    Anthropic's own API shape. ``LLMMessageRole`` proves this
+    structurally: it is a superset of Anthropic's own two-role
+    vocabulary (``user``/``assistant``), carrying roles
+    (``instruction``, ``context``, ``tool``) Anthropic's Messages API
+    has no equivalent for - if the neutral contract had silently
+    collapsed to Anthropic's own shape, only ``user``/``assistant``
+    would appear here.
+    """
+
+    schema = app_instance.openapi()
+    role_schema = schema["components"]["schemas"]["LLMMessageRole"]
+
+    assert set(role_schema["enum"]) == {
+        "instruction",
+        "context",
+        "user",
+        "assistant",
+        "tool",
+    }

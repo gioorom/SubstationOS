@@ -109,6 +109,29 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
     # Query itself depends on - never GraphStore, never Proposed
     # Claims/Review Workflow directly (see the dedicated tests below).
     "structured_retrieval": frozenset({"project", "graph_builder", "graph_query"}),
+    # Context Builder (Milestone 14) consumes Structured Retrieval's own
+    # output types (KnowledgeCandidateCollection/KnowledgeCandidate) as
+    # its shared, stable input vocabulary - the same "reuse the upstream
+    # read-oriented type" pattern Structured Retrieval itself
+    # established for Graph Query. Context Builder never imports
+    # graph_query or graph_builder directly: it never constructs a new
+    # GraphEntityId/GraphRelationshipType itself, only holds references
+    # to whatever a KnowledgeCandidate already carries.
+    "context_builder": frozenset({"project", "structured_retrieval"}),
+    # Prompt Builder (Milestone 15) consumes Context Builder's own
+    # output type (ContextPackage) as its shared, stable input
+    # vocabulary - the same pattern one level further downstream. It
+    # also reads structured_retrieval's own KnowledgeCandidate/
+    # KnowledgeCandidateKind vocabulary directly (ContextPackage embeds
+    # KnowledgeCandidate objects verbatim - the same transitive
+    # "shared, stable type" reuse graph_query/structured_retrieval
+    # already established), but never imports graph_query or
+    # graph_builder directly: it never constructs a new
+    # GraphEntityId/GraphRelationshipType itself, only reads fields off
+    # objects the ContextPackage already carries.
+    "prompt_builder": frozenset(
+        {"project", "context_builder", "structured_retrieval"}
+    ),
 }
 
 # Contexts outside app/domain/ontology - not part of the knowledge
@@ -299,6 +322,165 @@ def test_structured_retrieval_surface_has_no_ai_or_vector_dependency() -> (
             if any(
                 module == forbidden or module.startswith(f"{forbidden}.")
                 for forbidden in _FORBIDDEN_AI_MODULE_PREFIXES
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+# --- Context Builder boundaries (Milestone 14) --------------------------
+
+_CONTEXT_BUILDER_SURFACE = (
+    DOMAIN_ROOT / "context_builder",
+    APP_ROOT / "services" / "context_builder_service.py",
+    APP_ROOT / "routers" / "context_builder.py",
+)
+
+# Context Builder must never perform I/O, query the graph, or re-derive
+# retrieval - it consumes an already-built KnowledgeCandidateCollection
+# only. No SQLAlchemy, no write or read graph port, no legacy Knowledge
+# Graph path, no Proposed Claims/Review Workflow, and - critically - no
+# Graph Query and no Structured Retrieval *service or router* (its
+# domain *models* are the one allowed, shared-vocabulary exception,
+# enforced separately by ALLOWED_DOMAIN_DEPENDENCIES above).
+_FORBIDDEN_FOR_CONTEXT_BUILDER = (
+    "sqlalchemy",
+    "app.domain.project_knowledge_graph.graph_store",
+    "app.infrastructure.project_knowledge_graph.sqlalchemy_graph_store",
+    "app.domain.graph_query.graph_query_repository",
+    "app.infrastructure.graph_query",
+    "app.services.graph_query_service",
+    "app.routers.graph_query",
+    "app.services.structured_retrieval_service",
+    "app.routers.structured_retrieval",
+    "app.models.knowledge_graph",
+    "app.services.knowledge_graph",
+    "app.routers.knowledge_graph",
+    "app.schemas.knowledge_graph",
+    "app.domain.proposed_claims",
+    "app.domain.review_workflow",
+)
+
+
+def test_context_builder_does_not_import_forbidden_modules() -> None:
+    offenders: list[str] = []
+
+    for path in _files_under(*_CONTEXT_BUILDER_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_FOR_CONTEXT_BUILDER
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+def test_context_builder_surface_has_no_ai_or_vector_dependency() -> None:
+    offenders: list[str] = []
+
+    for path in _files_under(*_CONTEXT_BUILDER_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_AI_MODULE_PREFIXES
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+# --- Prompt Builder boundaries (Milestone 15) ---------------------------
+
+_PROMPT_BUILDER_SURFACE = (
+    DOMAIN_ROOT / "prompt_builder",
+    APP_ROOT / "services" / "prompt_builder_service.py",
+    APP_ROOT / "routers" / "prompt_builder.py",
+)
+
+# Prompt Builder must never perform I/O, query the graph, re-derive
+# retrieval, or re-derive context assembly - it consumes an
+# already-built ContextPackage only, and composes structured sections
+# from it. No SQLAlchemy, no write or read graph port, no legacy
+# Knowledge Graph path, no Proposed Claims/Review Workflow, no
+# Structured Retrieval or Context Builder *service or router* (their
+# domain models are the one allowed, shared-vocabulary exception,
+# enforced separately by ALLOWED_DOMAIN_DEPENDENCIES above), and no
+# provider SDK of any kind.
+_FORBIDDEN_FOR_PROMPT_BUILDER = (
+    "sqlalchemy",
+    "app.domain.project_knowledge_graph.graph_store",
+    "app.infrastructure.project_knowledge_graph.sqlalchemy_graph_store",
+    "app.domain.graph_query.graph_query_repository",
+    "app.infrastructure.graph_query",
+    "app.services.graph_query_service",
+    "app.routers.graph_query",
+    "app.services.structured_retrieval_service",
+    "app.routers.structured_retrieval",
+    "app.services.context_builder_service",
+    "app.routers.context_builder",
+    "app.models.knowledge_graph",
+    "app.services.knowledge_graph",
+    "app.routers.knowledge_graph",
+    "app.schemas.knowledge_graph",
+    "app.domain.proposed_claims",
+    "app.domain.review_workflow",
+)
+
+
+def test_prompt_builder_does_not_import_forbidden_modules() -> None:
+    offenders: list[str] = []
+
+    for path in _files_under(*_PROMPT_BUILDER_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_FOR_PROMPT_BUILDER
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+# No LLM, vector search, embedding, or external AI SDK/provider
+# dependency may appear anywhere in this bounded context - Prompt
+# Builder assembles a provider-independent PromptPackage only
+# (Milestone 15's explicit non-goals: no OpenAI, Anthropic, Ollama,
+# Azure OpenAI, LLM invocation, or provider adapters).
+_FORBIDDEN_PROVIDER_MODULE_PREFIXES = _FORBIDDEN_AI_MODULE_PREFIXES + (
+    "ollama",
+    "azure",
+)
+
+
+def test_prompt_builder_surface_has_no_ai_or_provider_dependency() -> None:
+    offenders: list[str] = []
+
+    for path in _files_under(*_PROMPT_BUILDER_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_PROVIDER_MODULE_PREFIXES
             ):
                 offenders.append(
                     f"{path.relative_to(APP_ROOT.parent)} imports "

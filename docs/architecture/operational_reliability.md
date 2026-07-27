@@ -86,6 +86,48 @@ already serves both purposes for this application's current size.
   `.gitignore` already anticipated this file
   (`!.env.example` alongside `.env`/`.env.*`) but it did not exist
   until now.
+  **Extended in Milestone 16** with `LLM_PROVIDER`/`LLM_MODEL`/
+  `LLM_DEFAULT_MAX_OUTPUT_TOKENS`/`LLM_TEMPERATURE` - a deliberately
+  separate configuration surface for the new, provider-neutral LLM
+  Provider Abstraction Layer (`app/application/**`), unrelated to the
+  legacy `ANTHROPIC_API_KEY`/`CLAUDE_MODEL` pair above. Unlike
+  `CLAUDE_MODEL`, `LLM_MODEL` has no hardcoded fallback model name of
+  any kind - see `docs/architecture/llm_provider_abstraction.md`.
+  **Extended again in Milestone 17** with `LLM_RUNTIME_ENABLED`/
+  `LLM_CONNECT_TIMEOUT_SECONDS`/`LLM_READ_TIMEOUT_SECONDS`/
+  `LLM_TOTAL_TIMEOUT_SECONDS`/`LLM_MAX_ATTEMPTS`/
+  `LLM_RETRY_BASE_DELAY_SECONDS`/`LLM_RETRY_MAX_DELAY_SECONDS`/
+  `LLM_RETRY_JITTER_ENABLED` for the LLM Invocation Runtime - this
+  surface reuses `ANTHROPIC_API_KEY` as its credential rather than
+  introducing a second key variable, since both paths ultimately call
+  the same Anthropic account. `LLM_RUNTIME_ENABLED` defaults to
+  `false`: a freshly deployed instance never performs a real provider
+  call, and never transmits project data externally, until an operator
+  explicitly opts in.
+
+## The LLM Invocation Runtime's failure posture
+
+Added in Milestone 17 (see
+[llm_invocation_runtime.md](llm_invocation_runtime.md) and
+[ADR-0014](adr/0014-llm-invocation-runtime.md)). Three timeouts are
+distinguished, never conflated: a per-call connect timeout, a per-call
+read timeout, and a single total invocation deadline covering every
+attempt and retry delay combined - a new attempt never starts once the
+deadline has passed, regardless of how much of `LLM_MAX_ATTEMPTS`
+remains. Retryable provider failures (connection/timeout/rate-limit/
+overload/transient-provider categories) are retried with bounded,
+jittered exponential backoff; every other category (authentication,
+invalid request, model not found, content-policy rejection, and,
+conservatively, any error the mapper cannot categorize) fails on the
+first attempt. `asyncio.CancelledError` is never treated as a
+retryable failure - it propagates as genuine cancellation. Every
+attempt (successful, failed, or cancelled) is preserved on the
+invocation result, so a caller can answer "what actually happened"
+without correlating logs across the SDK, the adapter, and the runtime.
+The Anthropic SDK's own retry logic is disabled entirely
+(`max_retries=0`): the runtime is the only layer that ever decides to
+retry, so total attempt count and total elapsed time stay predictable
+from one configuration surface.
 
 ## Test configuration remains isolated
 

@@ -1,18 +1,29 @@
 """
 End-to-end proof that the full governed knowledge pipeline reaches a
-Structured Retrieval result (EPIC 4, Milestone 13):
+normalized ``LLMResponseEnvelope`` (EPIC 4, Milestones 13-17):
 
     ProposedClaim -> approval -> CanonicalFact -> GraphOperationBatch ->
     GraphExecution -> Project Knowledge Graph -> Graph Query ->
-    Structured Retrieval Result
+    Structured Retrieval Result -> Context Builder ContextPackage ->
+    Prompt Builder PromptPackage -> neutral LLMRequest ->
+    AnthropicPreparedRequest -> mocked Anthropic invocation ->
+    LLMResponseEnvelope
 
 Every earlier stage already has its own dedicated test suite (domain,
 service, and API tests per bounded context); this file exists purely
 to prove the stages compose into one working chain through the real
-API, not to re-test any single stage's internal behavior.
+API, not to re-test any single stage's internal behavior. **No real
+network I/O occurs anywhere in this test** - the final stage
+monkeypatches the Anthropic client factory with a fake, in-memory SDK
+client (never a live call), the same technique
+``tests/api/test_llm_invocation_api.py`` uses on its own.
 """
 
 from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
+from tests.infrastructure._anthropic_test_support import make_message
 
 import io
 
@@ -20,7 +31,7 @@ from fastapi.testclient import TestClient
 
 
 def test_full_pipeline_reaches_a_structured_retrieval_result(
-    api_client: TestClient,
+    api_client: TestClient, monkeypatch
 ) -> None:
     # 1. Project
     project = api_client.post(
@@ -162,3 +173,146 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
     repeat_candidate = repeat_response.json()["candidates"]["candidates"][0]
     assert repeat_candidate["candidate_id"] == candidate["candidate_id"]
     assert repeat_candidate["score"]["total"] == candidate["score"]["total"]
+
+    # 10. Context Builder - the same ranked, explainable candidates,
+    # assembled into a bounded, provenance-aware ContextPackage. Context
+    # Builder never calls Structured Retrieval itself; it consumes
+    # exactly the KnowledgeCandidateCollection the prior call returned.
+    context_response = api_client.post(
+        f"/projects/{project['id']}/context-builder/build",
+        json={"candidates": result["candidates"]},
+    )
+    assert context_response.status_code == 200
+    context_result = context_response.json()
+
+    package = context_result["package"]
+    assert package["project_id"] == project["id"]
+    assert len(package["selected_candidates"]) == 1
+    selected = package["selected_candidates"][0]
+    assert selected["candidate_id"] == candidate["candidate_id"]
+    assert selected["score"]["total"] == candidate["score"]["total"]
+    assert selected["graph_execution_ids"] == [execution["id"]]
+
+    assert package["coverage"]["overall_completeness"] == 1.0
+    assert package["budget"]["exceeded"] is False
+    assert package["warnings"] == []
+    assert package["metadata"]["context_builder_version"]
+
+    # Deterministic: the same collection always assembles into the same
+    # ContextPackage.
+    repeat_context_response = api_client.post(
+        f"/projects/{project['id']}/context-builder/build",
+        json={"candidates": result["candidates"]},
+    )
+    repeat_selected = repeat_context_response.json()["package"][
+        "selected_candidates"
+    ][0]
+    assert repeat_selected["candidate_id"] == selected["candidate_id"]
+
+    # 11. Prompt Builder - the same ContextPackage, composed into a
+    # bounded, deterministic, provider-independent PromptPackage. Prompt
+    # Builder never calls Context Builder itself; it consumes exactly
+    # the ContextPackage the prior call returned.
+    prompt_response = api_client.post(
+        f"/projects/{project['id']}/prompt-builder/build",
+        json={"context_package": package},
+    )
+    assert prompt_response.status_code == 200
+    prompt_result = prompt_response.json()
+
+    prompt_package = prompt_result["package"]
+    assert prompt_package["project_id"] == project["id"]
+    assert len(prompt_package["sections"]) == 9
+    assert prompt_package["retrieved_knowledge"]["enabled"] is True
+    reference_ids = [r["candidate_id"] for r in prompt_package["references"]]
+    assert selected["candidate_id"] in reference_ids
+    assert len(prompt_package["constraints"]) == 5
+    assert len(prompt_package["instructions"]) == 3
+    assert prompt_result["validation"]["valid"] is True
+
+    # Deterministic: the same ContextPackage always composes into the
+    # same PromptPackage sections.
+    repeat_prompt_response = api_client.post(
+        f"/projects/{project['id']}/prompt-builder/build",
+        json={"context_package": package},
+    )
+    assert (
+        repeat_prompt_response.json()["package"]["sections"]
+        == prompt_package["sections"]
+    )
+
+    # 12. LLM Provider Abstraction Layer - the same PromptPackage,
+    # translated into a provider-neutral LLMRequest and then into a
+    # local AnthropicPreparedRequest. Never calls Anthropic, never
+    # sends anything over the network - only pure request preparation.
+    llm_response = api_client.post(
+        f"/projects/{project['id']}/llm/prepare-request",
+        json={
+            "prompt_package": prompt_package,
+            "provider_id": "anthropic",
+            "model_identifier": "model-under-test",
+        },
+    )
+    assert llm_response.status_code == 200
+    llm_result = llm_response.json()
+
+    assert llm_result["request"]["project_id"] == project["id"]
+    assert llm_result["request"]["model_selection"]["model_identifier"] == (
+        "model-under-test"
+    )
+    assert llm_result["prepared_request"]["provider_id"] == "anthropic"
+    assert llm_result["prepared_request"]["model"] == "model-under-test"
+    assert llm_result["capability_validation"]["valid"] is True
+
+    reference_ids = [r["candidate_id"] for r in llm_result["request"]["references"]]
+    assert selected["candidate_id"] in reference_ids
+
+    # 13. LLM Invocation Runtime - the same PromptPackage, actually
+    # invoked through the full runtime (validation, mapping, adapter
+    # resolution, retry/timeout policy, response normalization) with a
+    # mocked Anthropic client standing in for the real SDK - never a
+    # live network call.
+    monkeypatch.setenv("LLM_RUNTIME_ENABLED", "true")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-e2e-test-key")
+
+    class _FakeMessagesResource:
+        def __init__(self) -> None:
+            self.create = AsyncMock(
+                side_effect=lambda **kwargs: make_message(
+                    text="End-to-end deterministic answer.",
+                    model="model-under-test",
+                )
+            )
+
+    class _FakeAnthropicClient:
+        def __init__(self) -> None:
+            self.messages = _FakeMessagesResource()
+
+    import app.routers.llm_provider as llm_provider_router_module
+
+    monkeypatch.setattr(
+        llm_provider_router_module,
+        "build_anthropic_client",
+        lambda **_kwargs: _FakeAnthropicClient(),
+    )
+
+    invoke_response = api_client.post(
+        f"/projects/{project['id']}/llm/invoke",
+        json={
+            "prompt_package": prompt_package,
+            "provider_id": "anthropic",
+            "model_identifier": "model-under-test",
+        },
+    )
+    assert invoke_response.status_code == 200
+    invocation_result = invoke_response.json()
+
+    assert invocation_result["status"] == "succeeded"
+    assert invocation_result["terminal_error"] is None
+    envelope = invocation_result["envelope"]
+    assert envelope["provider_id"] == "anthropic"
+    assert envelope["configured_model_identifier"] == "model-under-test"
+    assert envelope["content"][0]["text"] == "End-to-end deterministic answer."
+    assert envelope["finish_reason"] == "completed"
+    assert len(envelope["attempts"]) == 1
+    assert invocation_result["validation"]["valid"] is True

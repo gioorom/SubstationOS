@@ -1,8 +1,17 @@
 # Performance Baseline — Project Knowledge Graph, Graph Query & Structured Retrieval
 
 **Status:** Baseline measurement, established by Milestone 12 (Knowledge
-Platform Hardening) and extended by Milestone 13 (Structured Retrieval
-Foundation). This is **not** a performance-optimization milestone — the
+Platform Hardening), extended by Milestone 13 (Structured Retrieval
+Foundation), and extended again by Milestone 17 (LLM Invocation
+Runtime) with its own, dataset-independent operations below. Context
+Builder (Milestone 14), Prompt Builder (Milestone 15), and the LLM
+Provider Abstraction Layer (Milestone 16) each added their own smoke
+benchmark to `graph_performance_benchmark.py` and are exercised by
+`test_graph_performance_benchmark_smoke.py`, but — a pre-existing,
+unremediated gap this milestone does not expand its own scope to fix —
+their numbers were never carried into this document's own Results
+table; only Milestone 13's Structured Retrieval numbers were. This is
+**not** a performance-optimization milestone — the
 purpose of this document is to record deterministic, reproducible
 numbers for the current dev adapter (SQLite via SQLAlchemy) so future
 work has something concrete to compare against, and to name the
@@ -66,6 +75,19 @@ algorithmic risk areas already visible at this scale.
   (`retrieval_combined`, entity type + attribute name), and entity
   lookup with 1-hop neighborhood enrichment
   (`retrieval_with_neighborhood_enrichment`).
+- **LLM Invocation Runtime (Milestone 17)**: `run_llm_invocation_runtime_benchmarks`
+  is dataset-independent (no `SMALL_DATASET`/`MEDIUM_DATASET` parameter)
+  since the runtime's own cost has nothing to do with graph size. It
+  times `llm_runtime.run_invocation` against a self-contained,
+  in-process `FakeLLMProviderAdapter` for a single successful attempt
+  (`llm_invocation_fake_success`) and for one transient failure
+  followed by a successful retry (`llm_invocation_transient_then_success`,
+  using a no-op injected sleeper so no real backoff delay is ever
+  measured or waited on), and times the Anthropic response mapper
+  (`map_content`/`map_finish_reason`/`map_usage`) against a synthetic,
+  locally constructed SDK `Message` object
+  (`anthropic_response_normalization`) - never a real Anthropic call,
+  never a real `httpx` request, in either measurement.
 
 ## Results (last recorded run)
 
@@ -107,6 +129,9 @@ absolute SLA.
 | medium  | retrieval_lexical             | 15,000 |  0.1782 |      0.000012 |
 | medium  | retrieval_combined            |  1,000 |  0.0934 |      0.000093 |
 | medium  | retrieval_with_neighborhood_enrichment |  1 |  0.0056 |     0.005630 |
+| n/a     | llm_invocation_fake_success            |      1 |  0.0010 |     0.001028 |
+| n/a     | llm_invocation_transient_then_success  |      2 |  0.0006 |     0.000320 |
+| n/a     | anthropic_response_normalization       |      1 |  0.0000 |     0.000011 |
 
 ## Observations
 
@@ -159,6 +184,20 @@ absolute SLA.
   full pre-limit candidate pool - its cost (~0.006s) is close to
   `one_hop_neighborhood`'s own cost, as expected, and does not grow
   with the size of the matched candidate set.
+- **The LLM Invocation Runtime's own overhead (Milestone 17) is
+  microseconds, independent of any dataset size** - expected, since
+  `run_invocation` orchestrates a fake or mocked provider call, not a
+  real network round-trip: `llm_invocation_fake_success` (a single
+  successful attempt) and `llm_invocation_transient_then_success` (one
+  retried attempt then success, timed with a no-op injected sleeper so
+  the recorded time reflects only the runtime's own bookkeeping, never
+  a real backoff delay) both complete in ~1ms;
+  `anthropic_response_normalization` (mapping a synthetic SDK `Message`
+  through the error/response mappers) completes in well under 0.1ms.
+  These numbers characterize the runtime's own logic only - real
+  end-to-end invocation latency is dominated entirely by the external
+  provider's own response time, which this benchmark deliberately never
+  measures (see Methodology below).
 
 ## Algorithmic risk areas identified (not fixed this milestone)
 

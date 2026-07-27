@@ -24,13 +24,16 @@ from app.models import (  # noqa: F401
 )
 from app.routers import (
     canonicalization as canonicalization_router,
+    context_builder as context_builder_router,
     documents,
     engineering_index as engineering_index_router,
     graph_builder as graph_builder_router,
     graph_query as graph_query_router,
     knowledge_graph,
+    llm_provider as llm_provider_router,
     project_knowledge_graph as project_knowledge_graph_router,
     projects,
+    prompt_builder as prompt_builder_router,
     proposed_claims as proposed_claims_router,
     review_workflow as review_workflow_router,
     structured_retrieval as structured_retrieval_router,
@@ -80,6 +83,9 @@ app.include_router(graph_builder_router.router)
 app.include_router(project_knowledge_graph_router.router)
 app.include_router(graph_query_router.router)
 app.include_router(structured_retrieval_router.router)
+app.include_router(context_builder_router.router)
+app.include_router(prompt_builder_router.router)
+app.include_router(llm_provider_router.router)
 
 
 @app.get("/")

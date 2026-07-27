@@ -123,7 +123,10 @@ readiness declaration)
 | Project Knowledge Graph | Implemented — Graph Builder translates facts into operations, Graph Persistence executes them atomically and idempotently against a project-scoped SQL-backed store (Milestones 11.1, 11.2, ADR-0007); schema lifecycle is now Alembic-managed rather than `create_all()` (Milestone 12, ADR-0008); the legacy `ingest_document`/`ProjectEntity`/`EntityRelation` path is retained, isolated, and marked deprecated rather than merged or deleted (Milestone 12, ADR-0009) |
 | Graph Query | Implemented — deterministic, read-only queries (by id, by type, by attribute presence, 1-hop adjacency, statistics, orphan detection) over current graph state through its own read port (Milestone 11.3); NL interpretation, semantic ranking, and answer generation are not yet built (see [knowledge_pipeline_overview.md](../architecture/knowledge_pipeline_overview.md)) |
 | Structured Retrieval | Implemented — deterministic, explainable `KnowledgeCandidate` ranking from structured criteria (entity lookup, entity type, attribute, relationship, lexical, combined) over Graph Query's read model, with fixed scoring weights and deterministic candidate identity (Milestone 13, ADR-0010); no embeddings, vector search, or NL interpretation |
-| Context Builder | Does not exist — expected next (Milestone 13's own follow-up) |
+| Context Builder | Implemented — deterministic, bounded, provenance-aware `ContextPackage` assembly (selection, aggregation, coverage, budget enforcement, warnings, statistics, metadata) from a `KnowledgeCandidateCollection` (Milestone 14, ADR-0011); no persistence, no AI, no prompt generation |
+| Prompt Builder | Implemented — deterministic, provider-independent `PromptPackage` composition (nine fixed-order sections, versioned constraints/instructions, approximate token estimates, statistics, self-validation) from a `ContextPackage` (Milestone 15, ADR-0012); no persistence, no AI, no provider serialization |
+| LLM Provider Abstraction Layer | Implemented — provider-neutral `LLMProviderPort`/`LLMRequest` contract, deterministic `PromptPackage` → `LLMRequest` mapping, an Anthropic adapter (zero SDK dependency) and a fake test adapter, an explicit provider registry, runtime-configured provider/model selection (Milestone 16, ADR-0013); no invocation, no network call, no persistence |
+| LLM Invocation Runtime | Implemented — attempt/retry/deadline/cancellation-governed execution of a real Anthropic call, provider-neutral `LLMResponseEnvelope` normalization, disabled by default (Milestone 17, ADR-0014); no automated test calls a real provider; no persistence, no streaming, no conversation memory |
 | AI Assistant | Does not exist |
 | Web frontend | Early — project listing/detail pages exist (`apps/frontend`), no auth, no review UI |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
@@ -680,6 +683,209 @@ interruptions, and are ranges, not commitments.
 - Dependencies: Milestone 12 (a hardened, tested Graph Query read
   model to build on).
 
+**Milestone 14 — Context Builder Foundation** — *Completed*
+- Objective: the official, AI-independent contract between the
+  deterministic knowledge platform and every future AI capability —
+  transform a `KnowledgeCandidateCollection` into a bounded,
+  structured, explainable `ContextPackage`. No LLM, no prompt
+  generation, no embeddings, no semantic ranking.
+- Delivered: `app/domain/context_builder/**` — deterministic Selection
+  (re-derives Structured Retrieval's own documented ordering convention
+  from public `KnowledgeCandidate` fields, since `sort_key` itself is
+  never exposed on the wire), Aggregation into per-kind
+  `ContextSection`s, Coverage Analysis (`CoverageReport`: entity/
+  relationship/attribute coverage, candidate utilization, an overall
+  completeness figure — selection completeness, never an invented
+  engineering-confidence score), and Budget Enforcement across six
+  independently tracked dimensions (candidates, entities,
+  relationships, attributes, metadata entries, warnings), each reported
+  as `requested`/`accepted`/`discarded`/`utilization`; a fixed-priority,
+  budget-capped structured warning generator (budget exceeded, missing
+  provenance, missing attributes/relationships, partial coverage,
+  candidate discarded); versioned `ContextStatistics`/`ContextMetadata`;
+  `POST /projects/{id}/context-builder/build`. Consumes Structured
+  Retrieval's own `KnowledgeCandidateCollection`/`KnowledgeCandidate`
+  types exclusively — never calls Graph Query, Structured Retrieval,
+  a database, or an AI provider itself (enforced by dedicated
+  architecture tests, the same discipline Milestone 13 established for
+  its own boundaries).
+- Architecture impact: **new ADR (0011)** — why Context Builder is a
+  dedicated bounded context rather than logic folded into Structured
+  Retrieval or a future Prompt Builder, why it owns budget and
+  coverage, and why a future Prompt Builder must consume
+  `ContextPackage` rather than duplicate this logic.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 14" for Semantic
+  Query Engine (EPIC 4). That entry's number is left unchanged here,
+  for the same reason Milestone 12's and 13's numbering collisions were
+  left unchanged rather than cascade-renumbering subsequent milestones
+  — see those milestones' own numbering notes.
+- Dependencies: Milestone 13 (a ranked, explainable
+  `KnowledgeCandidateCollection` to assemble into a package).
+
+**Milestone 15 — Prompt Builder Foundation** — *Completed*
+- Objective: the official, provider-independent contract every future
+  LLM adapter consumes — transform a `ContextPackage` into a bounded,
+  deterministic, explainable `PromptPackage`. No LLM invocation, no
+  provider SDK, no provider-specific message serialization. Distinct
+  from the later-planned "Milestone 18 — Prompt Orchestration
+  Framework" (EPIC 5): that milestone governs and versions *every*
+  prompt in the system (extraction, classification, interpretation,
+  generation); this one is the single, specific, deterministic
+  ContextPackage → PromptPackage transform for the engineering-Q&A
+  path this EPIC's own pipeline builds toward.
+- Delivered: `app/domain/prompt_builder/**` — nine fixed-order
+  `PromptSection`s (`SYSTEM_CONTEXT`, `ENGINEERING_CONTEXT`,
+  `SELECTED_KNOWLEDGE`, `EVIDENCE_REFERENCES`, `CONSTRAINTS`,
+  `FORMATTING_RULES`, `EXPECTED_OUTPUT`, `WARNINGS`, `METADATA`), each
+  built by exactly one small, named, pure composition function - never
+  free-form string concatenation; a fixed, versioned policy of five
+  `PromptConstraint`s (truthfulness) and three `PromptInstruction`s
+  (formatting), always present regardless of package content; a
+  documented, deliberately approximate, provider-independent token
+  estimate (~4 characters per token - never a real, provider-specific
+  tokenizer); versioned `PromptStatistics`/`PromptMetadata`/
+  `PromptVersion`; a self-validating `PromptValidationResult` proving
+  every assembled package's structural invariants hold;
+  `POST /projects/{id}/prompt-builder/build`. Consumes Context
+  Builder's own `ContextPackage` exclusively — never calls Graph
+  Query, Structured Retrieval, Context Builder, a database, or an AI
+  provider itself (enforced by dedicated architecture tests, the same
+  discipline Milestones 13-14 established for their own boundaries).
+- Architecture impact: **new ADR (0012)** — why `PromptPackage` exists
+  as a dedicated, provider-independent artifact, why provider
+  serialization is explicitly excluded from this milestone, why Prompt
+  Builder owns composition, and why the future LLM Provider
+  Abstraction Layer must consume `PromptPackage` rather than duplicate
+  this logic.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 15" for Evidence
+  Collection & Answer Composition (EPIC 4). That entry's number is left
+  unchanged here, for the same reason Milestones 12-14's numbering
+  collisions were left unchanged rather than cascade-renumbering
+  subsequent milestones — see those milestones' own numbering notes.
+- Dependencies: Milestone 14 (a bounded, provenance-aware
+  `ContextPackage` to compose into a prompt).
+
+**Milestone 16 — LLM Provider Abstraction Layer** — *Completed*
+- Objective: a stable, provider-neutral seam between `PromptPackage`
+  and external AI providers - no invocation, no network call, request
+  preparation only. Anthropic Claude is the first production-oriented
+  adapter (this project's intended first deployment choice), never the
+  platform's architectural identity. Distinct from the later-planned
+  "Milestone 19 — Multi-model & Reasoning" (EPIC 5): that milestone adds
+  a second adapter to the pre-existing *legacy* `AIProvider` port
+  (`app/services/ai/base.py`, used by the unreviewed `ingest_document`
+  extraction path); this milestone builds an entirely new,
+  provider-neutral contract for the *governed* EPIC 4 pipeline, with no
+  relationship to that legacy port.
+- Delivered: `app/application/**` (provider-neutral, not a new
+  `app/domain/**` bounded context, per this milestone's own
+  instruction) — `LLMProviderPort` (`prepare_request`/
+  `validate_configuration`/`provider_capabilities`, deliberately no
+  `generate`/`invoke` method yet); a provider-neutral `LLMRequest`
+  contract (`LLMMessageRole`: instruction/context/user/assistant/tool;
+  `LLMContentType`: text/structured_data/reference;
+  `LLMGenerationParameters`; opaque, runtime-configured
+  `LLMProviderSelection`/`LLMModelSelection` - no hardcoded model
+  version anywhere, no static model-name list); a deterministic
+  `PromptPackage` → `LLMRequest` mapper preserving section
+  ordering/enabled-disabled semantics/evidence references/every
+  upstream version string; a `provider_id`-keyed `LLMProviderRegistry`
+  with no business logic and no automatic fallback;
+  `LLMRequestPreparationService` (validates, maps, resolves the
+  adapter, validates required capabilities, prepares the provider-native
+  request - raises typed errors for missing/unknown/mismatched
+  providers and unsupported *required* capabilities, downgrades merely
+  *optional* unsupported parameters to warnings only).
+  `app/infrastructure/llm/anthropic/**` — the first adapter,
+  `AnthropicPreparedRequest` (a local, immutable stand-in for an
+  Anthropic Messages API request - never an SDK object, never
+  serialized, never sent), mapping `INSTRUCTION`-role content into
+  `system` and every other role into one synthetic `role="user"`
+  message (Anthropic requires at least one message; today's
+  `PromptPackage` models no real end-user turn yet - a documented,
+  provisional choice). Imports nothing from the `anthropic` package.
+  `app/infrastructure/llm/base/fake_llm_provider_adapter.py` —
+  `FakeLLMProviderAdapter`, proving genuine provider neutrality in
+  tests. `POST /projects/{id}/llm/prepare-request` — inspection only,
+  never calls a provider.
+- Architecture impact: **new ADR (0013)** — why this is an
+  application/infrastructure capability rather than a new bounded
+  context, why Anthropic is an adapter and not a domain dependency, why
+  `PromptPackage` != `LLMRequest` != `AnthropicPreparedRequest` != an
+  SDK object != an HTTP payload, why model identifiers are runtime
+  configuration, and why no provider fallback is ever automatic.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 16" for
+  Structured Query Services (EPIC 4). That entry's number is left
+  unchanged here, for the same reason Milestones 12-15's numbering
+  collisions were left unchanged rather than cascade-renumbering
+  subsequent milestones — see those milestones' own numbering notes.
+- Dependencies: Milestone 15 (a deterministic, provider-independent
+  `PromptPackage` to translate).
+
+**Milestone 17 — LLM Invocation Runtime** — *Completed*
+- Objective: the first milestone in this governed EPIC 4 pipeline
+  allowed to perform a real external network call - evolve
+  `LLMProviderPort` with an `invoke()` method and build the runtime
+  that owns the full invocation lifecycle (attempt sequencing, total
+  deadline, retry policy, cancellation, error normalization, response
+  normalization) over exactly one real provider call per attempt.
+  Distinct from the later-planned "Milestone 17 — AI Assistant"
+  (EPIC 5): that milestone is the conversational, user-facing surface
+  over the future Query Engine; this one is the governed execution
+  path a future AI Assistant would eventually call through, alongside
+  Milestone 16's own request-preparation contract - neither milestone
+  builds the other.
+- Delivered: `app/application/models/llm_invocation.py` — the full
+  invocation domain model (`LLMInvocationRequest`/`Context`/`Policy`/
+  `Result`/`Status`, `LLMResponseEnvelope`/`Content`/`Metadata`,
+  `LLMProviderError`/`Category`/`Details`, `LLMRetryDecision`/`Policy`,
+  `LLMTimeoutPolicy`, `LLMRuntimeConfiguration`/`Version`,
+  `LLMResponseValidationResult`); `app/application/policies/llm_retry_policy.py`
+  (fixed, version-stamped retryable/non-retryable classification,
+  bounded exponential backoff with injectable jitter) and
+  `llm_timeout_policy.py` (pure deadline-arithmetic helpers);
+  `app/application/validation/llm_response_validator.py` (structural
+  + secret-leak-pattern validation of every envelope);
+  `app/application/services/llm_runtime.py` (`run_invocation` — the
+  attempt/retry/deadline loop, the only place a retry is ever
+  decided) and `llm_invocation_service.py` (`invoke_llm` —
+  enablement/credential/preparation/adapter orchestration, never
+  touching a real credential value, only a boolean presence flag);
+  `app/application/services/llm_runtime_metrics.py` (a small,
+  thread-safe, in-process, non-persisted counter set);
+  `app/infrastructure/llm/anthropic/{anthropic_client,anthropic_invoker,
+  anthropic_error_mapper,anthropic_response_mapper}.py` — `max_retries=0`
+  on the SDK client (the runtime is the only retry authority), one
+  provider call per `invoke()`, full error-category and
+  content/finish-reason/usage normalization, no SDK type ever crossing
+  into `app/application/**`; `FakeLLMProviderAdapter` extended with
+  scripted `FakeInvocationOutcome` sequences (success, every error
+  category, retry-after hints, cancellable delays) so the runtime's
+  retry/timeout/cancellation behavior is fully provable with zero
+  Anthropic dependency; `POST /projects/{id}/llm/invoke` — may perform
+  a real call; Milestone 16's own `/prepare-request` endpoint is
+  untouched and still performs zero invocation.
+- Architecture impact: **new ADR (0014)** — why invocation stays an
+  application/infrastructure capability rather than becoming a new
+  bounded context, why the runtime (not the SDK, not the adapter) owns
+  every retry decision, why SDK retries are disabled entirely, why the
+  total invocation deadline is tracked separately from per-call
+  connect/read timeouts, why cancellation is real `asyncio` cancellation
+  never disguised as a retryable provider error, and why expected
+  provider failures are returned as data rather than raised as
+  exceptions.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 17" for the AI
+  Assistant (EPIC 5). That entry's number is left unchanged here, for
+  the same reason Milestones 12-16's numbering collisions were left
+  unchanged rather than cascade-renumbering subsequent milestones —
+  see those milestones' own numbering notes.
+- Dependencies: Milestone 16 (a provider-neutral `LLMRequest` and a
+  request-preparing Anthropic adapter to invoke).
+
 **Milestone 14 — Semantic Query Engine**
 - Objective: implement the interpret → identify project → query graph
   step of the workflow (architecture doc §8).
@@ -960,6 +1166,79 @@ Transmission, Rail, Renewables, and any future discipline)
   risks 1 and 6). Acceptable at current dataset sizes; a future
   performance milestone's natural starting point alongside Graph
   Query's own risks 1–3.
+- **Context Builder recomputes its own candidate ranking key rather
+  than trusting `KnowledgeCandidate.sort_key`.** `sort_key` is
+  Structured Retrieval's own internal ranking aid and is deliberately
+  never exposed by `KnowledgeCandidateRead` (Structured Retrieval's own
+  API response shape), so Context Builder's Selection stage
+  independently recomputes the same, publicly documented ordering
+  convention from public fields. A small, deliberate duplication of a
+  *documented* convention, not of Structured Retrieval's private
+  scoring internals — see ADR-0011 and `context_builder.md`'s
+  Selection section.
+- **Context Builder's `context_completeness` is a simple, fixed,
+  equally-weighted average**, not a statistically validated model of
+  "how much context is enough." Adequate for Milestone 14's own
+  "explain selection, don't invent confidence" requirement; a future
+  milestone could weight it differently with a documented rationale and
+  a version bump, the same discipline `scoring_policy.py`'s
+  `SCORING_POLICY_VERSION` already establishes for Structured
+  Retrieval.
+- **Prompt Builder's token estimate is a rough, provider-independent
+  approximation (~4 characters per token), not a real tokenizer.**
+  Every real tokenizer is provider-specific (`tiktoken` for OpenAI,
+  Anthropic's own tokenizer, ...); adopting one would violate this
+  bounded context's "no provider SDK" boundary before an LLM Provider
+  Abstraction Layer exists to justify the dependency. Deliberate and
+  documented, not an oversight — see ADR-0012 and
+  `prompt_builder.md`'s Token Estimation section. Precise,
+  provider-specific counting is the natural responsibility of that
+  future layer, not Prompt Builder.
+- **Prompt Builder's sections are fixed English prose with no
+  localization or per-provider style variation.** A legitimate future
+  extension (e.g. XML-tag-style sections for one provider vs.
+  markdown-header-style for another) once a real need is demonstrated,
+  not designed speculatively this milestone (CLAUDE.md SS12, YAGNI).
+- **The Anthropic adapter's system/conversational split is a
+  provisional, documented choice, not a final design.** Every
+  `CONTEXT`-role `PromptPackage` section is folded into one synthetic
+  `role="user"` Anthropic message, since no real end-user question or
+  prior conversation turn exists in a `PromptPackage` yet. Milestone 17
+  (LLM Invocation Runtime) invokes this mapping unchanged rather than
+  redesigning it — a genuine multi-turn conversation is the future AI
+  Assistant's (Milestone 17/EPIC 5's numbering, or a later Engineering
+  Response milestone's) concern, not this one's. See ADR-0013/ADR-0014
+  and `llm_provider_abstraction.md`'s Anthropic adapter section.
+- **The LLM Provider Abstraction Layer's API response shapes the
+  prepared request specifically for Anthropic** (the only
+  production-registered adapter today). A second provider reaching the
+  real router will need its own discriminated response shape - a known,
+  documented extension point (`llm_provider_abstraction.md`'s "Future
+  providers" section), not solved speculatively in Milestone 16.
+- **No API key is read anywhere in the LLM Provider Abstraction
+  Layer itself.** Deliberate: pure request preparation needs no
+  credential. **Resolved for invocation in Milestone 17** — the LLM
+  Invocation Runtime reads `ANTHROPIC_API_KEY` (reused from the legacy
+  path, not a second variable) only at the composition root
+  (`app/routers/llm_provider.py`), behind this project's existing
+  secret-handling convention (never logged, never in a response body,
+  never seen by the application service as anything but a boolean
+  presence flag).
+- **This codebase's first external data boundary now exists
+  (Milestone 17).** Whenever `LLM_RUNTIME_ENABLED=true` and a
+  credential is configured, enabled `PromptPackage` content leaves the
+  process and reaches Anthropic's servers. Disabled by default, no
+  automatic fallback, no tenant consent workflow, no data-residency
+  routing, and no per-project opt-out exists yet — recorded as
+  explicit future product/security work, not solved speculatively in
+  this milestone. See ADR-0014 and `llm_invocation_runtime.md`.
+- **LLM Invocation Runtime metrics are in-process and non-persisted.**
+  `llm_runtime_metrics.py`'s counters reset on every process restart
+  and are never exported to an external monitoring platform (none
+  exists in this repository yet) — adequate for Milestone 17's own
+  "lightweight telemetry, not a framework" instruction; a real
+  observability platform is Milestone 26's (Monitoring & Observability)
+  concern, not this one's.
 - **Legacy scratch tooling retained, not cleaned up.**
   `migrate_project_documents.py` (a pre-Alembic, ad hoc `sqlite3`
   migration script) and `test_claude.py`/`test_ingest.py` (manual,

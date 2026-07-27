@@ -86,3 +86,7 @@ one.
 | [0008](0008-database-migration-governance.md) | Database Migration Governance — Alembic Replaces `create_all()` | Accepted |
 | [0009](0009-legacy-knowledge-graph-isolation.md) | Legacy Knowledge Graph Isolation | Accepted |
 | [0010](0010-structured-retrieval-foundation.md) | Structured Retrieval Foundation | Accepted |
+| [0011](0011-context-builder-foundation.md) | Context Builder Foundation | Accepted |
+| [0012](0012-prompt-builder-foundation.md) | Prompt Builder Foundation | Accepted |
+| [0013](0013-llm-provider-abstraction-layer.md) | LLM Provider Abstraction Layer | Accepted |
+| [0014](0014-llm-invocation-runtime.md) | LLM Invocation Runtime | Accepted |

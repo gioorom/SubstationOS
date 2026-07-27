@@ -2,20 +2,28 @@
 
 **Status:** As-built reference, established by Milestone 12 (Knowledge
 Platform Hardening), extended by Milestone 13 (Structured Retrieval
-Foundation). Describes the governed knowledge pipeline as it exists
-today — not the product vision (`project_intelligence_architecture.md`
-describes vision and roadmap; this document describes what is actually
-implemented, tested, and running). Update this document when a stage's
-real behavior changes; it is not an ADR and carries no historical
-Context/Decision record of its own.
+Foundation), Milestone 14 (Context Builder Foundation), Milestone 15
+(Prompt Builder Foundation), Milestone 16 (LLM Provider
+Abstraction Layer), and Milestone 17 (LLM Invocation Runtime).
+Describes the governed knowledge pipeline as it
+exists today — not the product vision
+(`project_intelligence_architecture.md` describes vision and roadmap;
+this document describes what is actually implemented, tested, and
+running). Update this document when a stage's real behavior changes;
+it is not an ADR and carries no historical Context/Decision record of
+its own.
 
 ## The pipeline, stage by stage
 
 ```
 Documents → Engineering Index → Proposed Claims → Review Workflow →
 Canonicalization → Graph Builder → Project Knowledge Graph → Graph Query →
-Structured Retrieval
+Structured Retrieval → Context Builder → Prompt Builder →
+LLM Provider Abstraction Layer → LLM Invocation Runtime
 ```
+
+The last two stages are deliberately not another `app/domain/**`
+bounded context - see the note below the pipeline table.
 
 Each stage trusts the stage before it completely and adds exactly one
 new responsibility — no stage re-derives or second-guesses a decision
@@ -35,6 +43,23 @@ across the whole pipeline).
 | Project Knowledge Graph | Project Knowledge Graph | Executes a `GraphOperationBatch` atomically and holds current graph state | `app/domain/project_knowledge_graph/**` |
 | Graph Query | Graph Query | Deterministic, read-only queries over current graph state, through its own read port | `app/domain/graph_query/**` |
 | Structured Retrieval | Structured Retrieval | Ranked, explainable `KnowledgeCandidate`s from structured (non-NL) criteria, built exclusively from Graph Query's read model | `app/domain/structured_retrieval/**` |
+| Context Builder | Context Builder | A bounded, provenance-aware, budget-enforced `ContextPackage` assembled from a `KnowledgeCandidateCollection` - selection, aggregation, coverage, budget, warnings, statistics, metadata | `app/domain/context_builder/**` |
+| Prompt Builder | Prompt Builder | A deterministic, provider-independent `PromptPackage` composed from a `ContextPackage` - fixed-order sections, versioned constraints/instructions, token estimates, statistics, self-validation | `app/domain/prompt_builder/**` |
+| LLM Provider Abstraction Layer | *(application/infrastructure capability, not a bounded context)* | A provider-neutral `LLMRequest` mapped from a `PromptPackage`, translated by a provider adapter (Anthropic first) into a local, never-sent prepared request - no invocation, no provider SDK dependency in the application layer | `app/application/**` (contracts, mapper, registry, service), `app/infrastructure/llm/**` (adapters) |
+| LLM Invocation Runtime | *(application/infrastructure capability, not a bounded context)* | Attempt sequencing, total-deadline enforcement, retry decisions, cancellation, and provider-neutral response normalization for exactly one real provider call per invocation | `app/application/services/llm_runtime.py`, `app/application/policies/**`, `app/application/validation/**` (runtime), `app/infrastructure/llm/anthropic/**` (invoker, error mapper, response mapper) |
+
+**Note on the last two rows:** unlike every other stage in this table,
+the LLM Provider Abstraction Layer and the LLM Invocation Runtime are
+intentionally not implemented as new `app/domain/**` bounded contexts
+(Milestone 16's own instruction, reaffirmed unchanged by Milestone 17:
+"do not create a new engineering bounded context merely to hold
+external provider details"). Provider selection, request shaping, and
+now invocation lifecycle management are an application/infrastructure
+concern, not new engineering domain knowledge about substations - see
+[ADR-0013](adr/0013-llm-provider-abstraction-layer.md),
+[llm_provider_abstraction.md](llm_provider_abstraction.md),
+[ADR-0014](adr/0014-llm-invocation-runtime.md), and
+[llm_invocation_runtime.md](llm_invocation_runtime.md).
 
 ## Required conceptual distinction
 
@@ -45,6 +70,10 @@ GraphExecution = audited application of a mutation plan
 Project Knowledge Graph = current project-scoped graph state
 Graph Query = deterministic read model
 Structured Retrieval = deterministic, structured-criteria ranking layer over Graph Query
+Context Builder = bounded, provenance-aware context assembly layer over Structured Retrieval's output
+Prompt Builder = deterministic, provider-independent prompt-composition layer over a ContextPackage
+LLM Provider Abstraction Layer = provider-neutral request contract + first (Anthropic) adapter over a PromptPackage - request preparation only, no invocation
+LLM Invocation Runtime = attempt/retry/deadline/cancellation-governed execution of exactly one real provider call, behind the same LLMProviderPort - implemented, disabled by default, never exercised with a real provider in the automated test suite
 Semantic Retrieval = future retrieval and ranking layer
 AI Assistant = future consumer, not owner, of engineering truth
 ```
@@ -53,18 +82,40 @@ Semantic Retrieval and the AI Assistant are **not implemented**. No
 code in this repository performs embedding, vector search, semantic
 ranking, or natural-language query interpretation today — every read
 in Graph Query is a deterministic, exact query (by id, by type, by
-attribute presence, by 1-hop adjacency), and Structured Retrieval
+attribute presence, by 1-hop adjacency); Structured Retrieval
 (Milestone 13) adds only deterministic, structured-criteria matching
-and a fixed, documented scoring policy on top of it - still no
-free-text question, no NL intent detection, no AI provider call (see
+and a fixed, documented scoring policy on top of it; Context Builder
+(Milestone 14) adds only deterministic selection, budget enforcement,
+and coverage/warning reporting on top of that; Prompt Builder
+(Milestone 15) adds only deterministic section composition, a fixed
+constraint/instruction policy, and an approximate, provider-independent
+token estimate on top of that; the LLM Provider Abstraction Layer
+(Milestone 16) adds only deterministic request translation and a
+capability-declaring provider adapter on top of that; and the LLM
+Invocation Runtime (Milestone 17) adds a governed execution path
+(attempt sequencing, total-deadline enforcement, retry policy,
+cancellation, response normalization) capable of a real Anthropic call
+— but that path is **disabled by default**
+(`LLM_RUNTIME_ENABLED=false`), and no automated test in this repository
+ever calls a real provider: every test exercises either the fake
+adapter or a mocked/monkeypatched Anthropic client (see
 [structured_retrieval.md](structured_retrieval.md),
-[ADR-0010](adr/0010-structured-retrieval-foundation.md)). Describing
-Semantic Retrieval or the AI Assistant as existing would misrepresent
-the system; they are named here only to mark where a future milestone
-(Context Builder, then the AI Assistant, per the Product Development
-Plan) will attach, and to make clear that when they do arrive, they
-consume Structured Retrieval's deterministic output — they do not gain
-their own path to engineering truth.
+[context_builder.md](context_builder.md),
+[prompt_builder.md](prompt_builder.md),
+[llm_provider_abstraction.md](llm_provider_abstraction.md),
+[llm_invocation_runtime.md](llm_invocation_runtime.md),
+[ADR-0010](adr/0010-structured-retrieval-foundation.md),
+[ADR-0011](adr/0011-context-builder-foundation.md),
+[ADR-0012](adr/0012-prompt-builder-foundation.md),
+[ADR-0013](adr/0013-llm-provider-abstraction-layer.md),
+[ADR-0014](adr/0014-llm-invocation-runtime.md)). Describing Semantic
+Retrieval or the AI Assistant as existing would misrepresent the
+system; they are named here only to mark where a future milestone (the
+AI Assistant, per the Product Development Plan) will attach, and to
+make clear that when it arrives, it consumes the LLM Invocation
+Runtime's normalized response through the same `LLMProviderPort` — it
+does not gain its own path to engineering truth, and Anthropic remains
+one configurable adapter rather than the platform's identity.
 
 ## Bounded-context dependency direction
 
@@ -84,7 +135,16 @@ graph_builder           -> project, canonicalization, proposed_claims
 project_knowledge_graph -> project, graph_builder
 graph_query             -> project, graph_builder
 structured_retrieval    -> project, graph_builder, graph_query
+context_builder         -> project, structured_retrieval
+prompt_builder          -> project, context_builder, structured_retrieval
 ```
+
+`app/application/**` (the LLM Provider Abstraction Layer, Milestone 16)
+is not part of this table at all - it sits outside `app/domain/**` by
+design (see the pipeline table's note above) and is governed by its
+own, separate architecture tests
+(`tests/architecture/test_llm_provider_boundaries.py`) rather than the
+domain dependency-order table below.
 
 `graph_builder`'s dependency on `proposed_claims` (in addition to
 `canonicalization`, which is already downstream of `proposed_claims`)
@@ -123,6 +183,67 @@ Proposed Claims/Review Workflow) and
 `anthropic`, `openai`, or `app.services.ai` import anywhere in the
 domain, service, or router files) — the codified form of ADR-0010's
 "deterministic first, no AI provider" decision.
+
+Two more, added in Milestone 14, guard Context Builder's own
+boundaries the same way: `test_context_builder_does_not_import_forbidden_modules`
+(no SQLAlchemy, no `GraphStore`, no Graph Query read port/service/router,
+no Structured Retrieval *service or router* - its domain models are the
+one allowed, shared-vocabulary exception - no legacy Knowledge Graph
+modules, no Proposed Claims/Review Workflow) and
+`test_context_builder_surface_has_no_ai_or_vector_dependency` (no
+`anthropic`, `openai`, or `app.services.ai` import anywhere in the
+domain, service, or router files) — the codified form of ADR-0011's
+"assembly only, no retrieval, no AI" decision.
+
+Two more, added in Milestone 15, guard Prompt Builder's own boundaries
+the same way: `test_prompt_builder_does_not_import_forbidden_modules`
+(no SQLAlchemy, no `GraphStore`, no Graph Query read port/service/router,
+no Structured Retrieval *or* Context Builder service/router - their
+domain models are the one allowed, shared-vocabulary exception - no
+legacy Knowledge Graph modules, no Proposed Claims/Review Workflow) and
+`test_prompt_builder_surface_has_no_ai_or_provider_dependency` (no
+`anthropic`, `openai`, `app.services.ai`, `ollama`, or `azure` import
+anywhere in the domain, service, or router files) — the codified form
+of ADR-0012's "composition only, no serialization, no provider SDK"
+decision.
+
+Milestone 16 adds a dedicated file,
+`tests/architecture/test_llm_provider_boundaries.py`, rather than
+extending the bounded-context dependency table above (the LLM Provider
+Abstraction Layer is not a domain bounded context - see the pipeline
+table's note). It enforces: the provider-neutral contract surface
+(`app/application/ports/**` + `app/application/models/**`) and the
+whole `app/application/**` tree import no provider SDK (`anthropic`,
+`openai`, `azure`, `ollama`), no HTTP client (`requests`, `httpx`), no
+SQLAlchemy, and no Graph Query/Structured Retrieval/Context
+Builder/Prompt Builder *service or router* (`test_application_contracts_do_not_import_forbidden_modules`,
+`test_application_llm_layer_does_not_import_forbidden_modules`); the
+Anthropic adapter (`app/infrastructure/llm/anthropic/**`) imports
+nothing from the `anthropic` package itself, no knowledge-graph/
+retrieval/canonicalization internals, no engineering domain service, no
+persistence repository, and no HTTP router
+(`test_anthropic_adapter_does_not_import_forbidden_modules`,
+`test_anthropic_adapter_module_never_imports_the_anthropic_sdk`); and
+the fake test adapter carries no provider or network dependency of its
+own (`test_fake_adapter_has_no_provider_or_network_dependency`) - the
+codified form of ADR-0013's "Anthropic is an adapter, never a domain
+dependency" decision.
+
+Milestone 17 extends the same file rather than adding a new one, since
+invocation is the same non-bounded-context capability, not a new
+architectural surface. Milestone 16's narrow
+`test_anthropic_adapter_module_never_imports_the_anthropic_sdk` is
+replaced by a positive-confinement test,
+`test_anthropic_sdk_is_confined_to_the_anthropic_adapter_package`,
+because invocation legitimately requires the `anthropic`/`httpx`
+imports Milestone 16 had forbidden: it scans every file under `app/`
+and asserts that only `app/infrastructure/llm/anthropic/**` (plus the
+already-isolated legacy `app/services/ai/**`, per
+[ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md)) may import
+`anthropic` or `httpx` — everything else in the tree, including
+`app/application/**` itself, must not. This is the codified form of
+ADR-0014's "the SDK is confined to the Anthropic adapter package, and
+the runtime owns retry, not the SDK" decision.
 
 ## Public vocabulary boundary: entity types (Graph Query ↔ Canonicalization)
 
@@ -180,3 +301,7 @@ into the governed pipeline this milestone.
 - **Performance baseline:** [performance_baseline.md](performance_baseline.md).
 - **Startup/health/config:** [operational_reliability.md](operational_reliability.md).
 - **Structured Retrieval:** [structured_retrieval.md](structured_retrieval.md), [ADR-0010](adr/0010-structured-retrieval-foundation.md).
+- **Context Builder:** [context_builder.md](context_builder.md), [ADR-0011](adr/0011-context-builder-foundation.md).
+- **Prompt Builder:** [prompt_builder.md](prompt_builder.md), [ADR-0012](adr/0012-prompt-builder-foundation.md).
+- **LLM Provider Abstraction Layer:** [llm_provider_abstraction.md](llm_provider_abstraction.md), [ADR-0013](adr/0013-llm-provider-abstraction-layer.md).
+- **LLM Invocation Runtime:** [llm_invocation_runtime.md](llm_invocation_runtime.md), [ADR-0014](adr/0014-llm-invocation-runtime.md).
