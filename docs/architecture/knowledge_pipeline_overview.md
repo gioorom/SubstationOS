@@ -5,8 +5,9 @@ Platform Hardening), extended by Milestone 13 (Structured Retrieval
 Foundation), Milestone 14 (Context Builder Foundation), Milestone 15
 (Prompt Builder Foundation), Milestone 16 (LLM Provider
 Abstraction Layer), Milestone 17 (LLM Invocation Runtime),
-Milestone 18 (Engineering Response Foundation, EPIC 5), and Milestone
-19 (Engineering Session Foundation, EPIC 5).
+Milestone 18 (Engineering Response Foundation, EPIC 5), Milestone
+19 (Engineering Session Foundation, EPIC 5), and Milestone 20
+(Conversation Foundation, EPIC 5).
 Describes the governed knowledge pipeline as it
 exists today — not the product vision
 (`project_intelligence_architecture.md` describes vision and roadmap;
@@ -22,7 +23,7 @@ Documents → Engineering Index → Proposed Claims → Review Workflow →
 Canonicalization → Graph Builder → Project Knowledge Graph → Graph Query →
 Structured Retrieval → Context Builder → Prompt Builder →
 LLM Provider Abstraction Layer → LLM Invocation Runtime →
-Engineering Response → Engineering Session
+Engineering Response → Engineering Session → Conversation
 ```
 
 The LLM Provider Abstraction Layer and LLM Invocation Runtime stages
@@ -57,6 +58,7 @@ across the whole pipeline).
 | LLM Invocation Runtime | *(application/infrastructure capability, not a bounded context)* | Attempt sequencing, total-deadline enforcement, retry decisions, cancellation, and provider-neutral response normalization for exactly one real provider call per invocation | `app/application/services/llm_runtime.py`, `app/application/policies/**`, `app/application/validation/**` (runtime), `app/infrastructure/llm/anthropic/**` (invoker, error mapper, response mapper) |
 | Engineering Response | Engineering Response | A structured, traceable `EngineeringResponse` - typed sections, structured warnings, uncertainty declarations, preserved evidence/version provenance - deterministically normalized from an `LLMResponseEnvelope`, never AI-interpreted | `app/domain/engineering_response/**` (domain), `app/services/engineering_response_service.py` (the one translation seam) |
 | Engineering Session | Engineering Session | The root aggregate for one engineering work session - project identity, session state, an ordered history of `EngineeringResponse`s, an append-only timeline, statistics, version metadata; owns no conversation/chat/memory/tools/agents yet | `app/domain/engineering_session/**` (domain), `app/services/engineering_session_service.py` |
+| Conversation | Conversation | Structured engineering dialogue belonging to an `EngineeringSession` (referenced, never embedded) - ordered Turns owning ordered Messages and `EngineeringResponse` references; Turn, not Message, is the primary conversational unit; no memory/tools/agents yet | `app/domain/conversation/**` (domain), `app/services/conversation_service.py` |
 
 **Note on the last two rows:** unlike every other stage in this table,
 the LLM Provider Abstraction Layer and the LLM Invocation Runtime are
@@ -86,6 +88,7 @@ LLM Provider Abstraction Layer = provider-neutral request contract + first (Anth
 LLM Invocation Runtime = attempt/retry/deadline/cancellation-governed execution of exactly one real provider call, behind the same LLMProviderPort - implemented, disabled by default, never exercised with a real provider in the automated test suite
 Engineering Response = the canonical, domain-owned, provider-neutral representation of an AI answer - typed sections, structured warnings, uncertainty, preserved evidence - deterministically normalized from an LLMResponseEnvelope, never AI-interpreted
 Engineering Session = the root aggregate for one engineering work session - owns project identity, session state, an ordered history of EngineeringResponses, a timeline, statistics, and version metadata; not a chat, owns no conversation/memory/tools/agents yet
+Conversation = structured engineering dialogue belonging to an EngineeringSession - ordered Turns (the primary conversational unit, not Messages) owning ordered Messages and EngineeringResponse references; no memory/tools/agents yet
 Semantic Retrieval = future retrieval and ranking layer
 AI Assistant = future consumer, not owner, of engineering truth
 ```
@@ -116,10 +119,13 @@ already-produced `LLMResponseEnvelope` into a structured
 `EngineeringResponse` (typed sections, structured warnings, uncertainty
 declarations derived from structural signals) on top of that - still no
 AI usage of its own, no semantic parsing of the provider's own prose;
-and Engineering Session (Milestone 19) adds only a deterministic root
+Engineering Session (Milestone 19) adds only a deterministic root
 aggregate owning a session's state, its ordered `EngineeringResponse`
-history, and an append-only timeline on top of that - still no
-conversation, chat history, memory, tools, or agents of any kind (see
+history, and an append-only timeline on top of that; and Conversation
+(Milestone 20) adds only a deterministic Turn/Message hierarchy
+referencing `EngineeringResponse`s produced during a session on top of
+that - still no memory, tool execution, agents, or assistant reasoning
+of any kind (see
 [structured_retrieval.md](structured_retrieval.md),
 [context_builder.md](context_builder.md),
 [prompt_builder.md](prompt_builder.md),
@@ -127,20 +133,22 @@ conversation, chat history, memory, tools, or agents of any kind (see
 [llm_invocation_runtime.md](llm_invocation_runtime.md),
 [engineering_response.md](engineering_response.md),
 [engineering_session.md](engineering_session.md),
+[conversation.md](conversation.md),
 [ADR-0010](adr/0010-structured-retrieval-foundation.md),
 [ADR-0011](adr/0011-context-builder-foundation.md),
 [ADR-0012](adr/0012-prompt-builder-foundation.md),
 [ADR-0013](adr/0013-llm-provider-abstraction-layer.md),
 [ADR-0014](adr/0014-llm-invocation-runtime.md),
 [ADR-0015](adr/0015-engineering-response-foundation.md),
-[ADR-0016](adr/0016-engineering-session-foundation.md)). Describing
+[ADR-0016](adr/0016-engineering-session-foundation.md),
+[ADR-0017](adr/0017-conversation-foundation.md)). Describing
 Semantic Retrieval or the AI Assistant as existing would misrepresent
 the system; they are named here only to mark where a future milestone
 (the AI Assistant, per the Product Development Plan) will attach, and
-to make clear that when it arrives, it consumes Engineering Session's
-own structured output — it does not gain its own path to engineering
-truth, and Anthropic remains one configurable adapter rather than the
-platform's identity.
+to make clear that when it arrives, it consumes Conversation's own
+structured Turn/Message history — it does not gain its own path to
+engineering truth, and Anthropic remains one configurable adapter
+rather than the platform's identity.
 
 ## Bounded-context dependency direction
 
@@ -304,6 +312,14 @@ Response's own equivalent test, since Engineering Session has no
 application-layer input to translate in the first place (see
 ADR-0016).
 
+Milestone 20 adds `conversation` to `ALLOWED_DOMAIN_DEPENDENCIES`
+(`{"engineering_session", "engineering_response"}`) and its own
+dedicated boundary section: `test_conversation_does_not_import_forbidden_modules`,
+`test_conversation_surface_has_no_ai_or_provider_dependency`, and
+`test_conversation_domain_never_imports_the_application_layer` - again
+with no exceptions anywhere, the same guarantee Engineering Session's
+own equivalent test establishes (see ADR-0017).
+
 ## Public vocabulary boundary: entity types (Graph Query ↔ Canonicalization)
 
 `GraphQueryValidator.validate_entity_type` can confirm an entity-type
@@ -366,3 +382,4 @@ into the governed pipeline this milestone.
 - **LLM Invocation Runtime:** [llm_invocation_runtime.md](llm_invocation_runtime.md), [ADR-0014](adr/0014-llm-invocation-runtime.md).
 - **Engineering Response:** [engineering_response.md](engineering_response.md), [ADR-0015](adr/0015-engineering-response-foundation.md).
 - **Engineering Session:** [engineering_session.md](engineering_session.md), [ADR-0016](adr/0016-engineering-session-foundation.md).
+- **Conversation:** [conversation.md](conversation.md), [ADR-0017](adr/0017-conversation-foundation.md).

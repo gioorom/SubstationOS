@@ -1,14 +1,16 @@
 """
-End-to-end proof that the full governed knowledge pipeline reaches an
-``EngineeringSession`` owning a structured, traceable
-``EngineeringResponse`` (EPIC 4-5, Milestones 13-19):
+End-to-end proof that the full governed knowledge pipeline reaches a
+``Conversation`` (inside an ``EngineeringSession``) whose turn
+references a structured, traceable ``EngineeringResponse`` (EPIC 4-5,
+Milestones 13-20):
 
     ProposedClaim -> approval -> CanonicalFact -> GraphOperationBatch ->
     GraphExecution -> Project Knowledge Graph -> Graph Query ->
     Structured Retrieval Result -> Context Builder ContextPackage ->
     Prompt Builder PromptPackage -> neutral LLMRequest ->
     AnthropicPreparedRequest -> mocked Anthropic invocation ->
-    LLMResponseEnvelope -> EngineeringResponse -> EngineeringSession
+    LLMResponseEnvelope -> EngineeringResponse -> EngineeringSession ->
+    Conversation -> ConversationTurn
 
 Every earlier stage already has its own dedicated test suite (domain,
 service, and API tests per bounded context); this file exists purely
@@ -405,5 +407,74 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
     final_session = append_session_body["session"]
     assert final_session["statistics"]["response_count"] == 1
     assert final_session["engineering_responses"][0]["direct_answer"]["body"] == [
+        "End-to-end deterministic answer."
+    ]
+
+    # 16. Conversation - structured engineering dialogue belonging to
+    # the EngineeringSession above (referenced by session_id, never
+    # embedded). Starting a turn, adding a user message, attaching the
+    # same EngineeringResponse, adding an assistant message, and
+    # completing the turn never invokes an AI provider or any earlier
+    # pipeline stage - pure, in-memory domain operations.
+    conversation_response = api_client.post(
+        f"/projects/{project['id']}/conversation",
+        json={"session_id": final_session["session_id"]},
+    )
+    assert conversation_response.status_code == 200
+    conversation_body = conversation_response.json()
+    assert conversation_body["conversation"]["status"] == "active"
+    assert conversation_body["validation"]["valid"] is True
+
+    conversation = conversation_body["conversation"]
+    conversation = api_client.post(
+        f"/projects/{project['id']}/conversation/start-turn",
+        json={"conversation": conversation},
+    ).json()["conversation"]
+    assert len(conversation["turns"]) == 1
+
+    conversation = api_client.post(
+        f"/projects/{project['id']}/conversation/add-message",
+        json={
+            "conversation": conversation,
+            "role": "user",
+            "text": "What does cable C-295 feed?",
+        },
+    ).json()["conversation"]
+
+    attach_response_body = api_client.post(
+        f"/projects/{project['id']}/conversation/attach-response",
+        json={
+            "conversation": conversation,
+            "response": engineering_response,
+        },
+    )
+    assert attach_response_body.status_code == 200
+    attach_body = attach_response_body.json()
+    assert attach_body["validation"]["valid"] is True
+    conversation = attach_body["conversation"]
+
+    conversation = api_client.post(
+        f"/projects/{project['id']}/conversation/add-message",
+        json={
+            "conversation": conversation,
+            "role": "assistant",
+            "text": "It feeds TR2.",
+        },
+    ).json()["conversation"]
+
+    complete_turn_body = api_client.post(
+        f"/projects/{project['id']}/conversation/complete-turn",
+        json={"conversation": conversation},
+    )
+    assert complete_turn_body.status_code == 200
+    final_conversation_body = complete_turn_body.json()
+    assert final_conversation_body["validation"]["valid"] is True
+
+    final_conversation = final_conversation_body["conversation"]
+    assert final_conversation["statistics"]["message_count"] == 2
+    assert final_conversation["statistics"]["engineering_response_count"] == 1
+    final_turn = final_conversation["turns"][0]
+    assert final_turn["status"] == "completed"
+    assert final_turn["engineering_responses"][0]["direct_answer"]["body"] == [
         "End-to-end deterministic answer."
     ]

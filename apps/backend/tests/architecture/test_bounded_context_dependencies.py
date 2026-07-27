@@ -159,6 +159,17 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
     # this pipeline already uses - no import of `app.domain.project`
     # is needed or present.
     "engineering_session": frozenset({"engineering_response"}),
+    # Conversation (Milestone 20) depends on exactly two other domain
+    # contexts: engineering_session (to reference its owning session by
+    # EngineeringSessionId - never embedding the session itself) and
+    # engineering_response (a ConversationTurn references
+    # EngineeringResponse objects directly, never copies them - allowed
+    # because Conversation may depend on the Engineering Response
+    # domain contract directly, unlike Engineering Response's own
+    # relationship to the application-layer LLMResponseEnvelope). No
+    # Prompt Builder, Context Builder, Structured Retrieval, Graph
+    # Query, or Graph Builder import of its own.
+    "conversation": frozenset({"engineering_session", "engineering_response"}),
 }
 
 # Contexts outside app/domain/ontology - not part of the knowledge
@@ -753,6 +764,117 @@ def test_engineering_session_domain_never_imports_the_application_layer() -> (
     offenders: list[str] = []
 
     for path in _python_files(DOMAIN_ROOT / "engineering_session"):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if module == "app.application" or module.startswith(
+                "app.application."
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+# --- Conversation boundaries (Milestone 20) ------------------------------
+
+_CONVERSATION_SURFACE = (
+    DOMAIN_ROOT / "conversation",
+    APP_ROOT / "services" / "conversation_service.py",
+    APP_ROOT / "routers" / "conversation.py",
+)
+
+# Conversation must never perform I/O, query the graph, invoke a
+# provider, or re-derive retrieval/context/prompt assembly - it
+# references EngineeringSession/EngineeringResponse only. No SQLAlchemy,
+# no graph ports, no legacy Knowledge Graph path, no Proposed Claims/
+# Review Workflow, no Structured Retrieval/Context Builder/Prompt
+# Builder *service or router* (their domain models are not even part of
+# Conversation's own allowed dependency set - see
+# ALLOWED_DOMAIN_DEPENDENCIES above), no app.application.** of any
+# kind, no provider SDK, and no LLM Invocation Runtime module -
+# Conversation has no application-layer input at all, so (like
+# Engineering Session) it needs no exception anywhere, not even in its
+# own service module.
+_FORBIDDEN_FOR_CONVERSATION = (
+    "sqlalchemy",
+    "app.domain.project_knowledge_graph.graph_store",
+    "app.infrastructure.project_knowledge_graph.sqlalchemy_graph_store",
+    "app.domain.graph_query.graph_query_repository",
+    "app.infrastructure.graph_query",
+    "app.services.graph_query_service",
+    "app.routers.graph_query",
+    "app.services.structured_retrieval_service",
+    "app.routers.structured_retrieval",
+    "app.services.context_builder_service",
+    "app.routers.context_builder",
+    "app.services.prompt_builder_service",
+    "app.routers.prompt_builder",
+    "app.services.engineering_response_service",
+    "app.routers.engineering_response",
+    "app.services.engineering_session_service",
+    "app.routers.engineering_session",
+    "app.models.knowledge_graph",
+    "app.services.knowledge_graph",
+    "app.routers.knowledge_graph",
+    "app.schemas.knowledge_graph",
+    "app.domain.proposed_claims",
+    "app.domain.review_workflow",
+    "app.application",
+    "app.infrastructure.llm",
+    "app.services.llm_runtime",
+)
+
+
+def test_conversation_does_not_import_forbidden_modules() -> None:
+    offenders: list[str] = []
+
+    for path in _files_under(*_CONVERSATION_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_FOR_CONVERSATION
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+def test_conversation_surface_has_no_ai_or_provider_dependency() -> None:
+    offenders: list[str] = []
+
+    for path in _files_under(*_CONVERSATION_SURFACE):
+        imported = _imported_module_names(path)
+
+        for module in imported:
+            if any(
+                module == forbidden or module.startswith(f"{forbidden}.")
+                for forbidden in _FORBIDDEN_ENGINEERING_RESPONSE_AI_MODULE_PREFIXES
+            ):
+                offenders.append(
+                    f"{path.relative_to(APP_ROOT.parent)} imports "
+                    f"'{module}'"
+                )
+
+    assert offenders == []
+
+
+def test_conversation_domain_never_imports_the_application_layer() -> None:
+    """Conversation has no application-layer input at all - so
+    app/domain/conversation/** never imports app.application.**, with
+    no exception anywhere, not even in its own service module (the same
+    guarantee Engineering Session's own equivalent test establishes)."""
+
+    offenders: list[str] = []
+
+    for path in _python_files(DOMAIN_ROOT / "conversation"):
         imported = _imported_module_names(path)
 
         for module in imported:

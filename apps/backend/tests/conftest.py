@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from app.database.database import Base
 from app.routers import canonicalization as canonicalization_router_module
 from app.routers import context_builder as context_builder_router_module
+from app.routers import conversation as conversation_router_module
 from app.routers import documents as documents_router_module
 from app.routers import engineering_index as engineering_index_router_module
 from app.routers import engineering_response as engineering_response_router_module
@@ -87,6 +88,7 @@ def api_client(db_session: Session) -> Iterator[TestClient]:
     test_app.include_router(llm_provider_router_module.router)
     test_app.include_router(engineering_response_router_module.router)
     test_app.include_router(engineering_session_router_module.router)
+    test_app.include_router(conversation_router_module.router)
 
     def _override_get_db() -> Iterator[Session]:
         yield db_session

@@ -129,6 +129,7 @@ readiness declaration)
 | LLM Invocation Runtime | Implemented — attempt/retry/deadline/cancellation-governed execution of a real Anthropic call, provider-neutral `LLMResponseEnvelope` normalization, disabled by default (Milestone 17, ADR-0014); no automated test calls a real provider; no persistence, no streaming, no conversation memory |
 | Engineering Response | Implemented — deterministic, domain-owned `EngineeringResponse` (typed sections, structured warnings, uncertainty declarations, preserved evidence/version provenance) normalized from an `LLMResponseEnvelope`, no AI usage of its own (Milestone 18, ADR-0015); `SUMMARY`/`TECHNICAL_EXPLANATION`/`ASSUMPTIONS`/`NEXT_ACTIONS` sections always empty (no semantic parsing of provider prose); no conversation, no persistence |
 | Engineering Session | Implemented — the root aggregate for one engineering work session: project identity, a validated state machine (`CREATED`/`ACTIVE`/`PAUSED`/`COMPLETED`/`ARCHIVED`), an ordered `EngineeringResponse` history, an append-only timeline, statistics, version metadata (Milestone 19, ADR-0016); smallest dependency surface of any context in this pipeline (only `engineering_response`); no conversation/chat/memory/tools/agents yet; no persistence - each API call accepts and returns the full session, nothing is held server-side |
+| Conversation | Implemented — structured engineering dialogue belonging to an `EngineeringSession` (referenced, never embedded): ordered `ConversationTurn`s (the primary conversational unit, not `ConversationMessage`) owning ordered messages and `EngineeringResponse` references (held directly, never copied), a validated Conversation/Turn state machine, an append-only timeline, statistics, version metadata (Milestone 20, ADR-0017); no memory, tool execution, agents, or assistant reasoning yet; no persistence |
 | AI Assistant | Does not exist |
 | Web frontend | Early — project listing/detail pages exist (`apps/frontend`), no auth, no review UI |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
@@ -389,13 +390,18 @@ Services.
   every future conversation, tool, and agent will execute inside:
   project identity, a validated session state machine, an ordered
   `EngineeringResponse` history, an append-only timeline, statistics,
-  and version metadata.
+  and version metadata; `app/domain/conversation/**` (Conversation
+  Foundation, Milestone 20, ADR-0017) — structured engineering dialogue
+  belonging to an `EngineeringSession`: ordered `ConversationTurn`s (the
+  primary conversational unit) owning ordered messages and
+  `EngineeringResponse` references, with future tool execution,
+  retrieval, and agent execution all reserved to live inside a Turn.
 - **Implementation maturity:** Early. The `AIProvider` port and one
   legacy adapter (`app/services/ai/claude_provider.py`) already existed
   and remain the foundation this EPIC extends, not replaces; Engineering
-  Response and Engineering Session Foundations are now delivered on top
-  of the governed EPIC 4 pipeline. No conversation, chat, memory, tool,
-  or agent surface exists yet.
+  Response, Engineering Session, and Conversation Foundations are now
+  delivered on top of the governed EPIC 4 pipeline. No memory, tool
+  execution, agent, or assistant-reasoning surface exists yet.
 
 ### EPIC 6 — Web Platform
 
@@ -1028,6 +1034,59 @@ interruptions, and are ranges, not commitments.
   those milestones' own numbering notes.
 - Dependencies: Milestone 18 (an `EngineeringResponse` to own).
 
+**Milestone 20 — Conversation Foundation** — *Completed*
+- Objective: introduce structured engineering dialogue belonging to an
+  `EngineeringSession` - explicitly not a chat log. `ConversationTurn`,
+  not `ConversationMessage`, is the primary conversational unit: future
+  tool execution, retrieval, agent execution, and assistant reasoning
+  will all occur inside a Turn.
+- Delivered: `app/domain/conversation/**` - the second-smallest
+  dependency surface of any bounded context in this pipeline (only
+  `app.domain.engineering_session`, to reference the owning session by
+  `EngineeringSessionId`, and `app.domain.engineering_response`, to
+  hold `EngineeringResponse` objects directly by reference, never
+  copied - no Prompt Builder, Context Builder, Structured Retrieval,
+  Graph Query, provider SDK, or `app.application.**` of any kind).
+  `Conversation` -> ordered `ConversationTurn`s -> ordered
+  `ConversationMessage`s, one-directional ownership only (messages
+  never own turns); `ConversationStatus`
+  (`ACTIVE`/`COMPLETED`/`ARCHIVED`) and `ConversationTurnStatus`
+  (`STARTED`/`COMPLETED`), each with an explicit, validated transition
+  table (the same convention `app.domain.project.project_lifecycle`
+  established); only one Turn may be open at a time
+  (`TurnAlreadyInProgressError` otherwise); `ConversationMessageRole`
+  (`USER`/`ASSISTANT`/`SYSTEM`/`TOOL`/`AGENT` - the last two reserved,
+  unused); deterministically-derived `ConversationMessageId`
+  (`f"{turn_id}:{sequence}"`, never caller-supplied, unlike
+  `ConversationId`/`ConversationTurnId`); append-only
+  `ConversationTimeline`s at both the conversation and per-turn level
+  (`CONVERSATION_CREATED`/`TURN_STARTED`/`TURN_COMPLETED`/
+  `MESSAGE_ADDED`/`ENGINEERING_RESPONSE_ATTACHED`/`STATUS_CHANGED`);
+  `ConversationBuilder` (`create_conversation`/`start_turn`/
+  `append_message`/`attach_engineering_response`/`complete_turn`/
+  `change_conversation_status`), each a pure function returning the
+  *whole* updated `Conversation`; a self-validating
+  `ConversationValidator` checking structure only, never semantics.
+  `app/services/conversation_service.py` - no application-layer
+  translation seam needed. `POST /projects/{id}/conversation`
+  (`+/start-turn`/`/add-message`/`/attach-response`/`/complete-turn`/
+  `/change-status`) - no persistence: each endpoint (except creation)
+  accepts the current conversation in its own request body and returns
+  the updated one.
+- Architecture impact: **new ADR (0017)** — why Turn, not Message, is
+  the primary conversational unit, why `EngineeringResponse` is
+  referenced rather than copied, why Conversation belongs to
+  `EngineeringSession` by reference rather than embedding, and why
+  future tools belong to Turn.
+- **Numbering note:** this milestone's number was not reserved in the
+  original plan below, which already used "Milestone 20" for
+  Authentication & Workspace (EPIC 6). That entry's number is left
+  unchanged here, for the same reason Milestones 12-19's numbering
+  collisions were left unchanged rather than cascade-renumbering
+  subsequent milestones — see those milestones' own numbering notes.
+- Dependencies: Milestone 19 (an `EngineeringSession` to belong to) and
+  Milestone 18 (an `EngineeringResponse` to reference).
+
 **Milestone 17 — AI Assistant**
 - Objective: build the conversational, user-facing surface over the
   Query Engine.
@@ -1390,6 +1449,25 @@ Transmission, Rail, Renewables, and any future discipline)
   timeline event type that no other endpoint could ever exercise - a
   small, documented, in-scope extension, not scope creep - see
   `engineering_session.md`.
+- **Conversation has no persistence**, the same posture Engineering
+  Session already takes - a conversation's lifetime today is exactly
+  one client's own request/response chain. A real, multi-request
+  conversation store is explicit future work, not solved speculatively
+  in Milestone 20 - see ADR-0017.
+- **Conversation's `attach-response` and `change-status` endpoints were
+  not literally named in Milestone 20's own "such as" endpoint list.**
+  Added because `ENGINEERING_RESPONSE_ATTACHED` (an explicitly required
+  Turn responsibility) and `STATUS_CHANGED` (an explicitly required
+  timeline event type) would otherwise have no real caller ever
+  exercising them - the same documented, in-scope extension precedent
+  ADR-0016 already established for `update-configuration` - see
+  `conversation.md`.
+- **Only one ConversationTurn may be open at a time.** A deliberate
+  simplification keeping the API surface small (no `turn_id` parameter
+  needed on `add-message`/`attach-response`/`complete-turn`); if a
+  future need for concurrent or branching turns emerges (e.g. parallel
+  tool calls), it is a documented extension point in ADR-0017, not
+  solved speculatively now.
 
 ---
 

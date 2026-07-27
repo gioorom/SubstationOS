@@ -145,6 +145,14 @@ from app.domain.engineering_session.engineering_session_builder import (
 from app.domain.engineering_session.engineering_session_models import (
     EngineeringSessionStatus,
 )
+from app.domain.conversation.conversation_builder import (
+    append_message,
+    attach_engineering_response,
+    complete_turn,
+    create_conversation,
+    start_turn,
+)
+from app.domain.conversation.conversation_models import ConversationMessageRole
 from app.infrastructure.graph_builder.sqlalchemy_graph_operation_batch_repository import (
     SqlAlchemyGraphOperationBatchRepository,
 )
@@ -1400,6 +1408,99 @@ def run_engineering_session_benchmarks() -> list[BenchmarkMeasurement]:
     return measurements
 
 
+def run_conversation_benchmarks() -> list[BenchmarkMeasurement]:
+    """
+    Measures Conversation Builder overhead (Milestone 20) -
+    dataset-independent and provider-independent: creating a
+    conversation, starting a turn, appending a user message, attaching
+    one already-built ``EngineeringResponse`` (reusing the same
+    synthetic fixture ``run_engineering_response_benchmarks`` builds),
+    appending an assistant message, and completing the turn - never a
+    real provider call, never a database query, never persistence of
+    any kind.
+    """
+
+    measurements: list[BenchmarkMeasurement] = []
+
+    empty_candidates = KnowledgeCandidateCollection(
+        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
+    )
+    context_request = ContextBuildRequestFactory.create(
+        project_id=1, candidates=empty_candidates
+    )
+    context_package = assemble_context_package(context_request, now=NOW)
+
+    prompt_request = PromptBuildRequestFactory.create(
+        project_id=1, context_package=context_package
+    )
+    prompt_result = assemble_prompt_package(prompt_request, now=NOW)
+
+    source = EngineeringResponseSourceEnvelope(
+        provider_id="fake",
+        configured_model_identifier="benchmark-model",
+        returned_model_identifier="benchmark-model",
+        content=(
+            EngineeringResponseSourceContent(
+                sequence_index=0,
+                is_supported_text=True,
+                text="Synthetic benchmark answer.",
+                provider_block_type=None,
+            ),
+        ),
+        finish_reason=EngineeringSourceFinishReason.COMPLETED,
+        request_correlation_id="benchmark-conversation",
+        attempt_count=1,
+        warnings=(),
+        input_tokens=50,
+        output_tokens=20,
+        runtime_version="1.0",
+        adapter_version="1.0",
+        request_preparation_policy_version="1.0",
+    )
+    engineering_response_request = EngineeringResponseBuildRequestFactory.create(
+        project_id=1,
+        context_package=context_package,
+        prompt_package=prompt_result.package,
+        source=source,
+    )
+    engineering_response = assemble_engineering_response(
+        engineering_response_request, now=NOW
+    ).response
+
+    def _run_conversation_lifecycle() -> None:
+        conversation = create_conversation(
+            project_id=1,
+            session_id="benchmark-session",
+            conversation_id="benchmark-conversation",
+            now=NOW,
+        ).conversation
+        conversation = start_turn(conversation, "benchmark-turn", now=NOW).conversation
+        conversation = append_message(
+            conversation, ConversationMessageRole.USER, "Benchmark question?", now=NOW
+        ).conversation
+        conversation = attach_engineering_response(
+            conversation, engineering_response, now=NOW
+        ).conversation
+        conversation = append_message(
+            conversation,
+            ConversationMessageRole.ASSISTANT,
+            "Benchmark answer.",
+            now=NOW,
+        ).conversation
+        complete_turn(conversation, now=NOW)
+
+    measurements.append(
+        _timed(
+            "conversation_turn_lifecycle",
+            "n/a",
+            1,
+            _run_conversation_lifecycle,
+        )
+    )
+
+    return measurements
+
+
 def run_all(specs: tuple[DatasetSpec, ...]) -> list[BenchmarkMeasurement]:
     measurements: list[BenchmarkMeasurement] = []
 
@@ -1414,6 +1515,7 @@ def run_all(specs: tuple[DatasetSpec, ...]) -> list[BenchmarkMeasurement]:
     measurements.extend(run_llm_invocation_runtime_benchmarks())
     measurements.extend(run_engineering_response_benchmarks())
     measurements.extend(run_engineering_session_benchmarks())
+    measurements.extend(run_conversation_benchmarks())
 
     return measurements
 
