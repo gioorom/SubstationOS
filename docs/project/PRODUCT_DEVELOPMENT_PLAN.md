@@ -116,7 +116,13 @@ readiness declaration)
 |---|---|
 | Canonical Domain (ontology) | Mature — implemented, tested, versioned by git |
 | Project Platform (lifecycle, scope) | Mature — implemented, tested |
-| Document Repository | Functional — upload/storage/scope work; classification unpopulated |
+| Document Repository | Functional — upload/storage/scope work, and since Milestone 25.2 the upload endpoint classifies `file_format` from the file's own leading bytes rather than defaulting every document to `other`. `DXF` and `IMAGE` joined the vocabulary in the same milestone. Documents uploaded earlier remain readable as `other` (*unclassified*) until the deterministic backfill command is run against them |
+| Document Identity | Implemented — deterministic content identity and format classification (Milestone 25.2): SHA-256 streamed in chunks with the algorithm recorded beside it, size and accessibility, and a format decided from evidence ranked content signature > declared MIME type > filename extension. **One rule source** (`format_signatures.py`, asserted by architecture test) used by upload, ingestion and the backfill alike, so they cannot disagree about what a document is. Unknown and contradictory evidence produce explicit typed outcomes, never an arbitrary classification. Bytes reach the domain only through the read-only `DocumentContentPort` (`describe`/`read_prefix`/`iter_chunks`, abstract-method set asserted). Identity is **not** deduplication - identical checksums are recorded and nothing is concluded from them |
+| PDF consumption | Consolidated — since Milestone 26.2 there is exactly **one** supported PDF path (`upload → ingestion → identity → canonical representation → canonical text → downstream consumer`) and exactly **one** module permitted to import a PDF library. The four pre-canonical decoders (`pdf_text_extractor`, `pdf_renderer`, `document_analyzer`, `services/intelligence/`) are deleted; the upload endpoint's Knowledge Graph path consumes text assembled from the segmentation. Enforced by architecture tests asserting the single decoder, the shrinking closed list of raw-content consumers, and the absence of the retired files |
+| Engineering Evidence Extraction | Implemented — deterministic engineering observation over canonical text (Milestone 28.1): `EngineeringEvidenceSet → EngineeringEvidence` for designations, voltages, currents, powers and cable sections, under a versioned rule catalogue with **one** pattern source and **one** unit catalogue. Quantities held as exact `Decimal` (`Numeric` in the schema, never `Float`); every item carries provenance to the characters, tokens, line, paragraph and page that produced it, plus rule id and version. Idempotent on `(document_id, content_checksum, extraction_policy_version)`. **Observations only** — no entity, no relationship, no equipment type, no LLM, no Engineering Index or Knowledge Graph write, and no column in which any of them could be recorded, all enforced by architecture test |
+| Canonical Text Segmentation | Implemented — semantic-neutral textual structure over the canonical representation (Milestone 27.1): `CanonicalTextDocument → Section → Paragraph → Line → Token`, where a section **is a page**, a paragraph **is a PDF block** and a line **is a PDF line** - only boundaries the parser observed, never an inferred chapter, heading, table or list. Tokens carry original text, a deterministic NFKC normalisation, position in the line, and the full provenance chain `document → page → block → span → character range`, stored as columns so locating a term costs no joins. **The structure every future extractor consumes**, behind `CanonicalTextRepository`, which exposes no PDF structure. Idempotent on `(document_id, content_checksum, segmentation_version)`; no timestamp participates in value equality. Assigns no engineering meaning: no entities, no equipment, no cables, no relationships, no LLM, no ontology lookup, all enforced by architecture test |
+| Canonical PDF Representation | Implemented — deterministic, reproducible textual representation of a PDF (Milestone 26.1): `CanonicalPdfDocument → Page → Block → Span`, preserving page number, the parser's own reading order, verbatim text, bounding boxes, font family and size, and bold/italic, bound to one content checksum, one parser version and one representation version. **The single source of truth for every future semantic extraction**, consumed through `CanonicalRepresentationRepository` - which exposes no route to the original PDF, so the rule is structural. Idempotent (identical bytes re-use the stored representation; changed bytes produce a new one beside it, never over it), and the original PDF is never modified. Records what the parser observed and interprets nothing: no merged paragraphs, no inferred tables, lists, headings or sections, no entities, no OCR, no LLM, no embeddings, all enforced by architecture test |
+| Document Ingestion | Implemented — deterministic ingestion lifecycle (Milestone 25.1): explicit `UPLOADED → QUEUED → PROCESSING → PROCESSED/FAILED` state machine with validated transitions and an illegal move raising, one typed immutable `IngestionJob` per attempt with retry on the same record, one job in flight per document, a document-metadata snapshot taken at ingestion time, and a persisted `READY_FOR_EXTRACTION`/`FAILED` outcome for a future extractor. Milestone 25.2 extended the snapshot with content identity and classified format, each failure named rather than collapsed into a generic one, while the pipeline itself stayed pure - the service resolves bytes through the ports and hands the result in. **Orchestration only** - no document contents interpreted, no LLM, no embeddings, and no write to the Engineering Index or the Knowledge Graph, all enforced by architecture test |
 | Engineering Index | Implemented — idempotent, project-scoped, document-traceable (Milestones 9, 9.1); **read side** (Document Retrieval, Milestone 23B.1) answers "which documents mention X?" as ranked `DocumentReference`s scored from a fixed documented weight table, with a batch document-metadata port; reads no document contents |
 | Review Workflow | Implemented — `ProposedClaim`/`ReviewCandidate` state machine; the ADR-0004 mandatory review gate is closed for this pipeline (Milestone 10) |
 | Canonicalization | Implemented — deterministic normalization of `APPROVED` claims into `CanonicalFact`s (Milestone 11) |
@@ -1589,6 +1595,458 @@ interruptions, and are ranges, not commitments.
 - Dependencies: Milestone 23A (the engine), 22 (the classification, whose
   taxonomy already published `ENGINEERING_COMPARISON`), 23B.2
   (`PromptObjective`), 23B.3 (the bridge it extends), and 13-18.
+
+**Milestone 25.1 — Document Ingestion Pipeline** - *Completed*
+- Objective: make project knowledge enter the system through a
+  deterministic, governed pipeline. Every milestone before this one turned
+  *already-reviewed* knowledge into answers; this is the first on the
+  input side. Its responsibility is **orchestration, lifecycle and state**
+  - explicitly **not** extraction.
+- Delivered: a new `document_ingestion` bounded context - an explicit
+  `IngestionState` lifecycle (`UPLOADED → QUEUED → PROCESSING →
+  PROCESSED/FAILED`, with `FAILED → QUEUED` for retry) governed by a
+  `VALID_TRANSITIONS` table modelled on `project_lifecycle.py`'s own
+  shape; a typed immutable `IngestionJob`; a pure `execute_ingestion_pipeline`;
+  an `IngestionJobRepository` port with a SQLAlchemy adapter; the
+  `document_ingestion_jobs` table (additive migration `c7a41d8f2b16`);
+  `document_ingestion_service.py`; and five endpoints.
+- What it deliberately does **not** do, enforced by architecture test
+  rather than by intent: it reads no document contents (no parsing, no
+  OCR), uses no LLM, no embeddings and no provider, imports neither Prompt
+  Builder nor the Engineering Engine, and **writes neither the Engineering
+  Index nor the Project Knowledge Graph**. The repository port's own
+  abstract-method set is asserted, so the exclusions are a matter of
+  contract rather than discipline.
+- The lifecycle rules that carry the weight:
+  **Every transition is validated** and an illegal one raises - a job that
+  reached `PROCESSED` without passing through `PROCESSING` would be a
+  record of something that never happened. Every state pair is asserted
+  legal or illegal by test, not a handful of happy paths.
+  **`PROCESSING` is persisted before the pipeline runs**, so a job that
+  fell over mid-execution does not still read as `QUEUED`.
+  **One job in flight per document**; a second request raises rather than
+  racing. Re-ingestion is a *new* job, so what was processed when is never
+  overwritten, and the accumulated jobs are the document's audit trail.
+  **Retry keeps the same record**, incrementing `attempt_count` - the
+  attempt history belongs to the job an engineer is already looking at.
+- The document snapshot is a **copy taken at ingestion time**, not a live
+  read: a job that silently started describing the current document would
+  make its own recorded outcome unexplainable. Nothing in it is derived or
+  inferred - a snapshot that added a fact would be an extraction.
+- **A correction worth recording.** The first implementation refused
+  `DocumentFormat.OTHER` as unsupported. Testing the real upload path
+  showed the upload endpoint never sets `file_format` at all, so *every*
+  uploaded document carries `other` - refusing it would have meant judging
+  a document on a field nobody ever filled in (the same
+  absence-of-evidence error this system refuses everywhere else) and would
+  have left the pipeline unable to mark any real document ready.
+  `UNSUPPORTED_FORMAT` now claims exactly one thing: a format value this
+  system has no definition of, which is a data-integrity condition.
+- Failures: `DOCUMENT_NOT_FOUND` and `UNSUPPORTED_FORMAT` produce a
+  **recorded `FAILED` job** rather than an exception, so the attempt stays
+  visible; only `DUPLICATE_INGESTION_REQUEST` and
+  `INVALID_LIFECYCLE_TRANSITION` - the two cases where no job could
+  legitimately exist - raise.
+- Architecture impact: **no new ADR.** ADR-0002 already governs what the
+  Engineering Index is for and ADR-0005 document scope; this milestone
+  applies both by staying out of them. New as-built reference:
+  `docs/architecture/document_management.md`, which also closes a
+  pre-existing documentation gap - documents had no architecture note of
+  their own.
+- Dependencies: the existing document repository, and Milestone 23B.1's
+  `DocumentMetadataPort` (reused unchanged - this context adds no second
+  contract onto documents).
+
+**Milestone 25.2 — Document Identity and Content Access** - *Completed*
+- Objective: give the input side of the pipeline the minimum it needs to
+  know *which* document it is handling - deterministic format
+  classification, content identity, and a narrow read-only path to the
+  bytes - without crossing into extraction.
+- Delivered: a new `document_identity` bounded context (`ClassifiedFormat`
+  and its evidence value objects, the `format_signatures` rule tables, a
+  pure `classify_document_format`, `resolve_content_identity`, and three
+  narrow ports); `FilesystemDocumentContentAdapter`,
+  `SqlAlchemyDocumentStorageLocation` and
+  `SqlAlchemyDocumentFormatRegistry`; `document_identity_service.py`;
+  seven nullable identity columns on `document_ingestion_jobs` (additive
+  migration `d5b93e17ca40`); format classification wired into the upload
+  endpoint; and `scripts/maintenance/backfill_document_formats.py`.
+- **One rule source.** Upload, ingestion and the backfill all classify
+  through the same classifier, which reads only `format_signatures.py`.
+  An architecture test asserts - on the syntax tree, not on prose - that
+  nothing else declares a signature, a MIME map or an extension map. Two
+  copies of a format rule would let the system disagree with itself about
+  what a document is.
+- **Evidence is ranked, and the ranking is the whole design.** A readable
+  content signature decides absolutely, because the bytes are the document
+  and the filename is a label somebody typed; the overruled evidence is
+  still recorded rather than discarded. Without a signature, a MIME type
+  and an extension that disagree **deadlock** into `CONFLICTING` - both
+  are claims *about* the file rather than facts *from* it, so neither can
+  arbitrate the other, and picking one would be the arbitrary
+  classification this milestone forbids. A ZIP header abstains rather than
+  guessing between `xlsx` and `docx`. Nothing with an opinion yields
+  `UNKNOWN`, never a guess.
+- **Identity is not deduplication.** Identical checksums are recorded and
+  nothing is concluded from them. Whether a repeated upload is a
+  duplicate, a re-issue under a new revision, or the same drawing filed
+  against two projects is a question about the *documents*, and answering
+  it here would invent a policy nobody stated.
+- An **empty file fails** rather than hashing to SHA-256's empty digest -
+  a real value, which is exactly the problem: recorded as an identity it
+  would make every empty document look like the same document. If the
+  bytes read disagree with the reported size, the attempt fails as
+  `CHECKSUM_FAILURE`; a digest describing bytes other than the ones
+  reported would be a lie.
+- **Reads never rewrite.** An ingestion records the detected format
+  beside the stored one and leaves the document row untouched; correcting
+  it is the backfill's job, and the backfill plans without writing so an
+  operator can read the report first. `record_format` sits on its own
+  narrow port precisely so nothing calls it during a read. If the content
+  changed since a prior job, the new job records the new checksum and the
+  historical job is left exactly as it was.
+- **Backwards compatibility.** Every new column is nullable and every new
+  snapshot field defaults to `None`, so jobs written before this milestone
+  read back as jobs that examined no content - which is the truth about
+  them rather than a gap to fill in. A caller with no content port still
+  runs the 25.1 metadata-only pipeline: "nobody looked" and "the content
+  is broken" are different facts, and collapsing them would report every
+  such ingestion as broken storage. Documents stored as `other` remain
+  readable and are never modified during a normal read.
+- What it deliberately does **not** do, enforced by architecture test: no
+  parsing, OCR, text extraction, embeddings or LLM anywhere in the
+  context; no Engineering Index or Knowledge Graph write; no domain import
+  of a filesystem, cloud-storage client or ORM - the domain neither calls
+  `open` nor constructs a path, asserted on the syntax tree; and no fifth
+  bounded context gained storage access.
+- Architecture impact: **no new ADR.** The milestone introduces no new
+  persistence strategy and no external dependency - it applies the
+  existing Ports & Adapters discipline to storage. Reference updated:
+  `docs/architecture/document_management.md`.
+- Dependencies: Milestone 25.1 (the ingestion lifecycle it extends) and
+  the existing document repository.
+
+**Milestone 26.1 — Canonical PDF Representation** - *Completed*
+- Objective: convert a PDF into a deterministic, loss-minimising,
+  reproducible representation suitable for future engineering
+  extraction - and make that representation, rather than the original
+  file, the thing all downstream semantic processing reads.
+- Delivered: a new `canonical_pdf` bounded context (the
+  `CanonicalPdfDocument → Page → Block → Span` value hierarchy, a
+  construction factory enforcing every invariant, a typed failure
+  taxonomy, `PdfParserPort` and `CanonicalRepresentationRepository`);
+  `PyMuPdfParser`; a SQLAlchemy repository over four typed tables
+  (additive migration `b7ded1e07fcd`); `canonical_pdf_service.py`; and
+  two endpoints.
+- **Why extraction must consume the representation, not the PDF** - the
+  load-bearing decision of the milestone. Re-parsing a PDF next year
+  under a different library release can legitimately yield different
+  text; if extraction read the file, a claim already in the Knowledge
+  Graph could silently stop being supported by the document it came
+  from, with nothing able to show what changed. The representation is a
+  fixed value bound to one checksum, one parser version and one
+  representation version, so provenance resolves to a specific span of a
+  specific representation of specific bytes. Confining PDF decoding to
+  one adapter also means downstream milestones inherit *resolved*
+  failures rather than re-handling encryption, corruption and missing
+  text. The repository port exposes no method returning a path, a handle
+  or raw content - the rule is structural, not advisory.
+- **It records; it does not interpret.** No merged paragraphs, no
+  rewritten or repaired text, no removed headers, no inferred tables,
+  lists, headings or sections, no entities, and no geometric re-ordering
+  of blocks - on a multi-column wiring schedule a sorting heuristic would
+  be this system asserting how the page should be read. There is nowhere
+  in the model *or the schema* to record such a thing, asserted by test
+  on both.
+- Preserved because the parser supplies it: page number, the parser's own
+  reading order, verbatim text, bounding boxes, font family, font size,
+  bold and italic. Image blocks are recorded as observed rather than
+  dropped; spans keep the `line_index` they came from, so the parser's
+  line grouping survives without anyone re-deriving it from coordinates.
+- **Deterministic and idempotent.** The same bytes always produce an
+  equal representation - asserted directly, which is possible because the
+  value objects are frozen and carry no timestamp. Re-running finds the
+  stored representation and re-uses it (`reused: true`, `200` rather than
+  `201`); changed bytes carry a different checksum and produce a new
+  representation *alongside* the old, so a conclusion drawn from last
+  year's revision stays explainable. A unique constraint on
+  `(document_id, content_checksum, representation_version)` is the
+  persistence-level backstop.
+- **Only PDF, and no OCR.** Everything else produces a typed
+  `UNSUPPORTED_FORMAT` - a drawing is not badly-formed text. A PDF with
+  no text span anywhere fails with `NO_EXTRACTABLE_TEXT`, which names an
+  observation and refuses to diagnose: it does not claim the document is
+  scanned, because nothing this milestone reads could support that.
+  Persisting it would hand every future extractor a document that appears
+  to say nothing, indistinguishable from one that genuinely does.
+- Failures are each named rather than collapsed: `DOCUMENT_NOT_FOUND`,
+  `UNSUPPORTED_FORMAT`, `NOT_READY_FOR_EXTRACTION`, `CONTENT_NOT_FOUND`,
+  `CONTENT_INACCESSIBLE`, `EMPTY_CONTENT`, `ENCRYPTED_DOCUMENT`,
+  `CORRUPTED_DOCUMENT`, `PARSER_FAILURE`, `EMPTY_DOCUMENT`,
+  `NO_EXTRACTABLE_TEXT`, `REPRESENTATION_PERSISTENCE_FAILURE`. The five
+  shared with ingestion carry identical values and are asserted equal by
+  test, but are restated rather than imported - ingestion knows nothing
+  about PDF internals and `ENCRYPTED_DOCUMENT` would mean nothing on an
+  ingestion job.
+- Reuse rather than reinvention: the flow starts at Milestone 25.1's
+  `READY_FOR_EXTRACTION`, reads bytes through Milestone 25.2's
+  `DocumentContentPort` and `DocumentStorageLocationPort`, and carries
+  25.2's checksum onto the representation. The parser port takes **bytes,
+  not a path**, so bypassing the content port is impossible rather than
+  merely discouraged. PyMuPDF was already a dependency; nothing new was
+  added.
+- **Debt recorded, not hidden - and since resolved.** Four modules
+  decoded PDFs before this milestone: `pdf_text_extractor` (live, via the
+  upload endpoint's Knowledge Graph path) and three with no callers at
+  all. All four were enumerated in an architecture test so the set stayed
+  closed, and **Milestone 26.2 deleted every one of them** and migrated
+  the upload path onto the canonical pipeline.
+- Architecture impact: **no new ADR.** No new persistence strategy and no
+  new external dependency; the milestone applies the existing Ports &
+  Adapters discipline to PDF decoding. Reference updated:
+  `docs/architecture/document_management.md`.
+- Dependencies: Milestone 25.1 (the ingestion lifecycle it starts from)
+  and 25.2 (content access and identity).
+
+**Milestone 27.1 — Canonical Text Segmentation** - *Completed*
+- Objective: build the reusable, semantic-neutral text segmentation layer
+  every future extractor consumes, so that turning page layout into
+  textual structure is decided once, recorded, and versioned - rather
+  than re-implemented, slightly differently, inside each extractor.
+- Delivered: a new `canonical_text` bounded context (the
+  `Document → Section → Paragraph → Line → Token` value hierarchy, the
+  `SpanProvenance` chain, a pure segmenter, a pure normaliser, a typed
+  failure taxonomy and `CanonicalTextRepository`); a SQLAlchemy
+  repository over five typed tables (additive migration `26978efc7d15`);
+  `canonical_text_service.py`; and two endpoints.
+- **What a section is, and why it is the whole design.** A section **is a
+  page**. Not a chapter, not a heading, not an engineering section -
+  those would have to be inferred, and a heading detector deciding
+  "TECHNICAL DATA" was a section title would be guessing from font size,
+  with every extractor downstream inheriting the guess as though it were
+  an observation. Segmentation uses only boundaries the parser already
+  recorded: page transitions, block boundaries, the line index Milestone
+  26.1 preserved on every span, and whitespace. Nothing measures a gap or
+  compares a font size.
+- **Why extractors must consume the segmentation rather than PDF
+  layout.** A block, a bounding box and a font size are facts about ink;
+  "these lines form a paragraph" is a conclusion drawn from them. Drawn
+  independently by five extractors, it would be drawn five slightly
+  different ways, and two of them disagreeing about where a paragraph
+  ends would produce two irreconcilable answers about one document.
+  Deciding it once and versioning it under `segmentation_version` means a
+  rule change produces a *new* segmentation beside the old, and
+  conclusions drawn under the previous rules stay explainable.
+  `CanonicalTextRepository` exposes no page, block or bounding box, and
+  an architecture test pins the set of modules permitted to import the
+  canonical PDF models at all.
+- **Provenance is the point.** Every token carries
+  `document → page → block → span → character range`, with offsets into
+  the originating span's own text so the substring can be recovered and
+  checked without re-parsing anything. Stored as columns on the token
+  row rather than as joins, because "find this term and tell me exactly
+  where it sits" is the read every extractor performs. A token never
+  straddles two spans - a word split across a style boundary yields two
+  tokens - because a merged token would point at no single span, and the
+  chain is worth more than the tidier word.
+- **Normalisation is NFKC plus a strip, and nothing else.** No case
+  folding (`mV`, `kV` and `MV` are three different things), no
+  abbreviation expansion (`CB` → "circuit breaker" is an ontology lookup
+  wearing a normaliser's clothes), no spelling correction, no
+  engineering normalisation, no stemming. Both forms are stored: the
+  original is what the document says, the normalised form is what two
+  documents compare on. **The known cost is pinned by test:** NFKC folds
+  superscripts, so `mm²` normalises to `mm2` - acceptable only because
+  the original is preserved verbatim and the provenance points at the
+  exact characters. Changing it means bumping the segmentation version
+  and re-segmenting, which is what that version is for.
+- **Deterministic and idempotent.** No value object carries a timestamp,
+  so "the same representation always segments the same way" is asserted
+  directly by equality. The stored key is
+  `(document_id, content_checksum, segmentation_version)`: re-running
+  re-uses the stored result (`reused: true`, `200` rather than `201`), a
+  changed document or changed rules produce a new segmentation alongside
+  the old.
+- Empty structures are kept, never pruned: an empty page is still a page,
+  and dropping it would renumber every section after it and break the
+  correspondence with the page an engineer is looking at. An image block
+  becomes an empty paragraph for the same reason. A representation that
+  segments to *zero* tokens is refused rather than stored - it would look
+  to every extractor like a document that says nothing.
+- Failures: `CANONICAL_REPRESENTATION_MISSING`,
+  `INVALID_CANONICAL_REPRESENTATION` (caught on read, before segmentation
+  begins), `UNSUPPORTED_REPRESENTATION_VERSION` (refusing is the only
+  safe answer - a newer representation may carry fields this code would
+  misinterpret), `SEGMENTATION_FAILURE`,
+  `REPRESENTATION_PERSISTENCE_FAILURE`. The one shared with Milestone
+  26.1 carries an identical value, asserted by test, but is restated
+  rather than imported.
+- What it deliberately does **not** do, enforced by architecture test:
+  no entity, equipment or cable recognition; no Engineering Index or
+  Knowledge Graph write; no LLM, Prompt Builder or Engineering Engine;
+  no ontology lookup; and **no access to PDF storage or any PDF library**
+  - the domain imports the canonical PDF models and its own modules, and
+  nothing else. A service test additionally points a document's
+  `file_path` at a file that never existed and segments it successfully,
+  which is the strongest available proof that the original PDF is not
+  read.
+- Architecture impact: **no new ADR.** No new persistence strategy and no
+  new external dependency. Reference updated:
+  `docs/architecture/document_management.md`.
+- Dependencies: Milestone 26.1 (its only input).
+
+**Milestone 26.2 — PDF Consumption Consolidation** - *Completed*
+- Objective: make the canonical pipeline the *only* PDF path. Milestones
+  26.1 and 27.1 built it; the upload endpoint was still quietly running a
+  second one, and three further modules could decode a PDF as well.
+- Delivered: `canonical_text_assembler` (a pure, documented rendering of
+  a segmentation into text); `document_pipeline_service`, the application
+  workflow that sequences ingestion, canonicalisation and segmentation
+  and hands the assembled text to an injected consumer; the upload router
+  migrated onto that workflow; and the four pre-canonical decoders
+  deleted.
+- **Repository analysis first, deletion second.** Every PDF-touching
+  module was traced through imports, composition roots, routes, tests,
+  scripts and the frontend, and checked for dynamic loading (`importlib`,
+  `__import__`, `pkgutil` - none exists anywhere in `app/`).
+  `pdf_text_extractor` had exactly one caller: the upload endpoint. The
+  other three - and the whole `services/intelligence/` package their
+  helpers belonged to - had none.
+- **One decoder.** `app/infrastructure/canonical_pdf/pymupdf_parser.py`
+  is now the only module in the application permitted to import a PDF
+  library, asserted as an exact set rather than a subset. The retired
+  files are asserted absent *from the filesystem* as well as unimported,
+  because a restored file with no importers yet would pass every
+  import-based check while sitting there waiting to be used.
+- **The Knowledge Graph receives a string.** It is handed assembled text
+  and nothing else - no document id, no storage reference, no
+  segmentation, no parser object - so no consumer can reach the bytes for
+  itself. Architecture tests assert the whole live chain
+  (`knowledge_graph` → `services/ai/**` → `services/topology/**`) imports
+  no PDF library, no content or storage-location port, no filesystem
+  adapter, and opens no file.
+- **Text assembly preserves the engineering text.** It uses **original**
+  token text, never the NFKC-normalised form, because normalisation folds
+  `mm²` into `mm2`. Regression tests assert that superscripts,
+  subscripts, Greek letters (`Ω`, `Δ`, `φ`) and electrical symbols (`±`,
+  `°`, `≤`, `×`) survive the whole pipeline into the text delivered
+  downstream. The page marker is kept verbatim from the retired
+  extractor, since that string is part of what the consumer reads.
+- **Failures are named by stage.** The workflow reports which of
+  ingestion, canonicalisation, segmentation, assembly or the downstream
+  consumer stopped it, carrying **that stage's own typed code** rather
+  than translating everything into a fourth vocabulary. The endpoint's
+  `status` field keeps its long-standing values so existing clients see
+  no change; the new `failure` object beside it means "failed" is no
+  longer the end of the story.
+- **Two intentional behaviour changes, both documented rather than
+  smoothed over.** (1) Runs of whitespace inside a line collapse to a
+  single space, and paragraph transitions become a blank line - the
+  current entity patterns are whitespace-tolerant, and no designation's
+  characters change. (2) A project-scoped upload now creates an ingestion
+  job, because the upload *is* the pipeline; two Milestone 25.1 API tests
+  were updated to count relative to that job rather than assume its
+  absence.
+- **A pre-existing finding worth recording.** The live Knowledge Graph
+  extractor (`app/services/ai/extractor.py`) is **LLM-backed** and
+  requires `ANTHROPIC_API_KEY`; without one the upload has always
+  reported `failed`. This milestone neither introduced nor changed that -
+  but it now names the stage, so the condition is visible instead of
+  anonymous.
+- Architecture impact: **no new ADR.** The milestone removes code and
+  enforces boundaries the existing ADRs already imply; it introduces no
+  new persistence strategy, dependency or architectural decision.
+- Dependencies: Milestones 25.1, 25.2, 26.1 and 27.1 - it is the
+  consolidation those four made possible.
+
+**Milestone 28.1 — Engineering Evidence Extraction Foundation** -
+*Completed*
+- Objective: introduce a governed layer between canonical text and all
+  future engineering knowledge construction, so that what a document was
+  *observed* to contain is recorded deterministically, with provenance
+  and a rule version, before anybody decides what it *means*.
+- Delivered: a new `engineering_evidence` bounded context (evidence value
+  objects, provenance, a pattern catalogue, a unit catalogue, a rule
+  catalogue, an exact-`Decimal` quantity policy, a pure extractor, set
+  validation and `EngineeringEvidenceRepository`); a SQLAlchemy
+  repository over three typed tables (additive migration
+  `24d9fadeeb4c`); `engineering_evidence_service.py`; and two endpoints.
+- **Evidence is an observation, not an entity** - the decision the whole
+  milestone rests on. An item says "the characters `20 kV` appeared on
+  page 3, paragraph 2, line 1, tokens 4-5, under rule `voltage_value`
+  version 1.0". It does not say a transformer exists, nor which one. A
+  quantity beside a designation yields **two independent observations**:
+  adjacency is a fact about ink, attribution is a judgement. There is no
+  field on the model and no column in the schema in which "belongs to"
+  could be written, and an architecture test asserts both stay that way.
+- Supported catalogue: `DESIGNATION`, `VOLTAGE_VALUE`, `CURRENT_VALUE`,
+  `POWER_VALUE`, `CABLE_SECTION_VALUE`. **`MANUFACTURER_NAME` is omitted,
+  with reason**: recognising a manufacturer needs a list of
+  manufacturers, and this repository has none —
+  `ontology/attributes/manufacturer.yaml` is a free-text attribute with
+  no enumerated values. Writing one would be an arbitrary, incomplete
+  dictionary presented as a deterministic rule.
+- **Designation recognition is conservative.** Three declared shapes,
+  each requiring letters and digits together: `T1`/`QMT01`, `52-Q1`,
+  `+E01-QA1`. Bare uppercase words, bare numbers and lower-case tokens
+  are rejected — not every capitalised token is a designation, and the
+  cost is asymmetric: a missed designation is a gap a later milestone can
+  fill, a false one is an entity somebody has to disprove. The equipment
+  category is never inferred from the designation.
+- **Quantities are exact.** `Decimal` in the domain and `Numeric` in the
+  schema, never `float`. The separator policy is explicit about what it
+  cannot read: `1.250` is 1250 in one convention and 1.25 in the other,
+  so it is recorded `AMBIGUOUS` and **carried without a normalised
+  value** — a reviewer can settle it, and a guess could not be un-guessed
+  once it had become a rated value in the graph.
+- **The unit catalogue is small and closed.** No case folding (`mV`,
+  `kV` and `MV` are three different quantities), no inferred units (a
+  bare `630` beside "potenza" is a number beside a word), and conversions
+  only where exact (kV→V; `mm²` has no base unit because there is nothing
+  exact to convert it to).
+- **Provenance is recorded at match time, never reconstructed.** Every
+  item cites page, section, paragraph, block, line, token range and the
+  character ranges of the canonical spans it drew from. Character ranges
+  exclude trimmed punctuation, so `400 V,` points at `400 V`. An
+  observation may cite **two spans** when a style changes mid-value, and
+  never crosses a line — a value split across a line boundary is not
+  extracted rather than recorded with an approximate location.
+- **The extractor reads original token text, never the NFKC form.** The
+  normalised form folds `mm²` into `mm2` and `I₁` into `I1`; matching on
+  it would degrade the engineering symbols an item records and would
+  silently promote a subscripted signal name to a designation.
+  Regression tests cover `mm²`, `m³`, `Ω`, `Δ`, `φ`, `±`, `°`, `≤`, `×`
+  and `I₁`. The canonical text normalisation model itself is unchanged —
+  no blocker required redesigning it.
+- **Statuses are categorical, deliberately not percentages.** `OBSERVED`
+  and `AMBIGUOUS` are persisted; `REJECTED` candidates are diagnostics
+  and never reach storage. A numerical confidence would have to be
+  calibrated against something, and a regular expression either matched
+  or it did not — inventing "0.85" would dress a boolean up as a
+  measurement.
+- **Rules are findable.** One pattern module, one unit module, one rule
+  catalogue; architecture tests assert nothing else in the context calls
+  `re.compile`, constructs a `UnitDefinition`, or writes a unit spelling
+  as an executable literal. The extractor orchestrates and matches
+  nothing itself — an inline `if` there would be a rule nobody could
+  find, version or review, while every stored item cites a rule version.
+- Ten typed failures, none collapsed into a generic runtime error.
+- What it deliberately does **not** do, enforced by architecture test: no
+  PDF library, no content or storage-location port, no filesystem; no
+  LLM, Prompt Builder or Engineering Engine; no Engineering Index or
+  Knowledge Graph write. A service test additionally points a document's
+  `file_path` at a file that never existed and extracts successfully,
+  which is the strongest available proof that no document is reopened.
+- **Debt left standing, on purpose.** The live Knowledge Graph upload
+  path still performs ad-hoc LLM extraction from assembled text.
+  Migrating it is a separate milestone; an architecture test pins the
+  current absence of a dependency between the two, so that change will be
+  deliberate rather than incidental.
+- Architecture impact: **no new ADR.** No new persistence strategy and no
+  new external dependency. New as-built reference:
+  `docs/architecture/engineering_evidence.md`.
+- Dependencies: Milestone 27.1 (its only input) and, through it, 25.1,
+  25.2 and 26.1.
 
 **Milestone 17 — AI Assistant**
 - Objective: build the conversational, user-facing surface over the

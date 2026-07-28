@@ -10,11 +10,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database.database import Base
+from app.routers import canonical_pdf as canonical_pdf_router_module
+from app.routers import canonical_text as canonical_text_router_module
 from app.routers import canonicalization as canonicalization_router_module
 from app.routers import context_builder as context_builder_router_module
 from app.routers import conversation as conversation_router_module
+from app.routers import document_ingestion as document_ingestion_router_module
 from app.routers import documents as documents_router_module
 from app.routers import engineering_engine as engineering_engine_router_module
+from app.routers import engineering_evidence as engineering_evidence_router_module
 from app.routers import engineering_index as engineering_index_router_module
 from app.routers import engineering_intent as engineering_intent_router_module
 from app.routers import (
@@ -81,6 +85,10 @@ def api_client(db_session: Session) -> Iterator[TestClient]:
     test_app = FastAPI()
     test_app.include_router(projects_router_module.router)
     test_app.include_router(documents_router_module.router)
+    test_app.include_router(document_ingestion_router_module.router)
+    test_app.include_router(canonical_pdf_router_module.router)
+    test_app.include_router(canonical_text_router_module.router)
+    test_app.include_router(engineering_evidence_router_module.router)
     test_app.include_router(engineering_index_router_module.router)
     test_app.include_router(proposed_claims_router_module.router)
     test_app.include_router(review_workflow_router_module.router)
@@ -110,6 +118,18 @@ def api_client(db_session: Session) -> Iterator[TestClient]:
     ] = _override_get_db
     test_app.dependency_overrides[
         documents_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        document_ingestion_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        canonical_pdf_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        canonical_text_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        engineering_evidence_router_module.get_db
     ] = _override_get_db
     test_app.dependency_overrides[
         engineering_index_router_module.get_db

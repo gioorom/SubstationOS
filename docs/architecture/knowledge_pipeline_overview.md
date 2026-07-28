@@ -14,8 +14,14 @@ Foundation, EPIC 5), Milestone 23B.1 (Document Lookup workflow,
 EPIC 5), Milestone 23B.2 (Engineering Explanation workflow,
 EPIC 5), Milestone 23B.3 (Classification-to-Retrieval Bridge,
 EPIC 5), Milestone 24.1 (Engineering Verification workflow,
-EPIC 5), and Milestone 24.2 (Engineering Comparison workflow,
-EPIC 5).
+EPIC 5), Milestone 24.2 (Engineering Comparison workflow,
+EPIC 5), Milestone 25.1 (Document Ingestion Pipeline,
+EPIC 2), Milestone 25.2 (Document Identity and Content
+Access, EPIC 2), Milestone 26.1 (Canonical PDF
+Representation, EPIC 2), Milestone 27.1 (Canonical Text
+Segmentation, EPIC 2), Milestone 26.2 (PDF Consumption
+Consolidation, EPIC 2), and Milestone 28.1 (Engineering Evidence
+Extraction, EPIC 2).
 Describes the governed knowledge pipeline as it
 exists today — not the product vision
 (`project_intelligence_architecture.md` describes vision and roadmap;
@@ -27,7 +33,9 @@ its own.
 ## The pipeline, stage by stage
 
 ```
-Documents → Engineering Index → Proposed Claims → Review Workflow →
+Documents → Document Identity → Document Ingestion → Canonical PDF Representation →
+Canonical Text Segmentation → Engineering Evidence Extraction →
+Engineering Index → Proposed Claims → Review Workflow →
 Canonicalization → Graph Builder → Project Knowledge Graph → Graph Query →
 Structured Retrieval → Context Builder → Prompt Builder →
 LLM Provider Abstraction Layer → LLM Invocation Runtime →
@@ -132,6 +140,114 @@ the LLM Invocation Runtime's own application-layer output - see
 [ADR-0015](adr/0015-engineering-response-foundation.md) for how that
 Dependency Rule boundary is resolved.
 
+**Milestone 25.1 added the pipeline's first stage on the *input* side.**
+Everything before it turned reviewed knowledge into answers; ingestion is
+where project knowledge begins to enter the system at all. It deliberately
+stops short of extraction: it records that a document was accepted, what
+the repository already knows about it, and whether it is ready for a
+future extractor - and nothing else. The Engineering Index and the
+Knowledge Graph stay untouched, enforced by architecture test rather than
+by intent.
+
+**Milestone 28.1 added the first governed consumer of canonical
+text.** Engineering Evidence Extraction runs a small, versioned catalogue
+of deterministic rules over the segmentation and records what was
+*observed*: designations, voltages, currents, powers and cable sections,
+each with provenance back to the exact characters, tokens, line,
+paragraph and page that produced it, and each citing the rule and rule
+version that matched.
+
+**An evidence item is an observation, not an entity.** It says `20 kV`
+appeared at a place; it does not say a transformer exists, nor which one.
+A quantity beside a designation is *two independent observations* -
+adjacency is a fact about ink, attribution is a judgement - and there is
+no field on the model and no column in the schema in which "belongs to"
+could be written. Entity resolution, equipment records, technical
+properties and graph population are later milestones that consume
+evidence through `EngineeringEvidenceRepository`; when they arrive, graph
+population must read evidence rather than document text, or it would be
+re-deciding what counts as an observation under no rule version.
+
+No LLM, no embeddings, no inference beyond the declared patterns. The
+live Knowledge Graph upload path still performs ad-hoc LLM extraction and
+remains recorded debt; an architecture test pins the current absence of a
+dependency between the two, so migrating it will be a deliberate act.
+
+**Milestone 26.2 made the canonical path the only path.** Until then
+the pipeline drawn above described how documents *should* be read, while
+the upload endpoint quietly did something else: it opened the stored PDF
+with PyMuPDF and handed the result straight to the Knowledge Graph. Three
+further modules could decode a PDF as well. All four are now deleted, the
+upload runs the consolidated pipeline through a single application
+workflow, and the Knowledge Graph receives text assembled from the
+segmentation.
+
+**Exactly one module in this system may import a PDF library**, and an
+architecture test asserts that the set has precisely one member. That is
+what makes the reproducibility argument in the two milestones below
+actually hold - a second decoder would have quietly reintroduced every
+problem they were built to prevent.
+
+**Milestone 27.1 turned that artefact into the structure extraction
+actually consumes.** The Canonical Text Segmentation maps the
+representation onto `document → section → paragraph → line → token`,
+using only boundaries the parser already observed - page transitions,
+block boundaries, the line index preserved on every span, and whitespace.
+A section **is a page**: not a chapter, not a heading, not an engineering
+section, because those would have to be inferred and inferring them is
+what this milestone refuses to do.
+
+**Every semantic extractor consumes the segmentation rather than PDF
+layout.** A block, a bounding box and a font size are facts about ink on
+a page; "these lines form a paragraph" is a conclusion drawn from them.
+If each extractor drew that conclusion itself, each would draw it
+slightly differently, and two extractors disagreeing about where a
+paragraph ends would produce two irreconcilable answers about one
+document. Deciding it once, recording it, and versioning it under
+`segmentation_version` means a rule change produces a new segmentation
+beside the old one, and every conclusion drawn under the previous rules
+stays explainable. Tokens also carry the full provenance chain -
+`document → page → block → span → character range` - so an extractor can
+point at the exact characters behind anything it claims; an extractor
+starting from geometry would have to carry that chain itself, and the
+first one to drop it would break the property the whole system depends
+on.
+
+**Milestone 26.1 built the artefact everything downstream will
+read.** The canonical representation is the first thing in this system
+that records what a document *says* - page by page, block by block, span
+by span, with geometry and font style, exactly as the parser observed it.
+It records and does not interpret: no merged paragraphs, no inferred
+tables or sections, no engineering entities, no re-ordering of blocks,
+and nowhere in the model or the schema to put any of them.
+
+**Every future semantic extraction consumes the representation, never the
+original PDF.** The PDF stays authoritative as a document; it stops being
+the thing software parses. Re-decoding it later, under a different
+library version, could legitimately yield different text - which would
+mean a claim in the Knowledge Graph could silently stop being supported
+by the document it came from, with nothing able to show what changed. The
+representation is instead a fixed value bound to one checksum, one parser
+version and one representation version, so "where did this claim come
+from?" resolves to a specific span of a specific representation of
+specific bytes. Confining PDF decoding to one adapter behind one port
+also means every downstream milestone inherits *resolved* failures -
+encrypted, corrupted, no extractable text - rather than handling them
+again. `CanonicalRepresentationRepository` deliberately exposes no method
+returning a path, a handle or raw content, so the rule is structural
+rather than advisory.
+
+**Milestone 25.2 gave that stage eyes, and only just enough of them.**
+Document Identity establishes two deterministic facts about a document's
+bytes - which bytes they are (SHA-256, size, accessibility) and what kind
+of file they form (signature > declared MIME type > filename extension) -
+and stops there. Reading at most 32 leading bytes and a streamed digest
+identifies a file; it does not read a document. There is still no
+parsing, no OCR, no embeddings, no LLM and no knowledge write anywhere on
+the input side, and the same architecture tests now cover the new context
+too. The line between *identifying* a document and *understanding* one is
+the line this milestone deliberately did not cross.
+
 Each stage trusts the stage before it completely and adds exactly one
 new responsibility — no stage re-derives or second-guesses a decision
 an earlier stage already made (this is the same discipline
@@ -141,7 +257,13 @@ across the whole pipeline).
 
 | Stage | Bounded context | Owns | Domain package |
 |---|---|---|---|
-| Documents | Document Repository | Uploaded files, scope (`PROJECT` vs `CANONICAL_LIBRARY`), classification | `app/models/document.py`, `app/routers/documents.py` |
+| Documents | Document Repository | Uploaded files, scope (`PROJECT` vs `CANONICAL_LIBRARY`), and - since Milestone 25.2 - the format classified at upload rather than defaulted to `other` | `app/models/document.py`, `app/routers/documents.py` |
+| Document Identity | Document Identity | Deterministic content identity (SHA-256, size, accessibility) and format classification from evidence ranked signature > declared MIME type > filename extension, behind the read-only `DocumentContentPort` (Milestone 25.2). The **one** format rule source in the system, used by upload, ingestion and the backfill alike. Identity is not deduplication: identical checksums are recorded and nothing is concluded from them | `app/domain/document_identity/**` (domain), `app/services/document_identity_service.py` |
+| Document Ingestion | Document Ingestion | The deterministic lifecycle a document passes through on its way to being extractable (Milestone 25.1): an explicit `UPLOADED → QUEUED → PROCESSING → PROCESSED/FAILED` state machine with validated transitions, one typed immutable `IngestionJob` per attempt, a document-metadata snapshot taken at ingestion time, and a persisted `READY_FOR_EXTRACTION`/`FAILED` outcome a future extraction milestone consumes. Since Milestone 25.2 the snapshot also carries the content identity and classified format resolved through Document Identity, each content and format failure named rather than collapsed. **Orchestration only** - it interprets no document contents, uses no LLM, and writes neither the Engineering Index nor the Knowledge Graph | `app/domain/document_ingestion/**` (domain), `app/services/document_ingestion_service.py` |
+| Canonical PDF Representation | Canonical PDF | The deterministic, reproducible textual representation of a PDF (Milestone 26.1): `CanonicalPdfDocument → Page → Block → Span`, with page number, the parser's own reading order, verbatim text, bounding boxes, font family and size, and bold/italic - bound to one content checksum, one parser version and one representation version. **The single source of truth for every future semantic extraction**, which consumes it through `CanonicalRepresentationRepository` and never re-opens the original PDF. Records what the parser observed and interprets nothing: no merged paragraphs, no inferred tables, lists, headings or sections, no entities, no OCR | `app/domain/canonical_pdf/**` (domain), `app/services/canonical_pdf_service.py` |
+| Canonical Text Segmentation | Canonical Text | The semantic-neutral textual structure over the representation (Milestone 27.1): `CanonicalTextDocument → Section → Paragraph → Line → Token`, where a section **is a page**, a paragraph **is a PDF block** and a line **is a PDF line** - only boundaries the parser observed. Tokens carry the original text, a deterministic NFKC normalisation, their position in the line, and the full provenance chain back to the originating span's characters. **The structure every future extractor consumes**, through `CanonicalTextRepository`, which exposes no PDF structure at all. Assigns no engineering meaning: no entities, no equipment, no cables, no tables, no relationships | `app/domain/canonical_text/**` (domain), `app/services/canonical_text_service.py` |
+| Engineering Evidence Extraction | Engineering Evidence | Deterministic engineering observation over canonical text (Milestone 28.1): `EngineeringEvidenceSet → EngineeringEvidence`, covering designations, voltages, currents, powers and cable sections under a versioned rule catalogue with one pattern source and one unit catalogue. Quantities are held as exact `Decimal`; every item carries provenance to the characters, tokens, line, paragraph and page that produced it, plus its rule id and version. **Observations only** - no entity, no relationship, no equipment type, no LLM, and no column in which any of them could be recorded | `app/domain/engineering_evidence/**` (domain), `app/services/engineering_evidence_service.py` |
+| Knowledge Graph ingestion (legacy consumer) | Knowledge Graph | The pre-existing per-project entity extraction the upload endpoint feeds. Since Milestone 26.2 it receives **text assembled from the canonical segmentation** - never PDF bytes, a filesystem path, the content port or a parser object, all enforced by architecture test. Its own semantic policy is unchanged by that milestone: same extractor, same entities, same topology builder, different source of text | `app/services/knowledge_graph.py`, `app/services/ai/**`, `app/services/topology/**` |
 | Engineering Index | Engineering Index | A structured, per-document index of extracted content — not yet a claim about the installation. Its **read side** (Document Retrieval, Milestone 23B.1) answers "which documents mention X?" as ranked `DocumentReference`s, scored from a fixed documented weight table | `app/domain/engineering_index/**` (domain), `app/services/document_retrieval_service.py` |
 | Proposed Claims | Proposed Claims | Candidate assertions derived from the index, not yet reviewed | `app/domain/proposed_claims/**` |
 | Review Workflow | Review Workflow | Human review/approval state for a Proposed Claim | `app/domain/review_workflow/**` |
@@ -597,5 +719,7 @@ into the governed pipeline this milestone.
 - **Conversation:** [conversation.md](conversation.md), [ADR-0017](adr/0017-conversation-foundation.md).
 - **Working Memory:** [working_memory.md](working_memory.md), [ADR-0018](adr/0018-working-memory-foundation.md).
 - **Engineering Request Classification:** [engineering_intent.md](engineering_intent.md), [ADR-0019](adr/0019-engineering-request-classification.md).
+- **Documents, Document Identity, Document Ingestion, the Canonical PDF Representation and the Canonical Text Segmentation:** [document_management.md](document_management.md).
+- **Engineering Evidence Extraction:** [engineering_evidence.md](engineering_evidence.md).
 - **Classification-to-Retrieval Bridge:** [retrieval_bridge.md](retrieval_bridge.md) (no ADR of its own - it applies ADR-0019 and ADR-0020 rather than departing from either).
 - **Engineering Engine:** [engineering_engine.md](engineering_engine.md), [ADR-0020](adr/0020-engineering-engine-foundation.md).

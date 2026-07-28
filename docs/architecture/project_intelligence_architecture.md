@@ -140,6 +140,19 @@ the existing `POST /documents/upload` endpoint's role, with one required
 change: project association becomes mandatory, not optional (today's
 `Document.project_id` is nullable; see §10).
 
+> **As-built note (Milestone 26.2).** The upload endpoint now also
+> *triggers* the deterministic document pipeline — ingestion, document
+> identity, canonical PDF representation, canonical text segmentation —
+> and hands the resulting text to the existing Knowledge Graph consumer.
+> That is still not interpretation happening *in* upload: every stage is
+> an existing application service, and the endpoint sequences them
+> through one workflow rather than doing any of the work itself.
+>
+> The rule that matters for everything downstream: **no consumer decodes
+> the original PDF.** Exactly one adapter in the system may import a PDF
+> library, and semantic consumers read the canonical text. See
+> [document_management.md](document_management.md).
+
 ### Document Classification
 
 Every uploaded document is assigned a document type from a governed

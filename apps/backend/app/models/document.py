@@ -17,11 +17,23 @@ if TYPE_CHECKING:
 
 
 class DocumentFormat(str, Enum):
+    """
+    The persisted format vocabulary. ``DXF`` and ``IMAGE`` were added in
+    Milestone 25.2, when classification made them distinguishable - before
+    that every document was stored as ``OTHER`` regardless.
+
+    ``OTHER`` means **unclassified**, not "examined and found unusable".
+    ``app.domain.document_identity.ClassifiedFormat`` is the domain's own
+    restatement of this set; a test asserts the two agree.
+    """
+
     PDF = "pdf"
     DWG = "dwg"
+    DXF = "dxf"
     MODEL_3D = "model_3d"
     XLSX = "xlsx"
     DOCX = "docx"
+    IMAGE = "image"
     OTHER = "other"
 
 

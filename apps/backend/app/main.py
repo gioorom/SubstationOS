@@ -12,8 +12,12 @@ from app.database.database import SessionLocal
 # relying on routers transitively importing the same modules, so mapper
 # configuration does not depend on router import order.
 from app.models import (  # noqa: F401
+    canonical_pdf,
+    canonical_text,
     canonicalization,
     document,
+    document_ingestion,
+    engineering_evidence,
     engineering_index,
     graph_builder,
     knowledge_graph,
@@ -23,11 +27,15 @@ from app.models import (  # noqa: F401
     review_workflow,
 )
 from app.routers import (
+    canonical_pdf as canonical_pdf_router,
+    canonical_text as canonical_text_router,
     canonicalization as canonicalization_router,
     context_builder as context_builder_router,
     conversation as conversation_router,
     documents,
+    document_ingestion as document_ingestion_router,
     engineering_engine as engineering_engine_router,
+    engineering_evidence as engineering_evidence_router,
     engineering_index as engineering_index_router,
     engineering_intent as engineering_intent_router,
     engineering_request_preparation as engineering_request_preparation_router,
@@ -80,6 +88,10 @@ app.add_middleware(
 
 
 app.include_router(documents.router)
+app.include_router(document_ingestion_router.router)
+app.include_router(canonical_pdf_router.router)
+app.include_router(canonical_text_router.router)
+app.include_router(engineering_evidence_router.router)
 app.include_router(projects.router)
 app.include_router(knowledge_graph.router)
 app.include_router(engineering_index_router.router)

@@ -15,8 +15,12 @@ from alembic import context
 # this milestone's scope.
 from app.database.database import Base, DATABASE_URL
 from app.models import (  # noqa: F401
+    canonical_pdf,
+    canonical_text,
     canonicalization,
     document,
+    document_ingestion,
+    engineering_evidence,
     engineering_index,
     graph_builder,
     knowledge_graph,
