@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from app.domain.context_builder.context_builder_models import ContextPackage
+from app.domain.engineering_index.document_retrieval_models import (
+    DocumentRetrievalResult,
+)
 from app.domain.engineering_response.engineering_response_exceptions import (
+    BlankRequestCorrelationIdError,
     InvalidProjectIdError,
     ProjectIdMismatchError,
 )
@@ -10,7 +14,8 @@ from app.domain.prompt_builder.prompt_builder_models import PromptPackage
 
 class EngineeringResponseInputValidator:
     """Stateless validation rules for Engineering Response, shared by
-    ``EngineeringResponseBuildRequestFactory``. Validates only
+    ``EngineeringResponseBuildRequestFactory`` and
+    ``EngineeringResponseDocumentLookupBuildRequestFactory``. Validates only
     structurally invalid input (a non-positive project id, a project id
     that disagrees with a supplied upstream package) - Engineering
     Response always builds a structurally complete
@@ -41,3 +46,19 @@ class EngineeringResponseInputValidator:
             raise ProjectIdMismatchError(
                 project_id, prompt_package.project_id, "PromptPackage"
             )
+
+    @staticmethod
+    def validate_project_id_matches_document_retrieval(
+        project_id: int, retrieval_result: DocumentRetrievalResult
+    ) -> None:
+        if project_id != retrieval_result.request.project_id:
+            raise ProjectIdMismatchError(
+                project_id,
+                retrieval_result.request.project_id,
+                "DocumentRetrievalResult",
+            )
+
+    @staticmethod
+    def validate_request_correlation_id(request_correlation_id: str) -> None:
+        if not request_correlation_id or not request_correlation_id.strip():
+            raise BlankRequestCorrelationIdError()

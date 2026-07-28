@@ -17,6 +17,9 @@ from app.routers import documents as documents_router_module
 from app.routers import engineering_engine as engineering_engine_router_module
 from app.routers import engineering_index as engineering_index_router_module
 from app.routers import engineering_intent as engineering_intent_router_module
+from app.routers import (
+    engineering_request_preparation as engineering_request_preparation_router_module,
+)
 from app.routers import engineering_response as engineering_response_router_module
 from app.routers import engineering_session as engineering_session_router_module
 from app.routers import graph_builder as graph_builder_router_module
@@ -94,6 +97,9 @@ def api_client(db_session: Session) -> Iterator[TestClient]:
     test_app.include_router(conversation_router_module.router)
     test_app.include_router(working_memory_router_module.router)
     test_app.include_router(engineering_intent_router_module.router)
+    test_app.include_router(
+        engineering_request_preparation_router_module.router
+    )
     test_app.include_router(engineering_engine_router_module.router)
 
     def _override_get_db() -> Iterator[Session]:

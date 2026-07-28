@@ -143,6 +143,65 @@ class ProjectNotIndexableError(EngineeringIndexError):
         )
 
 
+class BlankDocumentRetrievalRequestError(EngineeringIndexError):
+    """
+    A document lookup that names no engineering identifier at all. This
+    bounded context answers "which documents mention X?" - with no X
+    there is nothing to look up, and returning every document in the
+    project instead would silently answer a different question.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "A document retrieval request must name at least one "
+            "engineering identifier."
+        )
+
+
+class InvalidDocumentRetrievalLimitError(EngineeringIndexError):
+    def __init__(self, limit: int, minimum: int, maximum: int) -> None:
+        self.limit = limit
+        self.minimum = minimum
+        self.maximum = maximum
+
+        super().__init__(
+            f"Invalid document retrieval limit: {limit}. It must be "
+            f"between {minimum} and {maximum}."
+        )
+
+
+class ExcessiveDocumentRetrievalIdentifierCountError(EngineeringIndexError):
+    def __init__(self, count: int, maximum: int) -> None:
+        self.count = count
+        self.maximum = maximum
+
+        super().__init__(
+            f"A document retrieval request names {count} identifiers; at "
+            f"most {maximum} are accepted."
+        )
+
+
+class DocumentRetrievalIdentifierTooLongError(EngineeringIndexError):
+    def __init__(self, identifier: str, maximum: int) -> None:
+        self.identifier = identifier
+        self.maximum = maximum
+
+        super().__init__(
+            f"Document retrieval identifier '{identifier}' exceeds the "
+            f"maximum length of {maximum} characters."
+        )
+
+
+class InvalidDocumentRetrievalProjectError(EngineeringIndexError):
+    def __init__(self, project_id: int) -> None:
+        self.project_id = project_id
+
+        super().__init__(
+            f"Invalid project id for a document retrieval request: "
+            f"{project_id}. It must be positive."
+        )
+
+
 class UnsupportedIndexEntryKindError(EngineeringIndexError):
     def __init__(self, kind: str) -> None:
         self.kind = kind

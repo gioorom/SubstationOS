@@ -154,7 +154,18 @@ infrastructure is introduced.
 
 **Easier:**
 
-- Milestone 23B adds workflows by registration alone.
+- Milestone 23B adds workflows by registration alone. **Confirmed by
+  Milestone 23B.1**, which registered `DOCUMENT_LOOKUP` - the first
+  non-LLM workflow - without modifying the registry, planner, plan
+  executor, engine service or structural validators; see
+  `engineering_engine.md`'s "Adding a workflow" section for the worked
+  example and the architecture tests that now enforce it. **Milestone
+  23B.2 registered `ENGINEERING_EXPLANATION` for less still**: two
+  declarative enum members, a workflow definition, and two registrations
+  reusing an existing handler class with a different Prompt Builder
+  objective - no new capability, artifact key, handler module, failure
+  code or response type. Extension gets cheaper as the shared pipeline
+  matures, which is the outcome this decision was made to produce.
 - Every execution is auditable end to end without correlating logs.
 - Existing components are reused rather than re-implemented: the engine
   contains no retrieval, prompt, or response-building logic of its own.

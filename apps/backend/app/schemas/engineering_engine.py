@@ -23,6 +23,24 @@ from app.schemas.engineering_response import EngineeringResponseRead
 # --- Request -----------------------------------------------------------
 
 
+class ComparisonOperandCriteriaBody(BaseModel):
+    """One side of a comparison, exactly as
+    ``/engineering-requests/prepare`` derived it. Named ``comparison_left``
+    / ``comparison_right`` on the body rather than supplied as a list:
+    "compare A with B" and "compare B with A" are different questions."""
+
+    designation: str
+    retrieval_limit: int = 20
+    retrieval_include_neighborhood: bool = False
+    retrieval_neighborhood_depth: int = 0
+    retrieval_entity_type: str | None = None
+    retrieval_canonical_entity_id: str | None = None
+    retrieval_attribute_name: str | None = None
+    retrieval_lexical_terms: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class EngineeringEngineExecuteRequestBody(BaseModel):
     """
     An engine execution request. ``project_id`` is deliberately absent -
@@ -58,6 +76,9 @@ class EngineeringEngineExecuteRequestBody(BaseModel):
 
     working_memory_has_open_question: bool = False
     working_memory_active_response_count: int = 0
+
+    comparison_left: ComparisonOperandCriteriaBody | None = None
+    comparison_right: ComparisonOperandCriteriaBody | None = None
 
 
 # --- Response ------------------------------------------------------------

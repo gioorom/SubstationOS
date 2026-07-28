@@ -49,6 +49,14 @@ _ROLE_FOR_SECTION: dict[PromptSectionType, LLMMessageRole] = {
     PromptSectionType.EXPECTED_OUTPUT: LLMMessageRole.INSTRUCTION,
     PromptSectionType.ENGINEERING_CONTEXT: LLMMessageRole.CONTEXT,
     PromptSectionType.SELECTED_KNOWLEDGE: LLMMessageRole.CONTEXT,
+    # The two comparison sides carry evidence, so they are context like
+    # any other knowledge section. The mapper does not know what a
+    # comparison is - it maps sections to roles, and these two are
+    # sections; keeping them distinct is Prompt Builder's concern, and
+    # their ordering in the message list follows the canonical section
+    # order rather than anything this module decides.
+    PromptSectionType.LEFT_KNOWLEDGE: LLMMessageRole.CONTEXT,
+    PromptSectionType.RIGHT_KNOWLEDGE: LLMMessageRole.CONTEXT,
     PromptSectionType.EVIDENCE_REFERENCES: LLMMessageRole.CONTEXT,
     PromptSectionType.WARNINGS: LLMMessageRole.CONTEXT,
     PromptSectionType.METADATA: LLMMessageRole.CONTEXT,

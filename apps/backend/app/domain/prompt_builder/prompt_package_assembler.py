@@ -47,7 +47,7 @@ def assemble_prompt_package(
 ) -> PromptBuildResult:
     context_package = request.context_package
 
-    assembly = compose_sections(context_package)
+    assembly = compose_sections(context_package, objective=request.objective)
     statistics = build_statistics(assembly, context_package)
     metadata = build_metadata(
         configuration=request.configuration,
@@ -71,6 +71,7 @@ def assemble_prompt_package(
         metadata=metadata,
         statistics=statistics,
         version=version,
+        objective=request.objective,
     )
 
     validation = validate_package(package)

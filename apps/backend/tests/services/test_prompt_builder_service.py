@@ -18,6 +18,9 @@ from app.domain.structured_retrieval.structured_retrieval_models import (
     KnowledgeCandidateScoreComponent,
     ScoreComponentCategory,
 )
+from app.domain.prompt_builder.prompt_composition import (
+    PROMPT_SECTION_ORDER,
+)
 from app.services import context_builder_service, prompt_builder_service
 
 PROJECT_ID = 4
@@ -112,12 +115,12 @@ def test_build_prompt_package_rejects_a_mismatched_project_id():
         )
 
 
-def test_build_prompt_package_always_has_nine_sections_regardless_of_budget():
+def test_build_prompt_package_always_has_every_section_regardless_of_budget():
     package = _context_package(5, max_candidates=1)
     result = prompt_builder_service.build_prompt_package(
         project_id=PROJECT_ID, context_package=package, now=NOW
     )
-    assert len(result.package.sections) == 9
+    assert len(result.package.sections) == len(PROMPT_SECTION_ORDER)
     assert result.validation.valid is True
 
 

@@ -10,6 +10,7 @@ from app.domain.engineering_response.engineering_response_models import (
     EngineeringEvidenceReference,
     EngineeringResponse,
     EngineeringResponseMetadata,
+    EngineeringResponseOrigin,
     EngineeringResponseSection,
     EngineeringResponseStatistics,
     EngineeringResponseStatus,
@@ -261,3 +262,118 @@ def test_character_count_inconsistency_is_rejected() -> None:
 
     assert result.valid is False
     assert any("character_count" in error for error in result.errors)
+
+
+# --- Origin / provider correspondence (Milestone 23B.1) -------------------
+
+
+def _deterministic_response(**overrides) -> EngineeringResponse:
+    """A DETERMINISTIC_RETRIEVAL response: no provider, no model, no
+    runtime version."""
+
+    response = _response()
+    metadata = replace(
+        response.metadata,
+        provider_id=None,
+        configured_model_identifier=None,
+        returned_model_identifier=None,
+        prompt_package_version=None,
+        context_builder_version=None,
+        prompt_builder_version=None,
+    )
+    version = replace(
+        response.version,
+        prompt_builder_version=None,
+        context_builder_version=None,
+        request_preparation_policy_version=None,
+        runtime_version=None,
+    )
+
+    return replace(
+        response,
+        origin=EngineeringResponseOrigin.DETERMINISTIC_RETRIEVAL,
+        metadata=metadata,
+        version=version,
+        **overrides,
+    )
+
+
+def test_a_response_defaults_to_an_llm_invocation_origin() -> None:
+    """Every response built before Milestone 23B.1 keeps exactly the
+    meaning it already had."""
+
+    assert _response().origin is EngineeringResponseOrigin.LLM_INVOCATION
+
+
+def test_a_well_formed_deterministic_response_is_valid() -> None:
+    result = validate_response(_deterministic_response())
+
+    assert result.valid is True
+    assert result.errors == ()
+
+
+def test_an_llm_response_missing_its_provider_is_rejected() -> None:
+    broken_metadata = replace(_response().metadata, provider_id=None)
+    broken = replace(_response(), metadata=broken_metadata)
+
+    result = validate_response(broken)
+
+    assert result.valid is False
+    assert any("LLM_INVOCATION" in error for error in result.errors)
+
+
+def test_an_llm_response_missing_its_model_is_rejected() -> None:
+    broken_metadata = replace(
+        _response().metadata, configured_model_identifier=""
+    )
+    broken = replace(_response(), metadata=broken_metadata)
+
+    result = validate_response(broken)
+
+    assert result.valid is False
+
+
+def test_a_deterministic_response_claiming_a_provider_is_rejected() -> None:
+    """The fabrication this project refuses: a response nothing generated
+    must not be able to claim a model generated it."""
+
+    response = _deterministic_response()
+    broken_metadata = replace(response.metadata, provider_id="anthropic")
+    broken = replace(response, metadata=broken_metadata)
+
+    result = validate_response(broken)
+
+    assert result.valid is False
+    assert any(
+        "must name no provider" in error for error in result.errors
+    )
+
+
+def test_a_deterministic_response_claiming_a_runtime_version_is_rejected() -> (
+    None
+):
+    response = _deterministic_response()
+    broken_version = replace(response.version, runtime_version="1.0")
+    broken = replace(response, version=broken_version)
+
+    result = validate_response(broken)
+
+    assert result.valid is False
+    assert any(
+        "runtime was never invoked" in error for error in result.errors
+    )
+
+
+def test_document_reference_count_inconsistency_is_rejected() -> None:
+    response = _deterministic_response()
+    broken_statistics = replace(
+        response.statistics, document_reference_count=3
+    )
+    broken = replace(response, statistics=broken_statistics)
+
+    result = validate_response(broken)
+
+    assert result.valid is False
+    assert any(
+        "document_reference_count" in error for error in result.errors
+    )

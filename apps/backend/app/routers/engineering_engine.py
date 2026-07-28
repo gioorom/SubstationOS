@@ -1,11 +1,19 @@
 """
-The Engineering Engine API (Milestone 23A).
+The Engineering Engine API (Milestone 23A; DOCUMENT_LOOKUP added in
+23B.1).
 
 This router is the composition root for one engine execution: it wires
-the concrete Graph Query repository, the LLM provider registry (with a
-real Anthropic client only when a credential is present), and runtime
+the concrete Graph Query repository, the Engineering Index repository and
+document metadata adapter, the LLM provider registry (with a real
+Anthropic client only when a credential is present), and runtime
 configuration into ``build_engineering_engine`` - the engine itself
 never constructs a concrete dependency.
+
+Adding DOCUMENT_LOOKUP changed exactly two things here: the three lines
+that wire its two repositories, and this docstring. The endpoint, the
+request body and the response shape are unchanged - a caller selects a
+workflow only by supplying a classified intent type, never by naming a
+workflow.
 
 **Unsupported intents return HTTP 200 with ``status="unsupported"``**,
 not a client error: the request was well-formed and the engine answered
@@ -33,7 +41,14 @@ from app.application.models.llm_invocation import LLMRuntimeConfiguration
 from app.application.services.llm_provider_registry import LLMProviderRegistry
 from app.database.database import SessionLocal
 from app.domain.engineering_engine.engineering_engine_models import (
+    ComparisonOperandCriteria,
     EngineeringEngineExecutionRequest,
+)
+from app.infrastructure.engineering_index.sqlalchemy_document_metadata import (
+    SqlAlchemyDocumentMetadataRepository,
+)
+from app.infrastructure.engineering_index.sqlalchemy_engineering_index_repository import (  # noqa: E501
+    SqlAlchemyEngineeringIndexRepository,
 )
 from app.infrastructure.graph_query.sqlalchemy_graph_query_repository import (
     SqlAlchemyGraphQueryRepository,
@@ -100,11 +115,31 @@ def _build_provider_registry(
     return registry
 
 
+def _operand(body) -> ComparisonOperandCriteria | None:
+    """Maps one comparison operand from the request body. ``None`` for
+    every workflow that is not a comparison."""
+
+    if body is None:
+        return None
+
+    return ComparisonOperandCriteria(
+        designation=body.designation,
+        retrieval_limit=body.retrieval_limit,
+        retrieval_include_neighborhood=body.retrieval_include_neighborhood,
+        retrieval_neighborhood_depth=body.retrieval_neighborhood_depth,
+        retrieval_entity_type=body.retrieval_entity_type,
+        retrieval_canonical_entity_id=body.retrieval_canonical_entity_id,
+        retrieval_attribute_name=body.retrieval_attribute_name,
+        retrieval_lexical_terms=tuple(body.retrieval_lexical_terms),
+    )
+
+
 @router.post(
     "/projects/{project_id}/engineering-engine/execute",
     response_model=EngineeringEngineExecutionResultRead,
     summary="Select, plan and execute an engineering workflow for a "
-    "classified request (Milestone 23A supports KNOWLEDGE_QUERY only)",
+    "classified request (KNOWLEDGE_QUERY and DOCUMENT_LOOKUP are "
+    "registered; every other intent type returns status='unsupported')",
 )
 async def execute_engineering_workflow(
     project_id: int,
@@ -124,6 +159,8 @@ async def execute_engineering_workflow(
 
     engine = build_engineering_engine(
         graph_query_repository=SqlAlchemyGraphQueryRepository(db),
+        engineering_index_repository=SqlAlchemyEngineeringIndexRepository(db),
+        document_metadata_port=SqlAlchemyDocumentMetadataRepository(db),
         provider_registry=_build_provider_registry(
             runtime_configuration, credential
         ),
@@ -159,6 +196,8 @@ async def execute_engineering_workflow(
         working_memory_active_response_count=(
             body.working_memory_active_response_count
         ),
+        comparison_left=_operand(body.comparison_left),
+        comparison_right=_operand(body.comparison_right),
     )
 
     result = await engine.execute(execution_request)

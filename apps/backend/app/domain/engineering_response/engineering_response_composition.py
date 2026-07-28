@@ -19,6 +19,16 @@ those categories would itself be inventing engineering structure that
 was never actually there (Milestone 18's own "never invent engineering
 facts" rule applies to structure, not only to content).
 
+**The one narrow exception**, added in Milestone 24.1: for a response
+built from a *verification* prompt, the answer's first line is matched
+against the four verdict tokens Prompt Builder explicitly asked for
+(``engineering_response_verification.py``). That is reading a declared
+protocol - the same kind of operation as reading ``finish_reason`` off
+the envelope - not interpreting prose: nothing beyond the first line is
+examined, no keyword is searched for, and a non-matching line yields no
+verdict rather than a guessed one. The rule above is otherwise unchanged,
+and it still holds for every other objective.
+
 O(n) in the number of content blocks, references, and warnings on the
 input - a small, constant number of linear passes over already
 materialized data.
@@ -40,11 +50,18 @@ from app.domain.engineering_response.engineering_response_models import (
     EngineeringUncertaintyLevel,
     EngineeringWarning,
     EngineeringWarningCategory,
+    VerificationAssessment,
 )
 from app.domain.engineering_response.engineering_response_policy import (
     overall_uncertainty_from,
 )
-from app.domain.prompt_builder.prompt_builder_models import PromptPackage
+from app.domain.engineering_response.engineering_response_verification import (
+    assess_verification,
+)
+from app.domain.prompt_builder.prompt_builder_models import (
+    PromptObjective,
+    PromptPackage,
+)
 
 # The canonical, fixed, deterministic section order - independent of
 # input. Every EngineeringResponse.sections tuple follows exactly this
@@ -72,9 +89,16 @@ _TRUNCATING_FINISH_REASONS = (
 )
 
 
-def _section(
+def build_section(
     section_type: EngineeringSectionType, title: str, body: tuple[str, ...]
 ) -> EngineeringResponseSection:
+    """Constructs one section in its fixed canonical position, enabled
+    exactly when it has something to say. Public because every
+    composition stage - this one and
+    ``engineering_response_document_composition.py`` - must place
+    sections identically; two copies of this rule could drift apart and
+    break the "always the same nine-section shape" invariant."""
+
     return EngineeringResponseSection(
         section_type=section_type,
         title=title,
@@ -122,7 +146,7 @@ def _build_direct_answer_section(
 ) -> EngineeringResponseSection:
     body = tuple(block.text for block in _text_blocks(source.content))
 
-    return _section(EngineeringSectionType.DIRECT_ANSWER, "Direct Answer", body)
+    return build_section(EngineeringSectionType.DIRECT_ANSWER, "Direct Answer", body)
 
 
 def _build_references(
@@ -147,7 +171,7 @@ def _build_references_section(
         for reference in references
     )
 
-    return _section(EngineeringSectionType.REFERENCES, "Evidence References", body)
+    return build_section(EngineeringSectionType.REFERENCES, "Evidence References", body)
 
 
 def _build_unknown_section(
@@ -160,7 +184,7 @@ def _build_unknown_section(
         for block in _unsupported_blocks(source.content)
     )
 
-    return _section(EngineeringSectionType.UNKNOWN, "Unrecognized Content", body)
+    return build_section(EngineeringSectionType.UNKNOWN, "Unrecognized Content", body)
 
 
 def _build_warnings(
@@ -234,7 +258,7 @@ def _build_warnings_section(
 ) -> EngineeringResponseSection:
     body = tuple(f"[{warning.category.value}] {warning.message}" for warning in warnings)
 
-    return _section(EngineeringSectionType.WARNINGS, "Warnings", body)
+    return build_section(EngineeringSectionType.WARNINGS, "Warnings", body)
 
 
 def _build_limitations_section(
@@ -269,7 +293,7 @@ def _build_limitations_section(
             f"completeness: {completeness:.2f})."
         )
 
-    return _section(EngineeringSectionType.LIMITATIONS, "Limitations", tuple(lines))
+    return build_section(EngineeringSectionType.LIMITATIONS, "Limitations", tuple(lines))
 
 
 def _build_uncertainties(
@@ -352,6 +376,29 @@ def _build_uncertainties(
     return tuple(uncertainties)
 
 
+def _verification_assessment(
+    context_package: ContextPackage,
+    prompt_package: PromptPackage,
+    source: EngineeringResponseSourceEnvelope,
+) -> VerificationAssessment | None:
+    """
+    Assessed only when the prompt that produced this response actually
+    asked for a verification.
+
+    The objective is read off the ``PromptPackage`` rather than passed in
+    separately, because the package is already the record of what was
+    asked - a response cannot carry a verdict for a question nobody put.
+    This is a branch on the *prompt objective*, not on a workflow or an
+    intent: Engineering Response has always shaped its output from the
+    structure of its inputs, and the engine knows nothing about it.
+    """
+
+    if prompt_package.objective is not PromptObjective.ENGINEERING_VERIFICATION:
+        return None
+
+    return assess_verification(context_package, source)
+
+
 def compose_engineering_response(
     context_package: ContextPackage,
     prompt_package: PromptPackage,
@@ -363,17 +410,17 @@ def compose_engineering_response(
     uncertainties = _build_uncertainties(context_package, status)
     overall_uncertainty = overall_uncertainty_from(uncertainties)
 
-    summary_section = _section(EngineeringSectionType.SUMMARY, "Summary", ())
+    summary_section = build_section(EngineeringSectionType.SUMMARY, "Summary", ())
     direct_answer_section = _build_direct_answer_section(source)
-    technical_explanation_section = _section(
+    technical_explanation_section = build_section(
         EngineeringSectionType.TECHNICAL_EXPLANATION, "Technical Explanation", ()
     )
-    assumptions_section = _section(
+    assumptions_section = build_section(
         EngineeringSectionType.ASSUMPTIONS, "Assumptions", ()
     )
     warnings_section = _build_warnings_section(warnings)
     limitations_section = _build_limitations_section(context_package, source)
-    next_actions_section = _section(
+    next_actions_section = build_section(
         EngineeringSectionType.NEXT_ACTIONS, "Next Actions", ()
     )
     references_section = _build_references_section(references)
@@ -400,4 +447,7 @@ def compose_engineering_response(
         uncertainties=uncertainties,
         overall_uncertainty=overall_uncertainty,
         status=status,
+        verification=_verification_assessment(
+            context_package, prompt_package, source
+        ),
     )

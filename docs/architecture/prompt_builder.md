@@ -1,7 +1,10 @@
 # Prompt Builder
 
 **Status:** As-built reference, Milestone 15 (Prompt Builder
-Foundation). Describes the `prompt_builder` bounded context as
+Foundation), extended by Milestone 23B.2 (`PromptObjective`) and
+Milestone 24.1 (the verification objective) and Milestone 24.2
+(the comparison objective and the two knowledge sides).
+Describes the `prompt_builder` bounded context as
 implemented - for the decision record (why a dedicated composition
 layer, why provider serialization is excluded, why a future LLM
 Provider Abstraction Layer must not duplicate this logic), see
@@ -95,12 +98,69 @@ content. `WARNINGS` renders `ContextPackage.warnings` verbatim
 `ContextPackage.metadata.assembled_at`/`context_builder_version`/
 `retrieval_policy_version`.
 
+## Objective
+
+`PromptObjective` (Milestone 23B.2) is the **only** thing a caller may
+vary about a package's composition. It is deliberately *not* a
+free-form prompt, a template, a persona, or a caller-supplied
+instruction string: it selects between fixed, versioned instruction and
+expected-output sets declared in `composition_policy.py`, so every
+prompt this system can produce stays enumerable and reviewable.
+
+| Objective | Asks for | Used by |
+|---|---|---|
+| `DIRECT_ANSWER` (default) | The question answered, as briefly as the evidence allows | `KNOWLEDGE_QUERY` workflow |
+| `ENGINEERING_EXPLANATION` | The function, role and behaviour of the retrieved equipment, set out for an engineer | `ENGINEERING_EXPLANATION` workflow |
+| `ENGINEERING_VERIFICATION` | A verdict on whether the project's evidence supports a stated claim, plus the evidence behind it | `ENGINEERING_VERIFICATION` workflow |
+| `ENGINEERING_COMPARISON` | How a RIGHT subject differs from a LEFT one, judged only on the two supplied evidence groups | `ENGINEERING_COMPARISON` workflow |
+
+The objective changes **exactly two sections** - `FORMATTING_RULES` and
+`EXPECTED_OUTPUT` - for every objective except
+`ENGINEERING_COMPARISON`, which is built from a two-sided context and is
+described in [Comparison prompts](#comparison-prompts) below. Every other section is composed identically, from
+the same `ContextPackage`, by the same functions. `DIRECT_ANSWER` is
+byte-identical to what this context produced before the enum existed,
+which is why omitting the objective is always safe.
+
+`PromptPackage.objective` records which set produced a package;
+together with `version.composition_policy_version` it is the full
+reproduction key.
+
+## Comparison prompts
+
+`ENGINEERING_COMPARISON` is the only objective assembled from a
+`ComparisonContextPackage` rather than a single `ContextPackage`
+(`comparison_prompt_composition.py`, reached through
+`prompt_builder_service.build_comparison_prompt_package`).
+
+Two section types exist for it: **`LEFT_KNOWLEDGE`** and
+**`RIGHT_KNOWLEDGE`**. They are separate typed sections rather than
+labelled lines inside `SELECTED_KNOWLEDGE`, because a flattened rendering
+would let a formatting change silently transpose the sides - and a
+comparison answered backwards is worse than one not answered. Like every
+other section they are always constructed: empty and disabled for every
+objective that is not a comparison, which is why the package shape stays
+fixed at eleven sections throughout.
+
+`SELECTED_KNOWLEDGE` stays empty for a comparison: there is no single
+body of selected knowledge, and putting either side there would imply one
+is the default.
+
+**A side with no evidence is rendered as an explicit statement that the
+project holds none** - never as an empty section. An empty section would
+leave the model to infer why it is empty, and the likeliest wrong
+inference (that the equipment does not exist) is exactly the one the
+workflow must prevent.
+
 ## Constraints and Instructions
 
 Fixed, versioned, and always present (`composition_policy.py`,
 `COMPOSITION_POLICY_VERSION`):
 
-**Constraints** (behavioral - govern truthfulness):
+**Constraints** (behavioral - govern truthfulness). **Identical for
+every objective.** An explanation is held to the same "never invent an
+engineering fact" rule as a direct answer, because a longer answer is a
+larger opportunity to invent one, not a licence to:
 1. `use_only_supplied_evidence`
 2. `do_not_invent_facts`
 3. `report_uncertainty`
@@ -108,14 +168,84 @@ Fixed, versioned, and always present (`composition_policy.py`,
 5. `cite_supporting_evidence`
 
 **Instructions** (formatting - govern output structure, never
-truthfulness):
+truthfulness). Selected by objective:
+
+*`DIRECT_ANSWER`* (`INSTRUCTIONS`):
 1. `structure_the_answer_with_clear_sections`
 2. `reference_evidence_by_candidate_id`
 3. `state_explicitly_when_no_supporting_evidence_exists`
 
-Never derived from `ContextPackage` content; changing either list
-requires a documented rationale and a `COMPOSITION_POLICY_VERSION`
-bump.
+*`ENGINEERING_EXPLANATION`* (`EXPLANATION_INSTRUCTIONS`):
+1. `explain_function_and_role`
+2. `structure_the_answer_with_clear_sections`
+3. `reference_evidence_by_candidate_id`
+4. `describe_only_what_the_evidence_covers`
+5. `state_which_aspects_the_evidence_does_not_cover`
+
+The last two exist because this objective specifically needs them:
+*"how does an 87T work"* has a plausible textbook answer that owes
+nothing to **this** substation, and a plausible answer about the wrong
+installation is worse than an admitted gap.
+
+*`ENGINEERING_VERIFICATION`* (`VERIFICATION_INSTRUCTIONS`, Milestone
+24.1):
+1. `declare_the_verdict_on_the_first_line`
+2. `evaluate_only_retrieved_project_evidence`
+3. `distinguish_absence_of_evidence_from_evidence_of_absence`
+4. `report_conflicting_evidence_rather_than_choosing`
+5. `report_uncertainty_honestly`
+6. `cite_supporting_evidence_by_candidate_id`
+
+The third is the one that makes verification meaningfully different from
+every other objective. *"The project's evidence does not show a
+differential protection on T1"* and *"T1 has no differential
+protection"* are different statements, and in this domain confusing them
+is how a real installation gets signed off on a gap nobody looked for.
+The instruction set forces that distinction rather than hoping for it.
+
+*`ENGINEERING_COMPARISON`* (`COMPARISON_INSTRUCTIONS`, Milestone 24.2):
+1. `declare_the_comparison_outcome_on_the_first_line`
+2. `compare_only_the_two_supplied_evidence_groups`
+3. `preserve_left_and_right_direction`
+4. `separate_added_removed_modified_and_unchanged`
+5. `never_report_missing_evidence_as_a_difference`
+6. `state_when_the_evidence_cannot_settle_the_comparison`
+7. `cite_supporting_evidence_for_each_finding`
+
+Two of these carry most of the weight. **Direction** (3): *"T1 has a
+protection T2 lacks"* and its reverse are opposite engineering findings,
+so direction is instructed explicitly rather than assumed from the order
+evidence happens to appear in. **Missing evidence** (5): if one side's
+evidence simply does not mention a protection, that is not a removal -
+and a "removed protection" that was only ever un-indexed is exactly the
+kind of confident wrong answer this domain cannot afford.
+
+### The verdict protocol
+
+`COMPARISON_OUTCOME_TOKENS` is the same device for comparisons, with
+three literals - `COMPARABLE`, `INSUFFICIENT_EVIDENCE`,
+`CONFLICTING_EVIDENCE`. Deliberately not "same" versus "different": a
+real comparison usually contains both changed and unchanged aspects, so a
+same/different verdict would force a false choice. The findings
+themselves stay prose in the response body.
+
+`VERIFICATION_VERDICT_TOKENS` is a closed vocabulary of four literals -
+`SUPPORTED`, `NOT_SUPPORTED`, `INSUFFICIENT_EVIDENCE`,
+`CONFLICTING_EVIDENCE` - and the **only** part of any answer this system
+reads as a machine-readable token rather than as prose. The
+`declare_the_verdict_on_the_first_line` instruction asks for exactly one
+of them, alone, on the answer's first line.
+
+Prompt Builder owns this vocabulary **because Prompt Builder is what asks
+for it**; Engineering Response imports it rather than restating it, so
+the question asked and the answer read cannot drift apart. An
+architecture test asserts there is exactly one definition of it in the
+codebase.
+
+Never derived from `ContextPackage` content; changing an existing
+objective's list requires a documented rationale and a
+`COMPOSITION_POLICY_VERSION` bump. **Adding a new objective does not**
+- it changes nothing about the packages already produced.
 
 ## Token Estimation
 
@@ -158,6 +288,14 @@ that a `PromptPackage` satisfies every structural invariant this
 milestone requires: required sections exist in canonical order,
 constraints and instructions are non-empty, metadata is complete, and
 statistics are internally consistent with the assembled sections.
+
+It also checks the **objective correspondence**: a package's
+instructions and expected output must be exactly the fixed sets its
+declared objective selects, and its constraints must be the single
+shared set. This is what keeps `PromptObjective` an enumerable selector
+rather than a way to smuggle arbitrary instructions into a prompt - a
+package whose instructions are not one of the declared sets is
+structurally invalid, however plausible its text looks.
 Returned as `PromptBuildResult.validation` - an inspectable,
 testable proof, never a gate; Prompt Builder always produces a
 structurally valid package by construction and never raises over its
@@ -171,7 +309,9 @@ POST /projects/{project_id}/prompt-builder/build
 
 `project_id` in the path is authoritative; the request body's
 `context_package` field is exactly the `package` object a prior
-`/context-builder/build` call returned. Response: a
+`/context-builder/build` call returned. The optional `objective` field
+selects the instruction/expected-output set (default `direct_answer`) -
+it accepts only the declared enum values, never prompt text. Response: a
 `PromptBuildResultRead` (the request's own configuration, the resulting
 `PromptPackageRead`, and the self-validation result).
 
@@ -182,7 +322,8 @@ POST /projects/42/prompt-builder/build
 Content-Type: application/json
 
 {
-  "context_package": { "project_id": 42, "retrieval_summary": { ... }, "selected_candidates": [ ... ], ... }
+  "context_package": { "project_id": 42, "retrieval_summary": { ... }, "selected_candidates": [ ... ], ... },
+  "objective": "engineering_explanation"
 }
 ```
 

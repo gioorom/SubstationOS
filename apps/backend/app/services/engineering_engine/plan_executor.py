@@ -53,7 +53,7 @@ from app.services.engineering_engine.execution_context import (
 from app.services.engineering_engine.step_handler_registry import (
     StepHandlerRegistry,
 )
-from app.services.engineering_engine.step_handlers import StepHandlerError
+from app.services.engineering_engine.step_handler import StepHandlerError
 
 Clock = Callable[[], datetime]
 

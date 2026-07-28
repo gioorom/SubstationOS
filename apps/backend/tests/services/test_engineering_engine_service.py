@@ -22,6 +22,7 @@ from app.domain.engineering_intent.engineering_intent_models import (
 from app.infrastructure.llm.base.fake_llm_provider_adapter import (
     FakeInvocationOutcome,
 )
+from app.services.engineering_engine.composition import build_workflow_registry
 from tests.services._engineering_engine_support import (
     NOW,
     FakeGraphQueryRepository,
@@ -135,12 +136,17 @@ def test_a_drawing_request_is_unsupported_and_runs_nothing() -> None:
     [
         intent
         for intent in EngineeringIntentType
-        if intent is not EngineeringIntentType.KNOWLEDGE_QUERY
+        if not build_workflow_registry().is_registered(intent)
     ],
 )
-def test_every_non_knowledge_query_intent_is_unsupported(
+def test_every_unregistered_intent_is_unsupported(
     intent_type: EngineeringIntentType,
 ) -> None:
+    """Derived from the registry rather than hard-coded, so registering a
+    new workflow never silently leaves this asserting the old set. Which
+    workflows *are* registered is asserted explicitly in
+    ``test_engineering_engine_registries.py``."""
+
     engine = build_test_engine()
 
     result = _execute(engine, execution_request(intent_type=intent_type))
@@ -157,7 +163,7 @@ def test_an_unsupported_intent_never_routes_through_the_knowledge_workflow() -> 
     result = _execute(
         engine,
         execution_request(
-            intent_type=EngineeringIntentType.ENGINEERING_COMPARISON
+            intent_type=EngineeringIntentType.NAVIGATION_REQUEST
         ),
     )
 

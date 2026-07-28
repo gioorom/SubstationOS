@@ -69,6 +69,7 @@ def assemble_engineering_response(
         metadata=metadata,
         statistics=statistics,
         version=version,
+        verification=composition.verification,
     )
 
     validation = validate_response(response)

@@ -36,6 +36,7 @@ def build_prompt_package(
         return prompt_builder_service.build_prompt_package(
             project_id=project_id,
             context_package=context_package,
+            objective=body.objective,
             now=datetime.utcnow(),
         )
     except PromptBuilderError as error:

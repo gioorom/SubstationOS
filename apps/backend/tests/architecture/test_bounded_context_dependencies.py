@@ -144,8 +144,27 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
     # app.application.** (LLMResponseEnvelope, an application-layer
     # type) either - see the dedicated boundary test below, which is
     # this milestone's own new architectural guarantee.
+    #
+    # "engineering_index" was added in Milestone 23B.1, when the first
+    # non-LLM workflow (DOCUMENT_LOOKUP) made a document lookup's own
+    # DocumentReference the evidence of an EngineeringResponse. Engineering
+    # Index sits *upstream* of Engineering Response in the pipeline order
+    # above, so this is the same downstream-depends-on-upstream shared
+    # vocabulary reuse as context_builder/prompt_builder - not a backward
+    # dependency. Engineering Response reads a DocumentRetrievalResult
+    # structurally and constructs none of Engineering Index's own
+    # aggregates: it never builds an IndexEntry, never touches the
+    # EngineeringIndexRepository or DocumentMetadataPort ports, and
+    # therefore still performs no I/O (see the forbidden-module test
+    # below, which continues to ban every repository and adapter).
     "engineering_response": frozenset(
-        {"project", "context_builder", "prompt_builder", "structured_retrieval"}
+        {
+            "project",
+            "context_builder",
+            "prompt_builder",
+            "structured_retrieval",
+            "engineering_index",
+        }
     ),
     # Engineering Session (Milestone 19) consumes Engineering Response's
     # own output type (EngineeringResponse) as its shared, stable
@@ -201,6 +220,24 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
     # dedicated tests/architecture/test_engineering_engine_boundaries.py.
     "engineering_engine": frozenset(
         {"engineering_intent", "engineering_response"}
+    ),
+    # The Classification-to-Retrieval Bridge (Milestone 23B.3) turns a
+    # classified request into retrieval criteria. It reaches into exactly
+    # three contexts, all upstream of it:
+    #   - engineering_intent: the classified EngineeringIntent it maps
+    #     *from* (read structurally; never re-classified);
+    #   - canonicalization: its public `normalize_entity_reference`, so a
+    #     designation is resolved against the one existing canonical
+    #     vocabulary rather than a second copy of it;
+    #   - structured_retrieval: `RetrievalMode` and the request bounds,
+    #     so the criteria it emits are the criteria that context already
+    #     defines.
+    # Critically it depends on **engineering_engine not at all** - the
+    # bridge knows nothing of workflows, plans, or steps, and the engine
+    # knows nothing of the bridge (see the dedicated boundary tests in
+    # tests/architecture/test_retrieval_bridge_boundaries.py).
+    "retrieval_bridge": frozenset(
+        {"engineering_intent", "canonicalization", "structured_retrieval"}
     ),
 }
 

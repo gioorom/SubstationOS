@@ -6,8 +6,13 @@ This is what replaces core intent branching: the engine core never
 contains ``if intent is KNOWLEDGE_QUERY ... elif intent is
 DOCUMENT_LOOKUP ...``. It asks the registry to resolve a workflow and
 gets either a definition or a typed "not registered" failure. Milestone
-23B adds workflows by *registering* them here - never by editing the
-engine core (see ADR-0020).
+23B.1 added the DOCUMENT_LOOKUP workflow by *registering* it in the
+composition root - this module was not changed to accommodate it, and
+neither was any other engine module (see ADR-0020).
+
+The unsupported-intent message names whichever intent types are actually
+registered, read from the registry itself, so it can never drift out of
+date as workflows are added.
 
 Immutable after construction: ``register`` is only callable during
 composition, and ``freeze()`` returns a registry that refuses further
@@ -108,14 +113,19 @@ class WorkflowRegistry:
         definition = self._definitions.get(intent_type)
 
         if definition is None:
+            supported = ", ".join(
+                registered.value
+                for registered in self.registered_intent_types()
+            )
+
             return WorkflowSelectionResult(
                 selected=False,
                 failure=EngineeringEngineFailure(
                     code=EngineeringEngineFailureCode.UNSUPPORTED_INTENT,
                     message=(
                         f"No workflow is registered for intent type "
-                        f"'{intent_type.value}'. Milestone 23A supports "
-                        "knowledge_query only."
+                        f"'{intent_type.value}'. Registered intent types: "
+                        f"{supported or 'none'}."
                     ),
                 ),
             )

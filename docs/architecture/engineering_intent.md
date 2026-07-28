@@ -1,6 +1,7 @@
 # Engineering Request Classification
 
-**Status:** As-built reference, Milestone 22. Describes the
+**Status:** As-built reference, Milestone 22, with downstream
+consumers added in Milestones 23B.3, 24.1 and 24.2. Describes the
 `engineering_intent` bounded context as implemented - for the decision
 record (why this is request classification rather than psychological
 intent detection, why the first classifier is deterministic, why LLM
@@ -11,7 +12,9 @@ executable), see
 this context sits in the wider pipeline, see
 [knowledge_pipeline_overview.md](knowledge_pipeline_overview.md),
 [conversation.md](conversation.md), and
-[working_memory.md](working_memory.md).
+[working_memory.md](working_memory.md). For what now *consumes* a
+classification result, see
+[retrieval_bridge.md](retrieval_bridge.md).
 
 ## What this context does - and does not
 
@@ -260,6 +263,61 @@ pipeline. Enforced by
 (which also forbids `numpy`/`sklearn`/`torch`/`transformers`/`spacy`/
 `faiss`/`tiktoken` and similar, not merely provider SDKs), and
 `test_engineering_intent_domain_imports_no_other_bounded_context`.
+
+## Downstream: what a classification result now feeds
+
+An `EngineeringIntent` is still **not a command** (ADR-0019) - it
+executes nothing and this context is unchanged by Milestone 23B.3. What
+changed is that a separate bounded context now *consumes* it:
+
+```
+Raw Request
+   → Classification        (this context)
+   → Retrieval Bridge      (retrieval_bridge - Milestone 23B.3)
+   → Engine                (explicit execution request)
+   → Workflow
+```
+
+For a comparison, the bridge stage widens into **Comparison
+Preparation** - the same classification, mapped to two operands instead
+of one:
+
+```
+Raw Request
+   → Classification              (this context)
+   → Comparison Preparation      (comparison_bridge - Milestone 24.2)
+   → Engine
+   → Left Retrieval + Right Retrieval
+   → Comparison Context
+   → Comparison Prompt
+   → Runtime
+   → EngineeringResponse
+```
+
+`ENGINEERING_COMPARISON` has been in this context's published taxonomy
+since Milestone 22; nothing about classification changed to support it.
+The classifier still only decides *which category of workflow* a request
+wants - it does not identify the two subjects, count them, or order
+them. That is preparation's job, and it derives them from the request
+text by the same documented token-shape rules the single-operand arm
+uses.
+
+The **Classification-to-Retrieval Bridge** reads a classified intent and
+derives the retrieval criteria the Engineering Engine requires, so a
+caller no longer has to supply a canonical entity id or lexical terms by
+hand. Since Milestone 24.2 it has two arms: one operand for most intents,
+and exactly two for a comparison. It reads this context's output structurally and **never
+re-classifies, never re-runs the rule table, and never re-normalizes for
+classification purposes**.
+
+One consequence worth stating here: the bridge derives designations
+("T2", "87T", "C-295") from the request text, **not** from this
+context's evidence, because classification evidence records which
+*rules* fired - workflow verbs, nouns, interrogatives, domain vocabulary
+- and deliberately never extracted equipment identifiers. That remains
+true; the bridge does its own narrow, documented lexical extraction and
+this context gained no such responsibility. See
+[retrieval_bridge.md](retrieval_bridge.md).
 
 ## What this milestone deliberately does not do
 

@@ -9,6 +9,7 @@ from app.domain.prompt_builder.prompt_builder_models import (
     PromptEvidenceReference,
     PromptInstruction,
     PromptMetadata,
+    PromptObjective,
     PromptPackage,
     PromptSection,
     PromptSectionType,
@@ -29,9 +30,15 @@ class PromptBuildRequestBody(BaseModel):
     ``/context-builder/build`` returned (its ``package`` field) -
     Prompt Builder never calls Context Builder itself, so the caller
     supplies the package directly.
+
+    ``objective`` selects between Prompt Builder's own fixed, versioned
+    instruction and expected-output sets - it is never a caller-supplied
+    prompt, template or instruction string. Omitting it produces exactly
+    the package this endpoint produced before Milestone 23B.2.
     """
 
     context_package: ContextPackageRead
+    objective: PromptObjective = PromptObjective.DIRECT_ANSWER
 
 
 # --- Response ----------------------------------------------------------------
@@ -109,6 +116,7 @@ class PromptPackageRead(BaseModel):
     """
 
     project_id: int
+    objective: PromptObjective = PromptObjective.DIRECT_ANSWER
     system_context: PromptSectionRead
     engineering_context: PromptSectionRead
     retrieved_knowledge: PromptSectionRead
@@ -175,6 +183,7 @@ def _section_from_read(model: PromptSectionRead) -> PromptSection:
 def prompt_package_from_schema(model: PromptPackageRead) -> PromptPackage:
     return PromptPackage(
         project_id=model.project_id,
+        objective=model.objective,
         system_context=_section_from_read(model.system_context),
         engineering_context=_section_from_read(model.engineering_context),
         retrieved_knowledge=_section_from_read(model.retrieved_knowledge),

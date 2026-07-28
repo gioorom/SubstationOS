@@ -15,11 +15,23 @@ and adapters to existing services live in
 ``app/services/engineering_engine/**`` - this module imports no router,
 schema, provider SDK, persistence adapter, or application service.
 
-Milestone 23A implements exactly one workflow:
-``EngineeringIntentType.KNOWLEDGE_QUERY``. Every other intent type
+Five workflows are registered today: ``KNOWLEDGE_QUERY`` (Milestone
+23A), ``DOCUMENT_LOOKUP`` (Milestone 23B.1, the first workflow that
+invokes no LLM at all), ``ENGINEERING_EXPLANATION`` (Milestone 23B.2, the
+second LLM-powered workflow), ``VERIFICATION_REQUEST`` (Milestone 24.1,
+the first workflow that *evaluates* rather than presents) and
+``ENGINEERING_COMPARISON`` (Milestone 24.2, the first with two subjects
+and two independently retrieved evidence sets). Every other intent type
 yields an explicit ``UNSUPPORTED`` result - never a silent reroute
-through the knowledge-query workflow, and never an LLM fallback (see
+through another workflow, and never an LLM fallback (see
 ``docs/architecture/adr/0020-engineering-engine-foundation.md``).
+
+Neither addition required **any change to the engine's decision
+logic**: the registry, planner, plan executor, engine service and
+structural validators are all untouched. Only this module's declarative
+enumerations gained members, workflow definitions were declared,
+handlers were written or parameterized, and the composition root
+registered them.
 """
 
 from __future__ import annotations
@@ -37,11 +49,27 @@ from app.domain.engineering_response.engineering_response_models import (
 
 
 class WorkflowType(str, Enum):
-    """The kind of engineering work a registered workflow performs.
-    Deliberately one value in Milestone 23A - Milestone 23B adds more
-    by registering new workflows, never by editing the engine core."""
+    """The kind of engineering work a registered workflow performs. One
+    value per workflow actually registered - never a speculative value
+    for a workflow that does not exist."""
 
     KNOWLEDGE_QUERY = "knowledge_query"
+    # Milestone 23B.1 - the first non-LLM workflow: it answers entirely
+    # from governed repository state, invoking no provider.
+    DOCUMENT_LOOKUP = "document_lookup"
+    # Milestone 23B.2 - the second LLM-powered workflow. Same pipeline as
+    # KNOWLEDGE_QUERY; it differs only in what it asks the model for.
+    ENGINEERING_EXPLANATION = "engineering_explanation"
+    # Milestone 24.1 - the first *reasoning* workflow: it evaluates a
+    # statement against retrieved evidence rather than presenting the
+    # evidence. Same pipeline again; the difference is the objective the
+    # prompt carries and the verdict the response reads back.
+    ENGINEERING_VERIFICATION = "engineering_verification"
+    # Milestone 24.2 - the first workflow with **two** subjects. Its
+    # pipeline genuinely differs: two independent retrievals whose
+    # identity is preserved end to end, never merged into one context.
+    # What the two sides mean is decided entirely outside the engine.
+    ENGINEERING_COMPARISON = "engineering_comparison"
 
 
 class WorkflowStepType(str, Enum):
@@ -65,6 +93,45 @@ class WorkflowStepType(str, Enum):
     VALIDATE_ENGINEERING_RESPONSE = "validate_engineering_response"
     PREPARE_CONVERSATION_UPDATE = "prepare_conversation_update"
     PREPARE_SESSION_UPDATE = "prepare_session_update"
+    # Document lookup (Milestone 23B.1). Deliberately distinct step types
+    # rather than a reuse of BUILD_RETRIEVAL_REQUEST/EXECUTE_RETRIEVAL:
+    # exactly one handler is registered per step type, and these steps
+    # read the Engineering Index (which documents mention X?) whereas
+    # those read the project knowledge graph through Structured
+    # Retrieval. Sharing the names would make one step type mean two
+    # different things depending on which workflow was running.
+    BUILD_DOCUMENT_RETRIEVAL_REQUEST = "build_document_retrieval_request"
+    EXECUTE_DOCUMENT_RETRIEVAL = "execute_document_retrieval"
+    BUILD_DOCUMENT_LOOKUP_RESPONSE = "build_document_lookup_response"
+    # Engineering explanation (Milestone 23B.2). Its own step type
+    # because exactly one handler is registered per step type, and this
+    # step asks Prompt Builder for a different (explanation) objective.
+    # It produces the same PROMPT_PACKAGE artifact from the same
+    # CONTEXT_PACKAGE, so every downstream step is reused unchanged - and
+    # it is served by the *same handler class* as BUILD_PROMPT,
+    # parameterized at composition rather than duplicated.
+    BUILD_EXPLANATION_PROMPT = "build_explanation_prompt"
+    # Engineering verification (Milestone 24.1). Its own step type for the
+    # same reason BUILD_EXPLANATION_PROMPT has one - one handler per step
+    # type, and this step asks Prompt Builder for the verification
+    # objective - and served by the same handler class, parameterized at
+    # composition rather than duplicated.
+    BUILD_VERIFICATION_PROMPT = "build_verification_prompt"
+    # Engineering comparison (Milestone 24.2). Building both operands'
+    # retrieval requests is one step - it is pure, and an invalid operand
+    # set is an invalid *request* whichever side it came from. Executing
+    # them is two steps, so that a failure is attributed to the side that
+    # actually failed: "the left retrieval failed" and "the right
+    # retrieval failed" are different facts an engineer needs told apart,
+    # and one combined step would report them identically.
+    BUILD_COMPARISON_RETRIEVAL_REQUESTS = (
+        "build_comparison_retrieval_requests"
+    )
+    EXECUTE_LEFT_RETRIEVAL = "execute_left_retrieval"
+    EXECUTE_RIGHT_RETRIEVAL = "execute_right_retrieval"
+    BUILD_COMPARISON_CONTEXT = "build_comparison_context"
+    BUILD_COMPARISON_PROMPT = "build_comparison_prompt"
+    BUILD_COMPARISON_RESPONSE = "build_comparison_response"
 
 
 class WorkflowArtifactKey(str, Enum):
@@ -79,6 +146,18 @@ class WorkflowArtifactKey(str, Enum):
     EXECUTION_REQUEST = "execution_request"
     RETRIEVAL_REQUEST = "retrieval_request"
     RETRIEVAL_RESULT = "retrieval_result"
+    DOCUMENT_RETRIEVAL_REQUEST = "document_retrieval_request"
+    DOCUMENT_RETRIEVAL_RESULT = "document_retrieval_result"
+    # The two comparison sides (Milestone 24.2), kept as distinct
+    # artifacts from first retrieval to final response. The engine never
+    # inspects them; it only checks that a step produced what it declared,
+    # which is what makes "the left side is missing" a deterministic
+    # failure rather than a silently half-built context.
+    LEFT_RETRIEVAL_REQUEST = "left_retrieval_request"
+    RIGHT_RETRIEVAL_REQUEST = "right_retrieval_request"
+    LEFT_RETRIEVAL_RESULT = "left_retrieval_result"
+    RIGHT_RETRIEVAL_RESULT = "right_retrieval_result"
+    COMPARISON_CONTEXT = "comparison_context"
     CONTEXT_PACKAGE = "context_package"
     PROMPT_PACKAGE = "prompt_package"
     LLM_RESPONSE_ENVELOPE = "llm_response_envelope"
@@ -96,6 +175,10 @@ class WorkflowCapability(str, Enum):
 
     REQUEST_VALIDATION = "request_validation"
     STRUCTURED_RETRIEVAL = "structured_retrieval"
+    # Reading the Engineering Index for documents that mention a given
+    # engineering designation - a genuinely different capability from
+    # STRUCTURED_RETRIEVAL, which reads the project knowledge graph.
+    DOCUMENT_RETRIEVAL = "document_retrieval"
     CONTEXT_BUILDING = "context_building"
     PROMPT_BUILDING = "prompt_building"
     LLM_RUNTIME_INVOCATION = "llm_runtime_invocation"
@@ -438,6 +521,33 @@ class PreparedAggregateUpdates:
 
 
 @dataclass(frozen=True, slots=True)
+class ComparisonOperandCriteria:
+    """
+    One side of a comparison, as the engine receives it (Milestone 24.2).
+
+    The engine's own restatement of the retrieval criteria a comparison
+    operand carries - deliberately not an import of the Retrieval Bridge's
+    model, so the engine keeps depending on nothing but its two permitted
+    contexts and the bridge keeps depending on the engine not at all. The
+    application seam maps one onto the other, exactly as it already does
+    for the single-operand ``retrieval_*`` fields.
+
+    ``designation`` is the text the engineer named this side by ("T1"),
+    carried so the context and prompt can say *what* each side is rather
+    than only "left" and "right".
+    """
+
+    designation: str
+    retrieval_limit: int = 20
+    retrieval_include_neighborhood: bool = False
+    retrieval_neighborhood_depth: int = 0
+    retrieval_entity_type: str | None = None
+    retrieval_canonical_entity_id: str | None = None
+    retrieval_attribute_name: str | None = None
+    retrieval_lexical_terms: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class EngineeringEngineExecutionRequest:
     """
     Everything one engine execution needs, and nothing more.
@@ -483,6 +593,13 @@ class EngineeringEngineExecutionRequest:
     # Structural Working Memory signals (never memory contents).
     working_memory_has_open_question: bool = False
     working_memory_active_response_count: int = 0
+    # The two comparison operands (Milestone 24.2), populated only for a
+    # comparison. **Named fields, never a list**: "compare A with B" and
+    # "compare B with A" are different questions - additions, removals and
+    # every directional finding invert - so the ordering is structural
+    # rather than conventional. There is no index to transpose.
+    comparison_left: "ComparisonOperandCriteria | None" = None
+    comparison_right: "ComparisonOperandCriteria | None" = None
 
 
 @dataclass(frozen=True, slots=True)

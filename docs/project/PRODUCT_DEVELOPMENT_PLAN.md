@@ -117,22 +117,23 @@ readiness declaration)
 | Canonical Domain (ontology) | Mature — implemented, tested, versioned by git |
 | Project Platform (lifecycle, scope) | Mature — implemented, tested |
 | Document Repository | Functional — upload/storage/scope work; classification unpopulated |
-| Engineering Index | Implemented — idempotent, project-scoped, document-traceable (Milestones 9, 9.1) |
+| Engineering Index | Implemented — idempotent, project-scoped, document-traceable (Milestones 9, 9.1); **read side** (Document Retrieval, Milestone 23B.1) answers "which documents mention X?" as ranked `DocumentReference`s scored from a fixed documented weight table, with a batch document-metadata port; reads no document contents |
 | Review Workflow | Implemented — `ProposedClaim`/`ReviewCandidate` state machine; the ADR-0004 mandatory review gate is closed for this pipeline (Milestone 10) |
 | Canonicalization | Implemented — deterministic normalization of `APPROVED` claims into `CanonicalFact`s (Milestone 11) |
 | Project Knowledge Graph | Implemented — Graph Builder translates facts into operations, Graph Persistence executes them atomically and idempotently against a project-scoped SQL-backed store (Milestones 11.1, 11.2, ADR-0007); schema lifecycle is now Alembic-managed rather than `create_all()` (Milestone 12, ADR-0008); the legacy `ingest_document`/`ProjectEntity`/`EntityRelation` path is retained, isolated, and marked deprecated rather than merged or deleted (Milestone 12, ADR-0009) |
 | Graph Query | Implemented — deterministic, read-only queries (by id, by type, by attribute presence, 1-hop adjacency, statistics, orphan detection) over current graph state through its own read port (Milestone 11.3); NL interpretation, semantic ranking, and answer generation are not yet built (see [knowledge_pipeline_overview.md](../architecture/knowledge_pipeline_overview.md)) |
 | Structured Retrieval | Implemented — deterministic, explainable `KnowledgeCandidate` ranking from structured criteria (entity lookup, entity type, attribute, relationship, lexical, combined) over Graph Query's read model, with fixed scoring weights and deterministic candidate identity (Milestone 13, ADR-0010); no embeddings, vector search, or NL interpretation |
-| Context Builder | Implemented — deterministic, bounded, provenance-aware `ContextPackage` assembly (selection, aggregation, coverage, budget enforcement, warnings, statistics, metadata) from a `KnowledgeCandidateCollection` (Milestone 14, ADR-0011); no persistence, no AI, no prompt generation |
-| Prompt Builder | Implemented — deterministic, provider-independent `PromptPackage` composition (nine fixed-order sections, versioned constraints/instructions, approximate token estimates, statistics, self-validation) from a `ContextPackage` (Milestone 15, ADR-0012); no persistence, no AI, no provider serialization |
+| Context Builder | Implemented — deterministic, bounded, provenance-aware `ContextPackage` assembly (selection, aggregation, coverage, budget enforcement, warnings, statistics, metadata) from a `KnowledgeCandidateCollection` (Milestone 14, ADR-0011); no persistence, no AI, no prompt generation; since Milestone 24.2 also a `ComparisonContextPackage` - two whole `ContextPackage`s built by the same unchanged builder, paired under named left/right fields and never merged |
+| Prompt Builder | Implemented — deterministic, provider-independent `PromptPackage` composition (nine fixed-order sections, versioned constraints/instructions, approximate token estimates, statistics, self-validation) from a `ContextPackage` (Milestone 15, ADR-0012); a `PromptObjective` (Milestones 23B.2, 24.1, 24.2) selects between fixed, versioned instruction and expected-output sets (`DIRECT_ANSWER` / `ENGINEERING_EXPLANATION` / `ENGINEERING_VERIFICATION` / `ENGINEERING_COMPARISON`) - never free-form or caller-supplied prompt text - and truthfulness constraints never vary by objective; owns the closed verdict and comparison-outcome vocabularies an answer must declare, and the `LEFT_KNOWLEDGE`/`RIGHT_KNOWLEDGE` sections that keep a comparison's two evidence groups typed apart; no persistence, no AI, no provider serialization |
 | LLM Provider Abstraction Layer | Implemented — provider-neutral `LLMProviderPort`/`LLMRequest` contract, deterministic `PromptPackage` → `LLMRequest` mapping, an Anthropic adapter (zero SDK dependency) and a fake test adapter, an explicit provider registry, runtime-configured provider/model selection (Milestone 16, ADR-0013); no invocation, no network call, no persistence |
 | LLM Invocation Runtime | Implemented — attempt/retry/deadline/cancellation-governed execution of a real Anthropic call, provider-neutral `LLMResponseEnvelope` normalization, disabled by default (Milestone 17, ADR-0014); no automated test calls a real provider; no persistence, no streaming, no conversation memory |
-| Engineering Response | Implemented — deterministic, domain-owned `EngineeringResponse` (typed sections, structured warnings, uncertainty declarations, preserved evidence/version provenance) normalized from an `LLMResponseEnvelope`, no AI usage of its own (Milestone 18, ADR-0015); `SUMMARY`/`TECHNICAL_EXPLANATION`/`ASSUMPTIONS`/`NEXT_ACTIONS` sections always empty (no semantic parsing of provider prose); no conversation, no persistence |
+| Engineering Response | Implemented — deterministic, domain-owned `EngineeringResponse` (typed sections, structured warnings, uncertainty declarations, preserved evidence/version provenance) normalized from an `LLMResponseEnvelope`, no AI usage of its own (Milestone 18, ADR-0015); `SUMMARY`/`TECHNICAL_EXPLANATION`/`ASSUMPTIONS`/`NEXT_ACTIONS` sections always empty (no semantic parsing of provider prose); since Milestone 23B.1 also composes `DETERMINISTIC_RETRIEVAL` responses (`EngineeringResponseOrigin`) built entirely from repository state, with validation rejecting any such response that names a provider, model or runtime version; since Milestone 24.1 carries a `VerificationAssessment` for verification responses, read from a declared first-line verdict protocol (never inferred from prose) and structurally bounded to `INSUFFICIENT_EVIDENCE` when no evidence was retrieved; since 24.2 a `ComparisonAssessment` on the same device, bounded when **either** side retrieved nothing so a missing side can never become a difference; no conversation, no persistence |
 | Engineering Session | Implemented — the root aggregate for one engineering work session: project identity, a validated state machine (`CREATED`/`ACTIVE`/`PAUSED`/`COMPLETED`/`ARCHIVED`), an ordered `EngineeringResponse` history, an append-only timeline, statistics, version metadata (Milestone 19, ADR-0016); smallest dependency surface of any context in this pipeline (only `engineering_response`); no conversation/chat/memory/tools/agents yet; no persistence - each API call accepts and returns the full session, nothing is held server-side |
 | Conversation | Implemented — structured engineering dialogue belonging to an `EngineeringSession` (referenced, never embedded): ordered `ConversationTurn`s (the primary conversational unit, not `ConversationMessage`) owning ordered messages and `EngineeringResponse` references (held directly, never copied), a validated Conversation/Turn state machine, an append-only timeline, statistics, version metadata (Milestone 20, ADR-0017); no memory, tool execution, agents, or assistant reasoning yet; no persistence |
 | Working Memory | Implemented — deterministic, structurally-derived temporary engineering context for continued reasoning: open questions, recent `EngineeringResponse`s, their evidence references, and their already-computed assumptions/constraints (Milestone 21, ADR-0018); not conversation history, not project knowledge, never AI-edited, never persisted; `CURRENT_OBJECTIVE`/`CURRENT_EQUIPMENT`/`CURRENT_ELECTRICAL_AREA`/`CURRENT_TASK` reserved but never populated (no structural signal exists yet) |
 | Engineering Request Classification | Implemented — deterministic, rule-based classification of one explicit request into a small workflow taxonomy (10 types), with first-class reproducible evidence, categorical confidence, explicit precedence, and ambiguity as a valid result (Milestone 22, ADR-0019); no LLM, no embeddings, no semantic model, no provider SDK; depends on no other bounded context at all; not executable - a classification result only |
-| Engineering Engine | Implemented (foundation) — registry-driven workflow selection, explicit deterministic `WorkflowPlan`s, step-handler execution with first-failure stop, 14 typed failure codes, an append-only execution timeline, and explicit never-applied aggregate update proposals (Milestone 23A, ADR-0020); **one workflow only** (`KNOWLEDGE_QUERY`) - every other intent returns `UNSUPPORTED` and runs nothing; reuses Structured Retrieval, Context Builder, Prompt Builder, the provider-neutral runtime and Engineering Response rather than reimplementing them; no persistence, no transaction, no retries, no agents |
+| Classification-to-Retrieval Bridge | Implemented — deterministic mapping from a classified request to the typed retrieval criteria the engine requires (Milestone 23B.3): designation extraction by fixed token shape, resolution against Canonicalization's existing public vocabulary, an immutable versioned intent→retrieval policy table, and typed unresolved outcomes (insufficient / conflicting / unsupported / invalid) instead of silently broadened retrieval; never invents an identifier; no LLM, no embeddings, no fuzzy matching; executes nothing and depends on the Engineering Engine not at all. Closes the raw-request→engine gap: `POST /engineering-requests/prepare` returns exactly the body `/engineering-engine/execute` accepts |
+| Engineering Engine | Implemented (foundation) — registry-driven workflow selection, explicit deterministic `WorkflowPlan`s, step-handler execution with first-failure stop, 14 typed failure codes, an append-only execution timeline, and explicit never-applied aggregate update proposals (Milestone 23A, ADR-0020); **five workflows** - `KNOWLEDGE_QUERY` (23A), `DOCUMENT_LOOKUP` (23B.1, the first workflow that invokes no LLM at all), `ENGINEERING_EXPLANATION` (23B.2), `ENGINEERING_VERIFICATION` (24.1, the first reasoning workflow) and `ENGINEERING_COMPARISON` (24.2, the first with two subjects and two independent retrievals whose identity is preserved end to end), each added by declaration and registration alone with no change to engine decision logic; the engine evaluates and compares nothing itself; every other intent returns `UNSUPPORTED` and runs nothing; reuses Structured Retrieval, Document Retrieval, Context Builder, Prompt Builder, the provider-neutral runtime and Engineering Response rather than reimplementing them; no persistence, no transaction, no retries, no agents |
 | AI Assistant | Does not exist |
 | Web frontend | Early — project listing/detail pages exist (`apps/frontend`), no auth, no review UI |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
@@ -412,9 +413,13 @@ Services.
   result; `app/domain/engineering_engine/**` +
   `app/services/engineering_engine/**` (Engineering Engine Foundation,
   Milestone 23A, ADR-0020) — the application coordinator that selects,
-  plans and executes one complete engineering workflow end to end.
-- **Implementation maturity:** Early but now end-to-end for one
-  workflow. The `AIProvider` port and one legacy adapter
+  plans and executes complete engineering workflows end to end, now with
+  a second registered workflow (`DOCUMENT_LOOKUP`, Milestone 23B.1) that
+  answers without invoking a provider at all, and a third
+  (`ENGINEERING_EXPLANATION`, Milestone 23B.2) that reuses the
+  knowledge-query pipeline with one differently-instructed prompt step.
+- **Implementation maturity:** Early but now end-to-end for three
+  workflows, one of them entirely LLM-free. The `AIProvider` port and one legacy adapter
   (`app/services/ai/claude_provider.py`) already existed and remain the
   foundation this EPIC extends, not replaces; Engineering Response,
   Engineering Session, Conversation, Working Memory, Engineering
@@ -1266,6 +1271,325 @@ interruptions, and are ranges, not commitments.
   select a workflow for) and Milestones 13-18 (the components the
   workflow reuses).
 
+**Milestone 23B.1 — Document Lookup Workflow** — *Completed*
+- Objective: prove the Engineering Engine is genuinely extensible by
+  registering a **second** workflow (`DOCUMENT_LOOKUP`) without changing
+  its core - and, in doing so, establish that **not every engineering
+  answer requires an LLM**. This is the first workflow that invokes no
+  provider at all.
+- Delivered: `DOCUMENT_LOOKUP_WORKFLOW` declared in
+  `workflow_definitions.py` and registered in the composition root;
+  three step handlers in their own module
+  (`document_lookup_step_handlers.py`); the workflow's terminal three
+  steps reuse Milestone 23A's registered handlers unchanged.
+  **Document Retrieval** - the Engineering Index's read side, the
+  deterministic answer to the question ADR-0002 always named as that
+  context's purpose ("which documents mention X?"):
+  `DocumentRetrievalRequest`/`DocumentReference`/`DocumentRetrievalResult`
+  value objects, a request factory enforcing every invariant, a fixed
+  documented relevance weight table (`document_relevance_policy.py`),
+  pure aggregation/ranking with limit applied only after full
+  deduplication, a `DocumentMetadataPort` with a SQLAlchemy adapter, and
+  `app/services/document_retrieval_service.py`.
+  **A non-LLM `EngineeringResponse` path**: `EngineeringResponseOrigin`
+  (`LLM_INVOCATION` / `DETERMINISTIC_RETRIEVAL`), a document-lookup
+  composition and assembler sharing Milestone 18's statistics and
+  validation stages unchanged, and `document_references` on
+  `EngineeringResponse`. Validation now enforces the origin/provider
+  correspondence **in both directions**: a deterministic response naming
+  a provider, model or runtime version is rejected - a response nothing
+  generated must never look like one a model generated.
+- Honesty constraints held: no metadata is invented (every
+  `DocumentReference` field is one a repository already holds, and an
+  unavailable one is reported as `null`, never filled in); relevance is
+  a sum of named weighted components, never an opaque score; no document
+  is read, parsed, summarized or interpreted; finding nothing is a
+  `COMPLETED` execution carrying an `EMPTY` response, not a failure.
+- Engine changes: **none to its decision logic.** The registry, planner,
+  plan executor, engine service and structural validators were not
+  modified. The additions were declarative enum members, typed context
+  fields, a workflow definition, handlers, and registration. The
+  step-handler *contract* (`WorkflowStepHandler`, `StepHandlerError`,
+  `BaseStepHandler`) moved into its own `step_handler.py` so the core
+  depends on the contract rather than on a concrete handler module - a
+  behaviour-preserving extraction. No new failure code was introduced:
+  every failure path reuses the existing taxonomy.
+- Architecture impact: **no new ADR** — ADR-0020 already recorded that
+  workflows are added by registration; this milestone exercises that
+  decision rather than revising it. `engineering_response` gains
+  `engineering_index` in `ALLOWED_DOMAIN_DEPENDENCIES` (a
+  downstream-depends-on-upstream shared-vocabulary reuse, not a backward
+  dependency), and
+  `tests/architecture/test_engineering_engine_boundaries.py` gains the
+  standing, executable form of the "core is closed for modification"
+  claim so a future workflow cannot quietly erode it.
+- Dependencies: Milestone 23A (the engine), Milestone 22 (the
+  `DOCUMENT_LOOKUP` classification), and the Engineering Index
+  (Milestone 8-era) for the mentions it reads.
+
+**Milestone 23B.2 — Engineering Explanation Workflow** — *Completed*
+- Objective: register a third workflow (`ENGINEERING_EXPLANATION`) that
+  **explains** retrieved engineering knowledge - "spiegami il
+  funzionamento della protezione 87T", "descrivi lo schema funzionale
+  del trasformatore T1" - reusing the knowledge-query pipeline rather
+  than building a parallel one, and again without touching the engine.
+  The second LLM-powered workflow.
+- Delivered: `ENGINEERING_EXPLANATION_WORKFLOW` declared in
+  `workflow_definitions.py` and registered in the composition root. Its
+  ten steps are the knowledge-query pipeline **step for step**, differing
+  at exactly one: `BUILD_EXPLANATION_PROMPT` replaces `BUILD_PROMPT`,
+  produces the same `PROMPT_PACKAGE` from the same `CONTEXT_PACKAGE`, and
+  is served by the **same handler class**, parameterized at composition
+  with a different Prompt Builder objective rather than duplicated.
+  **`PromptObjective` in Prompt Builder** (`DIRECT_ANSWER` /
+  `ENGINEERING_EXPLANATION`) - the minimum addition needed, and the one
+  place the genuinely new behaviour lives. It selects between fixed,
+  versioned instruction and expected-output sets declared in
+  `composition_policy.py`; it is never a free-form prompt, template,
+  persona or caller-supplied instruction string, so every prompt this
+  system can produce stays enumerable and reviewable. Validation enforces
+  that correspondence: a package whose instructions are not one of the
+  declared sets is structurally invalid, however plausible its text.
+- Honesty constraints held: **truthfulness constraints never vary by
+  objective** - an explanation obeys the same "never invent an
+  engineering fact" rule as a direct answer, because a longer answer is a
+  larger opportunity to invent one, not a licence to. The explanation
+  instruction set adds the two rules this objective specifically needs
+  (`describe_only_what_the_evidence_covers`,
+  `state_which_aspects_the_evidence_does_not_cover`), because "how does
+  an 87T work" has a plausible textbook answer that owes nothing to *this*
+  substation, and a plausible answer about the wrong installation is
+  worse than an admitted gap. `DIRECT_ANSWER` output is byte-identical to
+  Milestone 15's, so the knowledge-query prompt did not change.
+- Retrieval scope: the workflow invents **no** retrieval criteria - it
+  uses the same `BUILD_RETRIEVAL_REQUEST` step and handler as knowledge
+  query, whose mode is derived purely from caller-supplied configuration.
+  Explaining one relay by retrieving everything about the project is
+  exactly the unrelated context this milestone forbids.
+- Engine changes: **none to its decision logic**, and less than 23B.1
+  needed. Two declarative enum members (`WorkflowType`,
+  `WorkflowStepType`), a workflow definition, and two registrations. No
+  new capability, no new artifact key, no new handler module, no
+  execution-context change, no router change, **no new failure code** (a
+  prompt failure is the existing `PROMPT_BUILD_FAILURE`, attributed to
+  `BUILD_EXPLANATION_PROMPT`), and **no new response type or metadata** -
+  an explanation returns an ordinary `EngineeringResponse` with
+  `origin = LLM_INVOCATION` and fully populated provider metadata.
+- Architecture impact: **no new ADR** — ADR-0020 already recorded that
+  workflows are added by registration. One standing guarantee was added
+  to `tests/architecture/test_engineering_engine_boundaries.py`:
+  `test_no_handler_derives_its_behaviour_from_an_intent_or_workflow_type`,
+  so a future workflow cannot reintroduce inside a handler the intent
+  switch the registry exists to remove.
+- Dependencies: Milestone 23A (the engine), Milestone 22 (the
+  `ENGINEERING_EXPLANATION` classification), and Milestones 13-18 (the
+  pipeline it reuses unchanged).
+
+**Milestone 23B.3 — Classification-to-Retrieval Bridge** — *Completed*
+- Objective: close the usability gap that made every workflow reachable
+  only by a caller who already knew the graph's contents. The classifier
+  decided *which workflow* a request wanted; the engine required
+  retrieval criteria (a canonical entity id, lexical terms) nobody
+  derived; no deterministic component connected the two. This milestone
+  makes the chain traversable from a raw sentence:
+  **Raw Request → Classification → Retrieval Bridge → Engine → Workflow.**
+- Delivered: a new `retrieval_bridge` bounded context - immutable models,
+  deterministic designation extraction, resolution against
+  Canonicalization's *existing* public `normalize_entity_reference`, an
+  immutable intent→retrieval **policy table** (versioned by
+  `BRIDGE_POLICY_VERSION`, never an if/else chain), and structural
+  validation of every configuration it emits. Plus
+  `engineering_request_preparation_service.py` (the seam that composes
+  classification + bridge into an `EngineeringEngineExecutionRequest`)
+  and `POST /projects/{id}/engineering-requests/prepare`, whose response
+  carries exactly the body `/engineering-engine/execute` accepts.
+- Scope held: only the three intents with implemented workflows
+  (`KNOWLEDGE_QUERY`, `DOCUMENT_LOOKUP`, `ENGINEERING_EXPLANATION`) are
+  mapped. Navigation, Verification, Comparison and Drawing are refused
+  with a typed `UNSUPPORTED_INTENT_MAPPING`, never given a default
+  policy.
+- Honesty constraints held: **no identifier is ever invented.** A
+  designation that Canonicalization does not recognize ("87T", "Q52")
+  becomes a lexical term, which is an honest "this system does not know
+  which graph entity this names". **Retrieval is never silently
+  broadened**: a request naming no designation is refused
+  (`INSUFFICIENT_EVIDENCE`) rather than answered against everything; two
+  distinct canonical entities are refused (`CONFLICTING_EVIDENCE`) rather
+  than resolved arbitrarily; a surplus of designations is refused rather
+  than truncated. Bare type words ("trasformatore") and bare numbers
+  ("400") are deliberately not designations, because searching for either
+  would widen retrieval past the question asked. Every refusal still
+  reports the designations found, so it is inspectable rather than
+  indistinguishable from a bug.
+- Engine changes: **none at all.** The engine still receives an explicit
+  execution request and cannot parse natural language - now enforced
+  rather than asserted: architecture tests forbid it from importing the
+  classifier service, the rule table, the request normalizer, or the
+  bridge. The dependency runs one way only.
+- A defect the design caught: the first implementation emitted an entity
+  type alongside the canonical reference, which makes a Structured
+  Retrieval `ENTITY_LOOKUP` request invalid. The **mode-agreement
+  invariant** - the mode the bridge declares must equal the mode the
+  engine derives from the same fields - caught it before it reached
+  anything, and is now a standing test.
+- Architecture impact: **no new ADR.** This milestone applies ADR-0019
+  ("a classification result is not a command" - the bridge maps, it does
+  not execute) and ADR-0020 ("the engine receives an explicit execution
+  request" - preparation is a stage before it), rather than departing
+  from either. New as-built reference:
+  `docs/architecture/retrieval_bridge.md`; new boundary file
+  `tests/architecture/test_retrieval_bridge_boundaries.py`.
+- Dependencies: Milestone 22 (the classified intent it maps from),
+  Milestone 11-era Canonicalization (the one canonical vocabulary), and
+  Milestone 13 (the retrieval criteria vocabulary it emits).
+
+**Milestone 24.1 — Engineering Verification Workflow** - *Completed*
+- Objective: introduce the first **reasoning** workflow. Where the three
+  existing workflows present retrieved knowledge, this one *evaluates* a
+  statement against it: "verify that protection 87T is present", "check
+  whether cable C-295 is connected to TA-12". The answer is a
+  verification, not an explanation.
+- Delivered: `ENGINEERING_VERIFICATION_WORKFLOW` registered in the
+  composition root, its ten steps the knowledge-query pipeline with one
+  difference (`BUILD_VERIFICATION_PROMPT` replaces `BUILD_PROMPT`, served
+  by the *same* handler class parameterized with a new objective).
+  `PromptObjective.ENGINEERING_VERIFICATION` in Prompt Builder, carrying
+  the four instructions this milestone requires plus the closed four-token
+  verdict vocabulary (`VERIFICATION_VERDICT_TOKENS`) - the only
+  machine-readable token this system asks a model for, and the only place
+  it is defined. `VerificationOutcome`/`VerificationAssessment` in
+  Engineering Response, with `engineering_response_verification.py`
+  reading the verdict from the answer's declared first line.
+- Verification behaviour: exactly four outcomes (`SUPPORTED`,
+  `NOT_SUPPORTED`, `INSUFFICIENT_EVIDENCE`, `CONFLICTING_EVIDENCE`) and no
+  fifth category. The prompt forces the distinction that matters most -
+  **absence of evidence is not evidence of absence** - because "the
+  evidence does not show a differential protection on T1" and "T1 has no
+  differential protection" are different findings, and in this domain
+  confusing them is how a real installation gets signed off on a gap
+  nobody looked for.
+- Honesty constraints held: reading the verdict is **matching a declared
+  protocol, not interpreting prose** - only the first line is examined,
+  against four literals, with no keyword search, no negation handling and
+  no scoring; a non-compliant line yields **no verdict** rather than a
+  guessed one ("probably SUPPORTED" is read as no verdict). Truthfulness
+  constraints are identical to every other objective. And the structural
+  bound: **with no retrieved evidence the outcome is
+  `INSUFFICIENT_EVIDENCE` whatever the model wrote**, because a
+  `SUPPORTED` verdict could then only have come from the model's general
+  knowledge - the assessment still records that the model spoke and was
+  overruled, since that differs from a model that said nothing.
+- Engine changes: **none to its decision logic**, and the same cost as
+  23B.2 despite being a materially different kind of workflow - two
+  declarative enum members, a definition, two registrations. No new
+  capability, artifact key, handler module, execution-context change,
+  router change, or **failure code** (a prompt failure is the existing
+  `PROMPT_BUILD_FAILURE`). The engine evaluates nothing: architecture
+  tests assert no engine module names a verification outcome, the
+  assessment type, or any verdict literal.
+- Response model: extended rather than overloaded. `verification` is a new
+  optional field because `EngineeringResponseStatus.UNSUPPORTED` already
+  means "the provider returned no usable text", and reusing it for "the
+  evidence does not support the statement" would make two entirely
+  different findings indistinguishable; warnings and uncertainties cannot
+  express `SUPPORTED` at all.
+- Also in scope, deliberately: a `VERIFICATION_REQUEST` row in the
+  Retrieval Bridge policy table, so a raw verification sentence is
+  preparable end to end. It searches lexically for **every** designation
+  (a relational claim names two things; an entity lookup would carry one
+  and drop the other) and expands the neighborhood by one hop, because a
+  relational claim is settled by relationships.
+- **Naming note:** the milestone brief names
+  `EngineeringIntentType.ENGINEERING_VERIFICATION`; the classifier has
+  published `VERIFICATION_REQUEST` since Milestone 22, and an intent-type
+  value is a contract (CLAUDE.md §16). The workflow, workflow type and
+  prompt objective are named "engineering verification"; the intent keeps
+  its published name. Adding a synonym member would have created two names
+  for one concept.
+- Architecture impact: **no new ADR** - ADR-0020 already covers workflow
+  registration and ADR-0015 the Engineering Response boundary; this
+  milestone applies both. The one genuinely new decision - that a
+  *declared token protocol* is not semantic parsing - is recorded in
+  `engineering_response_verification.py`'s own docstring and in
+  `engineering_engine.md`, and is narrow enough that an ADR would
+  overstate it.
+- Dependencies: Milestone 23A (the engine), Milestone 22 (the
+  `VERIFICATION_REQUEST` classification), 23B.2 (`PromptObjective`), and
+  Milestones 13-18 (the pipeline it reuses unchanged).
+
+**Milestone 24.2 — Engineering Comparison Workflow** - *Completed*
+- Objective: compare two explicitly identified engineering subjects using
+  only governed project evidence - "confronta il trasformatore T1 con
+  T2", "quali differenze ci sono tra il montante M1 e M2?". The first
+  workflow with **two subjects**, and the first whose *pipeline* differs
+  rather than only its prompt.
+- Delivered, end to end:
+  **Preparation** - `comparison_bridge.py` derives exactly two typed
+  operands from a classified `ENGINEERING_COMPARISON` request, under a
+  `COMPARISON_OPERAND_POLICY` applied to each side independently.
+  **Retrieval** - two independent steps (`EXECUTE_LEFT_RETRIEVAL`,
+  `EXECUTE_RIGHT_RETRIEVAL`) reusing Structured Retrieval unchanged.
+  **Context** - a `ComparisonContextPackage` holding **two whole
+  `ContextPackage`s**, each assembled by the existing builder, paired but
+  never merged. **Prompt** - a `ENGINEERING_COMPARISON` objective with
+  `LEFT_KNOWLEDGE`/`RIGHT_KNOWLEDGE` as separate typed sections.
+  **Response** - a `ComparisonAssessment` on the ordinary
+  `EngineeringResponse`.
+- The rules that carry the weight:
+  **Exactly two operands.** Fewer is `INSUFFICIENT_EVIDENCE` and the
+  missing one is never inferred; more is `CONFLICTING_EVIDENCE` and the
+  surplus is never truncated - choosing two of three would compare a pair
+  the request did not ask for.
+  **Order is structural, not conventional.** `left`/`right` are named
+  fields on every model - execution request, execution context, context
+  package, prompt sections - so there is no index to transpose. "Compare
+  A with B" cannot silently become "compare B with A", which matters
+  because additions, removals and every directional finding invert.
+  **A missing side is never a difference.** When either side retrieved no
+  evidence the outcome is structurally forced to `INSUFFICIENT_EVIDENCE`,
+  whatever the model wrote. Given evidence for T1 and none for T2, a
+  fluent answer reads "T2 lacks the differential protection T1 has" -
+  which is a statement about what the index covers, not about the
+  installation, and an engineer acting on it would commission a change on
+  the strength of a gap. The prompt also renders an evidence-less side as
+  an explicit statement that the project holds none, rather than as an
+  empty section that invites the wrong inference.
+- Outcome vocabulary: `COMPARABLE`, `INSUFFICIENT_EVIDENCE`,
+  `CONFLICTING_EVIDENCE` - read from the same declared first-line protocol
+  a verification verdict uses. Deliberately **not** "same" versus
+  "different": a real comparison of two montanti usually contains both
+  changed and unchanged aspects, so a top-level same/different verdict
+  would force a false choice.
+- **Structured findings are deliberately absent.** The prompt asks for
+  findings grouped under ADDED / REMOVED / MODIFIED / UNCHANGED, and they
+  stay **prose in the response body**. Extracting them into typed data
+  would mean parsing free text to manufacture engineering findings -
+  exactly what this system refuses. The limitation is recorded on
+  `ComparisonAssessment` itself and is the milestone's top technical debt;
+  it dissolves the day the runtime can return structured output.
+- Engine changes: **none to its decision logic**, and all additions
+  declarative - a workflow type, six step types, five artifact keys, a
+  typed `ComparisonOperandCriteria` on the execution request, five
+  execution-context fields, one handler module, six registrations. The
+  engine's *vocabulary* grew; its logic did not. It selects, plans and
+  executes exactly as before, and evaluates and compares nothing itself.
+- Failure taxonomy: **no new codes.** Fewer/more operands reuse the
+  bridge's `INSUFFICIENT_EVIDENCE`/`CONFLICTING_EVIDENCE`; a missing
+  operand at execution is `INVALID_EXECUTION_REQUEST`; each side's
+  retrieval failure is `RETRIEVAL_FAILURE` **attributed to its own step**,
+  which is precisely why retrieval is two steps rather than one - a
+  combined step would report a left and a right failure identically.
+- Architecture impact: **no new ADR** - ADR-0020 covers registration and
+  ADR-0015 the Engineering Response boundary. Four standing guarantees
+  were added: no engine module names a comparison outcome, assessment
+  type or finding literal; the engine imports neither the comparison
+  reader nor the preparation policy; comparison instructions exist only in
+  Prompt Builder; and **provider adapters and the runtime remain unaware
+  of comparison semantics**.
+- Dependencies: Milestone 23A (the engine), 22 (the classification, whose
+  taxonomy already published `ENGINEERING_COMPARISON`), 23B.2
+  (`PromptObjective`), 23B.3 (the bridge it extends), and 13-18.
+
 **Milestone 17 — AI Assistant**
 - Objective: build the conversational, user-facing surface over the
   Query Engine.
@@ -1683,18 +2007,67 @@ Transmission, Rail, Renewables, and any future discipline)
   Nothing is stored - not the `EngineeringResponse`, not the aggregate
   update proposals, not the execution record. The *intended future*
   transaction boundary would atomically persist all of them together;
-  **that transaction does not exist today**, and Milestone 23A neither
-  implements it nor depends on it (ADR-0020).
-- **The Engineering Engine supports one workflow only.** Nine of the
-  ten `EngineeringIntentType` values return `UNSUPPORTED`. This is
-  deliberate (Milestone 23A proves the architecture; 23B expands the
-  catalogue), and there is deliberately no fallback workflow and no
-  "just ask the LLM" path for unknown intents.
-- **The engine does not derive retrieval criteria from request text.**
-  Retrieval configuration is caller-supplied; inferring criteria from
-  the request would be exactly the semantic interpretation ADR-0019
-  excluded. A future milestone may bridge classification evidence to
-  retrieval criteria deterministically.
+  **that transaction does not exist today**, and the engine neither
+  implements it nor depends on it (ADR-0020) - Milestone 23B.1's
+  document-lookup workflow included.
+- **The Engineering Engine supports five workflows.** Five of the ten
+  `EngineeringIntentType` values return `UNSUPPORTED`. This is deliberate
+  (23A proved the architecture, 23B.1 proved it is extensible, 23B.2
+  proved extension gets *cheaper* as the shared pipeline matures, 24.1
+  proved a reasoning workflow costs the engine no more than a rephrased
+  prompt, and 24.2 proved a workflow whose *pipeline* differs still costs
+  it nothing but declarations); there is deliberately no fallback workflow
+  and no "just ask the LLM" path for unknown intents.
+- **A comparison reports no structured findings.** The ADDED / REMOVED /
+  MODIFIED / UNCHANGED grouping exists only as prose in the response body,
+  because extracting it would mean parsing free text to manufacture
+  engineering findings. A consumer can read the outcome
+  (`COMPARABLE` / `INSUFFICIENT_EVIDENCE` / `CONFLICTING_EVIDENCE`)
+  machine-readably and must read the findings themselves.
+- **A comparison compares evidence, not installations.** Two subjects
+  whose evidence is thin will compare as thin, and the system says so
+  rather than filling the gap. It never compares a subject against typical
+  practice for its equipment type.
+- **A verification verdict is the model's judgement, not the system's.**
+  SubstationOS reads a declared token and bounds it structurally when no
+  evidence was retrieved; it does not itself decide whether a statement is
+  true. `SUPPORTED` means "a model, given only this project's reviewed
+  evidence, said the evidence supports this" - it is not an engineering
+  sign-off, and the response's own uncertainty declarations remain the
+  honest measure of how far it should be trusted.
+- **An explanation is a differently-instructed prompt, not a different
+  reasoning capability.** `ENGINEERING_EXPLANATION` retrieves the same
+  governed graph evidence as a knowledge query and asks the model to set
+  out function and role rather than answer directly. It performs no
+  multi-step reasoning, consults no document contents, and builds no
+  causal or functional model of the installation - the quality of an
+  explanation is bounded by what the reviewed graph already holds.
+- **`DOCUMENT_LOOKUP` reports where equipment is mentioned, not what the
+  documents say.** It reads the Engineering Index only: no document is
+  opened, parsed, summarized, rendered, or ranked by its contents, and no
+  file is returned - the answer is a set of document references with page
+  or locator evidence. A document whose mentions were never indexed is
+  invisible to it, which is why "no matching documents" honestly reports
+  that the equipment may be undocumented *or* simply not indexed yet.
+- **The engine still does not derive retrieval criteria from request
+  text** - and never will. Since Milestone 23B.3 a separate stage does,
+  deterministically, *before* the engine: the Classification-to-Retrieval
+  Bridge. The engine continues to receive an explicit execution request
+  and is now prevented by architecture test from importing the
+  classifier, the rule table, the request normalizer, or the bridge.
+- **The bridge resolves no conversational reference.** "Come funziona
+  questo montante?" names no designation, so it is refused rather than
+  guessed at. Resolving "questo" needs Working Memory, which the bridge
+  deliberately does not consult - a request that means something only in
+  the context of the previous turn is not yet answerable end to end.
+- **The canonical vocabulary the bridge resolves against is narrow.**
+  Canonicalization recognizes a letter-prefix-then-digits shape over
+  seven entity types, so real designations like "87T" (an ANSI device
+  number) and "Q52" become lexical terms rather than entity lookups.
+  Lexical retrieval still finds them; entity lookup would be stronger.
+  Aligning canonical entity types with the Electrical Ontology's own
+  `EquipmentDefinition` ids and aliases remains the deliberate open
+  integration point Canonicalization's own module docstring names.
 - **`EngineeringIntentEvidenceType.STRUCTURAL_CONTEXT` is defined but
   never produced.** The two structural Working Memory signals the
   classification input accepts are carried and available but do not

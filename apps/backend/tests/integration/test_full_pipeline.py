@@ -227,7 +227,9 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
 
     prompt_package = prompt_result["package"]
     assert prompt_package["project_id"] == project["id"]
-    assert len(prompt_package["sections"]) == 9
+    # Eleven since Milestone 24.2: the two comparison sides are always
+    # present, and disabled for every non-comparison prompt.
+    assert len(prompt_package["sections"]) == 11
     assert prompt_package["retrieved_knowledge"]["enabled"] is True
     reference_ids = [r["candidate_id"] for r in prompt_package["references"]]
     assert selected["candidate_id"] in reference_ids

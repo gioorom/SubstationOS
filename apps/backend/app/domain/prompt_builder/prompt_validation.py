@@ -12,11 +12,52 @@ number of sections (a small, fixed-size collection).
 
 from __future__ import annotations
 
+from app.domain.prompt_builder.composition_policy import (
+    CONSTRAINTS,
+    EXPECTED_OUTPUT_BY_OBJECTIVE,
+    INSTRUCTIONS_BY_OBJECTIVE,
+)
 from app.domain.prompt_builder.prompt_builder_models import (
     PromptPackage,
     PromptValidationResult,
 )
 from app.domain.prompt_builder.prompt_composition import PROMPT_SECTION_ORDER
+
+
+def _objective_errors(package: PromptPackage) -> list[str]:
+    """
+    A package's instructions and expected output must be exactly the
+    fixed sets its declared objective selects, and its constraints must be
+    the single shared set regardless of objective.
+
+    This is what keeps ``PromptObjective`` an *enumerable selector*
+    rather than a way to smuggle arbitrary instructions into a prompt: a
+    package whose instructions are not one of the declared sets is
+    structurally invalid, however plausible its text looks.
+    """
+
+    errors: list[str] = []
+
+    if package.instructions != INSTRUCTIONS_BY_OBJECTIVE[package.objective]:
+        errors.append(
+            "Instructions are not the fixed set this objective declares."
+        )
+
+    if package.expected_output.content != (
+        EXPECTED_OUTPUT_BY_OBJECTIVE[package.objective]
+    ):
+        errors.append(
+            "The expected output section is not the fixed set this "
+            "objective declares."
+        )
+
+    if package.constraints != CONSTRAINTS:
+        errors.append(
+            "Constraints are not the shared truthfulness set - they never "
+            "vary by objective."
+        )
+
+    return errors
 
 
 def validate_package(package: PromptPackage) -> PromptValidationResult:
@@ -33,6 +74,8 @@ def validate_package(package: PromptPackage) -> PromptValidationResult:
 
     if not package.instructions:
         errors.append("No instructions are present.")
+
+    errors.extend(_objective_errors(package))
 
     if (
         not package.metadata.prompt_builder_version

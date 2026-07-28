@@ -15,6 +15,7 @@ from app.domain.prompt_builder.prompt_builder_models import (
     PromptBuildRequest,
     PromptBuilderConfiguration,
     PromptCompositionPolicy,
+    PromptObjective,
 )
 from app.domain.prompt_builder.prompt_builder_validator import (
     PromptBuilderValidator,
@@ -27,6 +28,7 @@ class PromptBuildRequestFactory:
         *,
         project_id: int,
         context_package: ContextPackage,
+        objective: PromptObjective = PromptObjective.DIRECT_ANSWER,
     ) -> PromptBuildRequest:
         PromptBuilderValidator.validate_project_id(project_id)
         PromptBuilderValidator.validate_project_id_matches_context_package(
@@ -44,4 +46,5 @@ class PromptBuildRequestFactory:
             project_id=project_id,
             context_package=context_package,
             configuration=configuration,
+            objective=objective,
         )

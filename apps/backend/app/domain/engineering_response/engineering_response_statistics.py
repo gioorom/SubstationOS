@@ -7,6 +7,11 @@ declarations, and references (all small, fixed or bounded collections).
 Deliberately does not compute a token count - that remains Prompt
 Builder's own approximate, provider-independent responsibility one
 layer upstream; duplicating it here would drift out of sync with it.
+
+Shared unchanged by both composition paths (LLM invocation and
+deterministic retrieval): a statistic is a count of what a composition
+produced, and counting does not depend on where the composition's input
+came from.
 """
 
 from __future__ import annotations
@@ -34,4 +39,5 @@ def build_statistics(
         uncertainty_count=len(composition.uncertainties),
         reference_count=len(composition.references),
         character_count=character_count,
+        document_reference_count=len(composition.document_references),
     )

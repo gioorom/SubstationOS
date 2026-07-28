@@ -4,10 +4,24 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.domain.engineering_index.document_retrieval_models import (
+    DocumentMentionReference,
+    DocumentReference,
+    DocumentRelevance,
+    DocumentRelevanceCategory,
+    DocumentRelevanceComponent,
+)
+from app.domain.engineering_index.engineering_index_entry_kind import (
+    EngineeringIndexEntryKind,
+)
+from app.domain.engineering_index.engineering_index_locator import (
+    IndexEntryLocatorKind,
+)
 from app.domain.engineering_response.engineering_response_models import (
     EngineeringEvidenceReference,
     EngineeringResponse,
     EngineeringResponseMetadata,
+    EngineeringResponseOrigin,
     EngineeringResponseSection,
     EngineeringResponseStatistics,
     EngineeringResponseStatus,
@@ -17,6 +31,10 @@ from app.domain.engineering_response.engineering_response_models import (
     EngineeringUncertaintyLevel,
     EngineeringWarning,
     EngineeringWarningCategory,
+    ComparisonAssessment,
+    ComparisonOutcome,
+    VerificationAssessment,
+    VerificationOutcome,
 )
 from app.schemas.context_builder import ContextPackageRead, context_package_from_schema
 from app.schemas.llm_provider import (
@@ -67,6 +85,101 @@ class EngineeringEvidenceReferenceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DocumentRelevanceComponentRead(BaseModel):
+    category: DocumentRelevanceCategory
+    weight: float
+    detail: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentRelevanceRead(BaseModel):
+    total: float
+    components: list[DocumentRelevanceComponentRead]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentMentionReferenceRead(BaseModel):
+    entry_id: int | None
+    kind: EngineeringIndexEntryKind
+    identifier: str
+    locator_kind: IndexEntryLocatorKind
+    locator_value: str | None
+    label: str | None
+    page: int | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentReferenceRead(BaseModel):
+    """
+    One retrieved document, exposed with exactly the metadata a repository
+    already holds. Every metadata field is nullable because an Engineering
+    Index entry may outlive the document row it points at; a ``null``
+    title means "unknown", never a placeholder.
+    """
+
+    document_id: int
+    title: str | None
+    document_format: str | None
+    document_category: str | None
+    revision: str | None
+    metadata_available: bool
+    relevance: DocumentRelevanceRead
+    matched_identifiers: list[str]
+    matched_terms: list[str]
+    mentions: list[DocumentMentionReferenceRead]
+    mention_count: int
+    page_references: list[int]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VerificationAssessmentRead(BaseModel):
+    """
+    The machine-readable verdict of a verification. ``outcome`` is
+    ``null`` when the model did not open its answer with one of the four
+    declared verdict tokens - never a verdict inferred from its prose.
+
+    ``evidence_bounded`` marks the one case where the builder overrides
+    the model: with no retrieved evidence the outcome is
+    ``insufficient_evidence`` whatever was written, because nothing
+    existed to support or contradict the statement with.
+    """
+
+    outcome: VerificationOutcome | None
+    stated_by_model: bool
+    evidence_bounded: bool
+    evidence_reference_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ComparisonAssessmentRead(BaseModel):
+    """
+    The machine-readable outcome of a comparison. ``outcome`` is ``null``
+    when the model did not open its answer with one of the three declared
+    outcome tokens - never one inferred from its prose.
+
+    ``evidence_bounded`` marks the structural override: when either side
+    retrieved no evidence the outcome is ``insufficient_evidence``
+    whatever was written, because a missing side is a gap in the project's
+    reviewed knowledge and can never honestly become a difference.
+
+    There are deliberately no structured ADDED/REMOVED/MODIFIED/UNCHANGED
+    findings here - see ``ComparisonAssessment``'s own docstring.
+    """
+
+    outcome: ComparisonOutcome | None
+    stated_by_model: bool
+    evidence_bounded: bool
+    left_evidence_count: int
+    right_evidence_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class EngineeringWarningRead(BaseModel):
     category: EngineeringWarningCategory
     message: str
@@ -86,8 +199,10 @@ class EngineeringResponseMetadataRead(BaseModel):
     response_policy_version: str
     assembled_at: datetime
     project_id: int
-    provider_id: str
-    configured_model_identifier: str
+    # Null for a DETERMINISTIC_RETRIEVAL response: no provider and no
+    # model were involved (see EngineeringResponseOrigin).
+    provider_id: str | None
+    configured_model_identifier: str | None
     returned_model_identifier: str | None
     request_correlation_id: str
     prompt_package_version: str | None
@@ -106,6 +221,7 @@ class EngineeringResponseStatisticsRead(BaseModel):
     uncertainty_count: int
     reference_count: int
     character_count: int
+    document_reference_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -118,6 +234,8 @@ class EngineeringResponseVersionRead(BaseModel):
     request_preparation_policy_version: str | None
     runtime_version: str | None
     package_version: str
+    document_retrieval_version: str | None = None
+    document_relevance_policy_version: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -127,15 +245,26 @@ class EngineeringResponseRead(BaseModel):
     Deliberately exposes only strongly typed sections and supporting
     objects - no provider SDK response, no ``LLMResponseEnvelope``, no
     raw prompt or response string of any kind. The canonical output
-    contract of the AI layer.
+    contract of the engineering answer layer.
+
+    ``origin`` tells a client whether a model was involved at all:
+    ``references`` carries graph evidence for an LLM-produced answer,
+    ``document_references`` carries document evidence for a deterministic
+    document lookup, and the two are never conflated.
     """
 
     project_id: int
     status: EngineeringResponseStatus
+    origin: EngineeringResponseOrigin = (
+        EngineeringResponseOrigin.LLM_INVOCATION
+    )
     sections: list[EngineeringResponseSectionRead]
     summary: EngineeringResponseSectionRead
     direct_answer: EngineeringResponseSectionRead
     references: list[EngineeringEvidenceReferenceRead]
+    document_references: list[DocumentReferenceRead] = []
+    verification: VerificationAssessmentRead | None = None
+    comparison: ComparisonAssessmentRead | None = None
     warnings: list[EngineeringWarningRead]
     uncertainties: list[EngineeringUncertaintyRead]
     overall_uncertainty: EngineeringUncertaintyLevel
@@ -178,6 +307,54 @@ def _section_from_read(model: EngineeringResponseSectionRead) -> EngineeringResp
         body=tuple(model.body),
         sequence=model.sequence,
         enabled=model.enabled,
+    )
+
+
+def _document_reference_from_read(
+    model: DocumentReferenceRead,
+) -> DocumentReference:
+    """``page_references`` is deliberately not read back: it is a derived
+    view over ``mentions``, so reconstructing the mentions reconstructs
+    it, and accepting a caller-supplied value would let the two
+    disagree."""
+
+    return DocumentReference(
+        document_id=model.document_id,
+        title=model.title,
+        document_format=model.document_format,
+        document_category=model.document_category,
+        revision=model.revision,
+        metadata_available=model.metadata_available,
+        relevance=DocumentRelevance(
+            total=model.relevance.total,
+            components=tuple(
+                DocumentRelevanceComponent(
+                    category=component.category,
+                    weight=component.weight,
+                    detail=component.detail,
+                )
+                for component in model.relevance.components
+            ),
+        ),
+        matched_identifiers=tuple(model.matched_identifiers),
+        matched_terms=tuple(model.matched_terms),
+        mentions=tuple(
+            DocumentMentionReference(
+                entry_id=mention.entry_id,
+                kind=mention.kind,
+                identifier=mention.identifier,
+                locator_kind=mention.locator_kind,
+                locator_value=mention.locator_value,
+                label=mention.label,
+            )
+            for mention in model.mentions
+        ),
+        mention_count=model.mention_count,
+        sort_key=(
+            -model.relevance.total,
+            -model.mention_count,
+            model.document_id,
+        ),
     )
 
 
@@ -229,6 +406,9 @@ def engineering_response_from_schema(
             uncertainty_count=model.statistics.uncertainty_count,
             reference_count=model.statistics.reference_count,
             character_count=model.statistics.character_count,
+            document_reference_count=(
+                model.statistics.document_reference_count
+            ),
         ),
         version=EngineeringResponseVersion(
             engineering_response_version=model.version.engineering_response_version,
@@ -240,6 +420,40 @@ def engineering_response_from_schema(
             ),
             runtime_version=model.version.runtime_version,
             package_version=model.version.package_version,
+            document_retrieval_version=(
+                model.version.document_retrieval_version
+            ),
+            document_relevance_policy_version=(
+                model.version.document_relevance_policy_version
+            ),
+        ),
+        origin=model.origin,
+        document_references=tuple(
+            _document_reference_from_read(reference)
+            for reference in model.document_references
+        ),
+        comparison=(
+            None
+            if model.comparison is None
+            else ComparisonAssessment(
+                outcome=model.comparison.outcome,
+                stated_by_model=model.comparison.stated_by_model,
+                evidence_bounded=model.comparison.evidence_bounded,
+                left_evidence_count=model.comparison.left_evidence_count,
+                right_evidence_count=model.comparison.right_evidence_count,
+            )
+        ),
+        verification=(
+            None
+            if model.verification is None
+            else VerificationAssessment(
+                outcome=model.verification.outcome,
+                stated_by_model=model.verification.stated_by_model,
+                evidence_bounded=model.verification.evidence_bounded,
+                evidence_reference_count=(
+                    model.verification.evidence_reference_count
+                ),
+            )
         ),
     )
 

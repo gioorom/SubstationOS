@@ -184,7 +184,7 @@ def test_sections_follow_the_canonical_deterministic_order():
     assert section_types == PROMPT_SECTION_ORDER
 
 
-def test_full_package_produces_nine_sections_all_enabled_when_content_exists():
+def test_full_package_produces_every_section_enabled_when_content_exists():
     candidates = (
         _entity_candidate("C-001", 100.0),
         _attribute_candidate("C-001", 40.0),
@@ -193,18 +193,24 @@ def test_full_package_produces_nine_sections_all_enabled_when_content_exists():
     package = _context_package(candidates)
     result = _build(package)
 
-    assert len(result.package.sections) == 9
-    # WARNINGS is the only section expected disabled - a full-coverage
-    # ContextPackage carries no ContextWarnings.
+    assert len(result.package.sections) == len(PROMPT_SECTION_ORDER)
+    # WARNINGS is the only *single-sided* section expected disabled - a
+    # full-coverage ContextPackage carries no ContextWarnings. The two
+    # comparison sides are always disabled here: only a comparison prompt
+    # populates them (Milestone 24.2).
     disabled = [s.section_type for s in result.package.sections if not s.enabled]
-    assert disabled == [PromptSectionType.WARNINGS]
+    assert disabled == [
+        PromptSectionType.LEFT_KNOWLEDGE,
+        PromptSectionType.RIGHT_KNOWLEDGE,
+        PromptSectionType.WARNINGS,
+    ]
 
 
-def test_empty_context_package_still_produces_all_nine_sections():
+def test_empty_context_package_still_produces_every_section():
     package = _context_package(())
     result = _build(package)
 
-    assert len(result.package.sections) == 9
+    assert len(result.package.sections) == len(PROMPT_SECTION_ORDER)
     disabled = {s.section_type for s in result.package.sections if not s.enabled}
     assert PromptSectionType.SELECTED_KNOWLEDGE in disabled
     assert PromptSectionType.EVIDENCE_REFERENCES in disabled
@@ -298,7 +304,7 @@ def test_statistics_are_internally_consistent():
     result = _build(package)
 
     statistics = result.package.statistics
-    assert statistics.section_count == 9
+    assert statistics.section_count == len(PROMPT_SECTION_ORDER)
     assert (
         statistics.enabled_section_count + statistics.disabled_section_count
         == statistics.section_count

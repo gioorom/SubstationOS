@@ -13,11 +13,20 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from app.domain.context_builder.comparison_context_models import (
+    ComparisonContextPackage,
+)
 from app.domain.context_builder.context_builder_models import ContextPackage
+from app.domain.prompt_builder.comparison_prompt_assembler import (
+    assemble_comparison_prompt_package,
+)
 from app.domain.prompt_builder.prompt_builder_factory import (
     PromptBuildRequestFactory,
 )
-from app.domain.prompt_builder.prompt_builder_models import PromptBuildResult
+from app.domain.prompt_builder.prompt_builder_models import (
+    PromptBuildResult,
+    PromptObjective,
+)
 from app.domain.prompt_builder.prompt_package_assembler import (
     assemble_prompt_package,
 )
@@ -27,10 +36,37 @@ def build_prompt_package(
     *,
     project_id: int,
     context_package: ContextPackage,
+    objective: PromptObjective = PromptObjective.DIRECT_ANSWER,
     now: datetime,
 ) -> PromptBuildResult:
+    """``objective`` selects between the fixed, versioned instruction and
+    expected-output sets Prompt Builder declares; it is never a
+    caller-supplied prompt or template. Omitting it reproduces Milestone
+    15's output exactly."""
+
     request = PromptBuildRequestFactory.create(
-        project_id=project_id, context_package=context_package
+        project_id=project_id,
+        context_package=context_package,
+        objective=objective,
     )
 
     return assemble_prompt_package(request, now=now)
+
+
+def build_comparison_prompt_package(
+    *,
+    comparison_context: ComparisonContextPackage,
+    now: datetime,
+) -> PromptBuildResult:
+    """
+    The two-sided entry point (Milestone 24.2). Takes a
+    ``ComparisonContextPackage`` rather than a single ``ContextPackage``,
+    and always composes under the ``ENGINEERING_COMPARISON`` objective -
+    the objective is not a parameter here, because a two-sided context has
+    no meaningful reading under any other one.
+
+    ``project_id`` comes from the comparison context itself, which already
+    carries the project both sides were assembled for.
+    """
+
+    return assemble_comparison_prompt_package(comparison_context, now=now)

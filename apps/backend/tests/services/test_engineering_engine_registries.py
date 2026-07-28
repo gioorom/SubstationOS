@@ -42,12 +42,22 @@ from tests.services._engineering_engine_support import (
 # --- WorkflowRegistry ------------------------------------------------------
 
 
-def test_the_composed_registry_registers_only_knowledge_query() -> None:
+# Deliberately spelled out rather than read from the registry: this is
+# the one place that asserts *which* workflows exist, so adding one must
+# be a visible, reviewed edit here.
+REGISTERED_INTENT_TYPES = (
+    EngineeringIntentType.DOCUMENT_LOOKUP,
+    EngineeringIntentType.ENGINEERING_COMPARISON,
+    EngineeringIntentType.ENGINEERING_EXPLANATION,
+    EngineeringIntentType.KNOWLEDGE_QUERY,
+    EngineeringIntentType.VERIFICATION_REQUEST,
+)
+
+
+def test_the_composed_registry_registers_exactly_the_known_workflows() -> None:
     registry = build_workflow_registry()
 
-    assert registry.registered_intent_types() == (
-        EngineeringIntentType.KNOWLEDGE_QUERY,
-    )
+    assert registry.registered_intent_types() == REGISTERED_INTENT_TYPES
 
 
 def test_resolving_a_registered_workflow_returns_its_definition() -> None:
@@ -99,7 +109,7 @@ def test_selecting_a_registered_workflow_succeeds() -> None:
     [
         intent
         for intent in EngineeringIntentType
-        if intent is not EngineeringIntentType.KNOWLEDGE_QUERY
+        if intent not in REGISTERED_INTENT_TYPES
     ],
 )
 def test_selecting_an_unregistered_workflow_yields_a_typed_failure(

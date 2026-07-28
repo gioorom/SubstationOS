@@ -18,7 +18,7 @@ from app.domain.engineering_engine.engineering_engine_models import (
     WorkflowPlan,
     WorkflowStepType,
 )
-from app.services.engineering_engine.step_handlers import WorkflowStepHandler
+from app.services.engineering_engine.step_handler import WorkflowStepHandler
 
 
 class StepHandlerRegistry:

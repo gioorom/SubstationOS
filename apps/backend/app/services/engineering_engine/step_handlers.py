@@ -1,25 +1,21 @@
 """
-Concrete step handlers (Milestone 23A) - the application-layer adapters
-between the engine and the existing services.
+Concrete step handlers for the KNOWLEDGE_QUERY workflow (Milestone 23A) -
+the application-layer adapters between the engine and the existing
+services.
 
 Every handler here exists for one of three reasons the milestone
 accepts: stable engine integration, typed inputs/outputs, or boundary
 isolation. **None recreates retrieval, context, prompt, runtime, or
 response-building logic** - each delegates to the existing service and
 maps its result into the typed execution context. The engine core knows
-none of these services; it knows only ``WorkflowStepHandler``.
-
-The handler protocol is ``async`` because one genuine dependency (the
-provider-neutral LLM Runtime) is async. Making only that one handler
-async would force the executor to special-case it.
+none of these services; it knows only the ``WorkflowStepHandler``
+contract, which lives in ``step_handler.py`` precisely so the core never
+has to import this module (or any other workflow's handlers).
 """
 
 from __future__ import annotations
 
 import random
-from datetime import datetime
-from typing import Protocol
-
 from app.application.models.llm_exceptions import LLMProviderAbstractionError
 from app.application.models.llm_invocation import (
     LLMInvocationStatus,
@@ -52,6 +48,7 @@ from app.domain.engineering_response.engineering_response_exceptions import (
 from app.domain.prompt_builder.prompt_builder_exceptions import (
     PromptBuilderError,
 )
+from app.domain.prompt_builder.prompt_builder_models import PromptObjective
 from app.domain.structured_retrieval.structured_retrieval_exceptions import (
     StructuredRetrievalError,
 )
@@ -70,45 +67,13 @@ from app.services import (
 from app.services.engineering_engine.execution_context import (
     WorkflowExecutionContext,
 )
+from app.services.engineering_engine.step_handler import (
+    BaseStepHandler,
+    StepHandlerError,
+)
 
 
-class StepHandlerError(Exception):
-    """Raised by a handler to signal a typed, stage-specific failure.
-    The executor converts it into a ``WorkflowStepFailure`` - a raw
-    provider or service exception never escapes into the engine
-    domain."""
-
-    def __init__(
-        self,
-        code: EngineeringEngineFailureCode,
-        message: str,
-        detail: str | None = None,
-    ) -> None:
-        self.code = code
-        self.message = message
-        self.detail = detail
-
-        super().__init__(message)
-
-
-class WorkflowStepHandler(Protocol):
-    """The one abstraction the engine core depends on."""
-
-    def supports(self, step_type: WorkflowStepType) -> bool: ...
-
-    async def execute(
-        self, step: WorkflowStep, context: WorkflowExecutionContext
-    ) -> WorkflowExecutionContext: ...
-
-
-class _BaseHandler:
-    step_type: WorkflowStepType
-
-    def supports(self, step_type: WorkflowStepType) -> bool:
-        return step_type is self.step_type
-
-
-class ValidateExecutionRequestStepHandler(_BaseHandler):
+class ValidateExecutionRequestStepHandler(BaseStepHandler):
     """Re-validates the execution request inside the plan, so the
     validation is recorded as a real, timed, auditable step rather than
     only as a precondition the service checked silently."""
@@ -129,7 +94,7 @@ class ValidateExecutionRequestStepHandler(_BaseHandler):
         return context
 
 
-class BuildRetrievalRequestStepHandler(_BaseHandler):
+class BuildRetrievalRequestStepHandler(BaseStepHandler):
     """Maps the engine's own retrieval configuration onto the existing
     ``StructuredRetrievalRequestFactory`` - never a second retrieval
     request model of its own."""
@@ -179,7 +144,7 @@ class BuildRetrievalRequestStepHandler(_BaseHandler):
         )
 
 
-class ExecuteRetrievalStepHandler(_BaseHandler):
+class ExecuteRetrievalStepHandler(BaseStepHandler):
     """Delegates to the existing ``structured_retrieval_service`` through
     the existing ``GraphQueryRepository`` port - Graph Query is reached
     only through Structured Retrieval, never separately."""
@@ -210,7 +175,7 @@ class ExecuteRetrievalStepHandler(_BaseHandler):
         )
 
 
-class BuildContextStepHandler(_BaseHandler):
+class BuildContextStepHandler(BaseStepHandler):
     step_type = WorkflowStepType.BUILD_CONTEXT
 
     async def execute(
@@ -239,8 +204,28 @@ class BuildContextStepHandler(_BaseHandler):
         )
 
 
-class BuildPromptStepHandler(_BaseHandler):
-    step_type = WorkflowStepType.BUILD_PROMPT
+class BuildPromptStepHandler(BaseStepHandler):
+    """
+    Delegates to the existing Prompt Builder. Serves **every** workflow
+    that needs a prompt: the step type it answers to and the
+    ``PromptObjective`` it requests are supplied at composition, so a
+    workflow wanting a different kind of answer registers this same class
+    again rather than duplicating it (Milestone 23B.2).
+
+    The objective is deliberately *not* derived from the intent type or
+    the workflow type here - that would put workflow branching inside a
+    handler. The composition root states it once, declaratively, next to
+    the workflow that wants it.
+    """
+
+    def __init__(
+        self,
+        *,
+        step_type: WorkflowStepType = WorkflowStepType.BUILD_PROMPT,
+        objective: PromptObjective = PromptObjective.DIRECT_ANSWER,
+    ) -> None:
+        self.step_type = step_type
+        self._objective = objective
 
     async def execute(
         self, step: WorkflowStep, context: WorkflowExecutionContext
@@ -249,6 +234,7 @@ class BuildPromptStepHandler(_BaseHandler):
             result = prompt_builder_service.build_prompt_package(
                 project_id=context.execution_request.project_id,
                 context_package=context.context_package,
+                objective=self._objective,
                 now=context.execution_request.executed_at,
             )
         except PromptBuilderError as error:
@@ -263,7 +249,7 @@ class BuildPromptStepHandler(_BaseHandler):
         )
 
 
-class RuntimeInvocationStepHandler(_BaseHandler):
+class RuntimeInvocationStepHandler(BaseStepHandler):
     """
     Invokes the existing provider-neutral LLM Runtime. The engine never
     touches a provider SDK, never selects a provider itself, and never
@@ -358,7 +344,7 @@ class RuntimeInvocationStepHandler(_BaseHandler):
         )
 
 
-class EngineeringResponseBuildStepHandler(_BaseHandler):
+class EngineeringResponseBuildStepHandler(BaseStepHandler):
     """Delegates to the existing Engineering Response service - the one
     seam allowed to translate an ``LLMResponseEnvelope`` into the domain
     (ADR-0015). The engine never rebuilds that translation."""
@@ -391,7 +377,7 @@ class EngineeringResponseBuildStepHandler(_BaseHandler):
         )
 
 
-class ValidateEngineeringResponseStepHandler(_BaseHandler):
+class ValidateEngineeringResponseStepHandler(BaseStepHandler):
     """Reuses Engineering Response's *own* self-validation result rather
     than re-deriving it - the engine never second-guesses a downstream
     context's validation."""
@@ -413,7 +399,7 @@ class ValidateEngineeringResponseStepHandler(_BaseHandler):
         return context
 
 
-class PrepareConversationUpdateStepHandler(_BaseHandler):
+class PrepareConversationUpdateStepHandler(BaseStepHandler):
     """Produces an explicit *proposal* only - the engine never mutates
     ``Conversation`` (ADR-0020's aggregate update policy)."""
 
@@ -441,7 +427,7 @@ class PrepareConversationUpdateStepHandler(_BaseHandler):
         )
 
 
-class PrepareSessionUpdateStepHandler(_BaseHandler):
+class PrepareSessionUpdateStepHandler(BaseStepHandler):
     """Produces an explicit *proposal* only - the engine never mutates
     ``EngineeringSession``."""
 

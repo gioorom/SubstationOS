@@ -32,3 +32,17 @@ class ProjectIdMismatchError(EngineeringResponseError):
             f"does not match the supplied {source_name}'s project id "
             f"{other_project_id}."
         )
+
+
+class BlankRequestCorrelationIdError(EngineeringResponseError):
+    """A response must always be traceable back to the execution that
+    produced it. A ``DETERMINISTIC_RETRIEVAL`` response has no provider
+    call and therefore no provider-assigned identifier to fall back on,
+    so the caller's own correlation id is required rather than
+    defaulted."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "A deterministic-retrieval response requires a non-blank "
+            "request_correlation_id."
+        )

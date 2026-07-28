@@ -145,7 +145,7 @@ def test_build_endpoint_assembles_a_prompt_package(api_client: TestClient) -> No
     assert body["project_id"] == project["id"]
     prompt = body["package"]
     assert prompt["project_id"] == project["id"]
-    assert len(prompt["sections"]) == 9
+    assert len(prompt["sections"]) == 11
     assert prompt["retrieved_knowledge"]["enabled"] is True
     assert len(prompt["constraints"]) == 5
     assert len(prompt["instructions"]) == 3

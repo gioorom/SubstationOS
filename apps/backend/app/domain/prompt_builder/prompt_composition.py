@@ -9,7 +9,12 @@ dedicated, deterministic function, never an ad hoc string join scattered
 across the codebase. A section with nothing meaningful to contribute is
 still constructed, in its fixed position, with empty content and
 ``enabled=False`` - ``PromptPackage.sections`` always has the same
-nine-section shape regardless of input.
+eleven-section shape regardless of input.
+
+``LEFT_KNOWLEDGE``/``RIGHT_KNOWLEDGE`` are populated only by the
+comparison composition (``comparison_prompt_composition.py``); this
+module always constructs them empty and disabled, which is why every
+prompt keeps the same shape whether or not it compares anything.
 
 O(n) in the number of selected candidates and warnings on the input
 ``ContextPackage`` - one pass to build ``SELECTED_KNOWLEDGE``, one pass
@@ -20,10 +25,16 @@ other section is O(1).
 from __future__ import annotations
 
 from app.domain.context_builder.context_builder_models import ContextPackage
-from app.domain.prompt_builder.composition_policy import CONSTRAINTS, INSTRUCTIONS
+from app.domain.prompt_builder.composition_policy import (
+    CONSTRAINTS,
+    EXPECTED_OUTPUT_BY_OBJECTIVE,
+    INSTRUCTIONS_BY_OBJECTIVE,
+)
 from app.domain.prompt_builder.prompt_builder_models import (
     PromptAssemblyResult,
     PromptEvidenceReference,
+    PromptInstruction,
+    PromptObjective,
     PromptSection,
     PromptSectionType,
 )
@@ -39,6 +50,8 @@ PROMPT_SECTION_ORDER: tuple[PromptSectionType, ...] = (
     PromptSectionType.SYSTEM_CONTEXT,
     PromptSectionType.ENGINEERING_CONTEXT,
     PromptSectionType.SELECTED_KNOWLEDGE,
+    PromptSectionType.LEFT_KNOWLEDGE,
+    PromptSectionType.RIGHT_KNOWLEDGE,
     PromptSectionType.EVIDENCE_REFERENCES,
     PromptSectionType.CONSTRAINTS,
     PromptSectionType.FORMATTING_RULES,
@@ -52,7 +65,15 @@ _SECTION_PRIORITY: dict[PromptSectionType, int] = {
 }
 
 
-def _section(section_type: PromptSectionType, content: tuple[str, ...]) -> PromptSection:
+def section(
+    section_type: PromptSectionType, content: tuple[str, ...]
+) -> PromptSection:
+    """Constructs one section in its fixed canonical position, enabled
+    exactly when it has content. Public because the comparison
+    composition (``comparison_prompt_composition.py``) must place
+    sections identically - two copies of this rule could drift and break
+    the "always the same shape" invariant."""
+
     return PromptSection(
         section_type=section_type,
         priority=_SECTION_PRIORITY[section_type],
@@ -72,7 +93,7 @@ def _build_system_context() -> PromptSection:
         "explicitly supplied below.",
     )
 
-    return _section(PromptSectionType.SYSTEM_CONTEXT, content)
+    return section(PromptSectionType.SYSTEM_CONTEXT, content)
 
 
 def _build_engineering_context(context_package: ContextPackage) -> PromptSection:
@@ -87,10 +108,10 @@ def _build_engineering_context(context_package: ContextPackage) -> PromptSection
         f"{context_package.coverage.overall_completeness:.2f}",
     )
 
-    return _section(PromptSectionType.ENGINEERING_CONTEXT, content)
+    return section(PromptSectionType.ENGINEERING_CONTEXT, content)
 
 
-def _describe_candidate(candidate: KnowledgeCandidate) -> str:
+def describe_candidate(candidate: KnowledgeCandidate) -> str:
     if candidate.candidate_kind is KnowledgeCandidateKind.ATTRIBUTE:
         reference = candidate.primary_reference
         attribute = candidate.matched_attributes[0]
@@ -130,11 +151,11 @@ def _build_selected_knowledge(
     context_package: ContextPackage,
 ) -> PromptSection:
     content = tuple(
-        _describe_candidate(candidate)
+        describe_candidate(candidate)
         for candidate in context_package.selected_candidates
     )
 
-    return _section(PromptSectionType.SELECTED_KNOWLEDGE, content)
+    return section(PromptSectionType.SELECTED_KNOWLEDGE, content)
 
 
 def _build_references(
@@ -159,31 +180,28 @@ def _build_evidence_references(
         for reference in references
     )
 
-    return _section(PromptSectionType.EVIDENCE_REFERENCES, content)
+    return section(PromptSectionType.EVIDENCE_REFERENCES, content)
 
 
 def _build_constraints_section() -> PromptSection:
     content = tuple(constraint.description for constraint in CONSTRAINTS)
 
-    return _section(PromptSectionType.CONSTRAINTS, content)
+    return section(PromptSectionType.CONSTRAINTS, content)
 
 
-def _build_formatting_rules_section() -> PromptSection:
-    content = tuple(instruction.description for instruction in INSTRUCTIONS)
+def _build_formatting_rules_section(
+    instructions: tuple[PromptInstruction, ...],
+) -> PromptSection:
+    content = tuple(instruction.description for instruction in instructions)
 
-    return _section(PromptSectionType.FORMATTING_RULES, content)
+    return section(PromptSectionType.FORMATTING_RULES, content)
 
 
-def _build_expected_output() -> PromptSection:
-    content = (
-        "Provide a clear, structured answer using only the evidence "
-        "supplied above.",
-        "Cite each claim by its evidence reference candidate id.",
-        "If the supplied evidence does not fully answer the question, "
-        "state explicitly what is missing.",
+def _build_expected_output(objective: PromptObjective) -> PromptSection:
+    return section(
+        PromptSectionType.EXPECTED_OUTPUT,
+        EXPECTED_OUTPUT_BY_OBJECTIVE[objective],
     )
-
-    return _section(PromptSectionType.EXPECTED_OUTPUT, content)
 
 
 def _build_warnings_section(context_package: ContextPackage) -> PromptSection:
@@ -192,7 +210,7 @@ def _build_warnings_section(context_package: ContextPackage) -> PromptSection:
         for warning in context_package.warnings
     )
 
-    return _section(PromptSectionType.WARNINGS, content)
+    return section(PromptSectionType.WARNINGS, content)
 
 
 def _build_metadata_section(context_package: ContextPackage) -> PromptSection:
@@ -204,25 +222,46 @@ def _build_metadata_section(context_package: ContextPackage) -> PromptSection:
         f"{metadata.retrieval_policy_version or 'unknown'}",
     )
 
-    return _section(PromptSectionType.METADATA, content)
+    return section(PromptSectionType.METADATA, content)
 
 
-def compose_sections(context_package: ContextPackage) -> PromptAssemblyResult:
+def compose_sections(
+    context_package: ContextPackage,
+    *,
+    objective: PromptObjective = PromptObjective.DIRECT_ANSWER,
+) -> PromptAssemblyResult:
+    """
+    ``objective`` selects the fixed instruction and expected-output sets
+    (``composition_policy.py``) and nothing else: every other section is
+    composed identically for every objective, from the same
+    ``ContextPackage``, by the same functions. The default reproduces
+    Milestone 15's output exactly.
+    """
+
+    instructions = INSTRUCTIONS_BY_OBJECTIVE[objective]
+
     system_context = _build_system_context()
     engineering_context = _build_engineering_context(context_package)
     selected_knowledge = _build_selected_knowledge(context_package)
     references = _build_references(context_package)
     evidence_references = _build_evidence_references(references)
     constraints_section = _build_constraints_section()
-    formatting_rules_section = _build_formatting_rules_section()
-    expected_output = _build_expected_output()
+    formatting_rules_section = _build_formatting_rules_section(instructions)
+    expected_output = _build_expected_output(objective)
     warnings_section = _build_warnings_section(context_package)
     metadata_section = _build_metadata_section(context_package)
+
+    # Always constructed, empty and disabled: only a comparison prompt
+    # populates them, and every PromptPackage keeps the same shape.
+    left_knowledge = section(PromptSectionType.LEFT_KNOWLEDGE, ())
+    right_knowledge = section(PromptSectionType.RIGHT_KNOWLEDGE, ())
 
     sections = (
         system_context,
         engineering_context,
         selected_knowledge,
+        left_knowledge,
+        right_knowledge,
         evidence_references,
         constraints_section,
         formatting_rules_section,
@@ -238,6 +277,6 @@ def compose_sections(context_package: ContextPackage) -> PromptAssemblyResult:
         retrieved_knowledge=selected_knowledge,
         expected_output=expected_output,
         constraints=CONSTRAINTS,
-        instructions=INSTRUCTIONS,
+        instructions=instructions,
         references=references,
     )
