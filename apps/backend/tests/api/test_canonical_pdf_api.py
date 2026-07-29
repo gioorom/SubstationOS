@@ -45,7 +45,7 @@ def _upload(
 
     assert response.status_code == 200
 
-    return response.json()
+    return response.json()["document"]
 
 
 def _ingest(api_client: TestClient, document_id: int) -> None:

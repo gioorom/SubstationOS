@@ -93,7 +93,7 @@ def test_uploading_a_pdf_runs_the_whole_pipeline(
     )
 
     assert response.status_code == 200
-    document_id = response.json()["id"]
+    document_id = response.json()["document"]["id"]
 
     assert (
         db_session.query(DocumentIngestionJob)
@@ -140,7 +140,7 @@ def test_the_pipeline_delivers_text_to_the_knowledge_graph(
     response = _upload(
         api_client, content=SUBSTATION_PAGE, project_id=project["id"]
     )
-    knowledge_graph = response.json()["knowledge_graph"]
+    knowledge_graph = response.json()["analysis"]
 
     if knowledge_graph["status"] == "completed":
         assert knowledge_graph["failure"] is None
@@ -158,7 +158,7 @@ def test_the_uploaded_document_is_readable_through_the_canonical_endpoints(
     project = _project(api_client)
     document_id = _upload(
         api_client, content=SUBSTATION_PAGE, project_id=project["id"]
-    ).json()["id"]
+    ).json()["document"]["id"]
 
     representation = api_client.get(
         f"/documents/{document_id}/canonical-representation"
@@ -180,7 +180,7 @@ def test_a_canonical_library_upload_skips_the_knowledge_graph(
 
     response = _upload(api_client, content=SUBSTATION_PAGE)
 
-    assert response.json()["knowledge_graph"]["status"] == "skipped"
+    assert response.json()["analysis"]["status"] == "skipped"
     assert (
         db_session.query(CanonicalPdfRepresentation).count() == 0
     )
@@ -200,13 +200,13 @@ def test_re_uploading_identical_bytes_reuses_the_canonical_artefacts(
 
     first = _upload(
         api_client, content=SUBSTATION_PAGE, project_id=project["id"]
-    ).json()
+    ).json()["document"]
     second = _upload(
         api_client,
         content=SUBSTATION_PAGE,
         project_id=project["id"],
         filename="copy.pdf",
-    ).json()
+    ).json()["document"]
 
     for document_id in (first["id"], second["id"]):
         assert (
@@ -226,7 +226,7 @@ def test_canonicalising_again_after_upload_reuses_what_upload_built(
     project = _project(api_client)
     document_id = _upload(
         api_client, content=SUBSTATION_PAGE, project_id=project["id"]
-    ).json()["id"]
+    ).json()["document"]["id"]
 
     response = api_client.post(
         f"/documents/{document_id}/canonical-representation"
@@ -253,7 +253,7 @@ def test_a_non_pdf_upload_reports_unsupported_file_type(
         filename="layout.dwg",
         mime_type="image/vnd.dwg",
     )
-    knowledge_graph = response.json()["knowledge_graph"]
+    knowledge_graph = response.json()["analysis"]
 
     assert response.status_code == 200
     assert knowledge_graph["status"] == "unsupported_file_type"
@@ -267,7 +267,7 @@ def test_a_pdf_with_no_text_reports_no_text(api_client: TestClient) -> None:
         api_client, content=empty_page_only_pdf(), project_id=project["id"]
     )
 
-    assert response.json()["knowledge_graph"]["status"] == "no_text"
+    assert response.json()["analysis"]["status"] == "no_text"
 
 
 def test_a_corrupted_pdf_reports_failed_and_names_the_stage(
@@ -282,7 +282,7 @@ def test_a_corrupted_pdf_reports_failed_and_names_the_stage(
     response = _upload(
         api_client, content=corrupted_pdf(), project_id=project["id"]
     )
-    knowledge_graph = response.json()["knowledge_graph"]
+    knowledge_graph = response.json()["analysis"]
 
     assert knowledge_graph["status"] == "failed"
     assert knowledge_graph["failure"]["stage"] == "canonical_representation"
@@ -299,7 +299,7 @@ def test_an_encrypted_pdf_names_its_own_cause(
     )
 
     assert (
-        response.json()["knowledge_graph"]["failure"]["code"]
+        response.json()["analysis"]["failure"]["code"]
         == "encrypted_document"
     )
 
@@ -318,15 +318,15 @@ def test_a_pipeline_failure_never_fails_the_upload(
     )
 
     assert response.status_code == 200
-    assert response.json()["id"] is not None
-    assert response.json()["file_path"]
+    assert response.json()["document"]["id"] is not None
+    assert response.json()["document"]["content_available"] is True
 
 
 def test_the_response_keeps_its_long_standing_shape(
     api_client: TestClient
 ) -> None:
-    """A client reading ``status`` and ``entities_found`` sees exactly
-    what it saw before Milestone 26.2."""
+    """The governed upload contract: a document, the scope it was
+    accepted under, what the analysis made of it, and any warnings."""
 
     project = _project(api_client)
 
@@ -334,24 +334,20 @@ def test_the_response_keeps_its_long_standing_shape(
         api_client, content=SUBSTATION_PAGE, project_id=project["id"]
     ).json()
 
-    assert set(body) == {
-        "id",
-        "project_id",
-        "filename",
-        "file_path",
-        "file_format",
-        "category",
-        "revision",
-        "project_name",
-        "scope",
-        "uploaded_at",
-        "knowledge_graph",
-    }
-    assert set(body["knowledge_graph"]) == {
+    assert set(body) == {"document", "scope", "analysis", "warnings"}
+
+    # Milestone 30.1.3 replaced the ad-hoc dictionary with a declared
+    # model. The analysis block kept its vocabulary exactly - a client
+    # reading `status` and `entities_found` still sees what it saw before
+    # Milestone 26.2 - and moved under a name that says what it is.
+    assert set(body["analysis"]) == {
         "status",
         "entities_found",
         "failure",
     }
+
+    # The storage location left the contract in the same milestone.
+    assert "file_path" not in body["document"]
 
 
 # --- Engineering symbols survive the migration ----------------------------------
@@ -370,7 +366,7 @@ def test_engineering_symbols_survive_the_consolidated_path(
     project = _project(api_client)
     document_id = _upload(
         api_client, content=SUBSTATION_PAGE, project_id=project["id"]
-    ).json()["id"]
+    ).json()["document"]["id"]
 
     body = api_client.get(
         f"/documents/{document_id}/canonical-text"

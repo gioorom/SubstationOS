@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from app.domain.project.project_models import Project
+from app.domain.project.project_query import ProjectQuery
+from app.domain.shared_kernel.pagination import Page
 
 
 class ProjectRepository(ABC):
@@ -40,6 +42,22 @@ class ProjectRepository(ABC):
         Return every project, ordered by creation time descending. Soft
         deleted projects are excluded unless ``include_deleted`` is
         ``True``.
+
+        Unbounded, and therefore **not** what the public list endpoint
+        uses - see :meth:`list_page`. Kept for the internal callers that
+        legitimately need the whole set.
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_page(self, query: ProjectQuery) -> Page[Project]:
+        """
+        Return the requested page of projects and the total number
+        matching the query.
+
+        Filtering, ordering, offset, limit and count are the adapter's
+        work; the caller never receives more rows than it asked for.
         """
 
         raise NotImplementedError

@@ -7,6 +7,7 @@ from app.domain.project.project_models import (
     UNVERSIONED_CANONICAL_DOMAIN,
     Project,
 )
+from app.domain.project.project_status import ProjectStatus
 from app.domain.project.project_validator import ProjectValidator
 
 
@@ -31,6 +32,8 @@ class ProjectFactory:
         description: str | None = None,
         canonical_domain_version: str = UNVERSIONED_CANONICAL_DOMAIN,
         created_by: str | None = None,
+        status: ProjectStatus = ProjectStatus.PLANNING,
+        voltage_level: str | None = None,
     ) -> Project:
         ProjectValidator.validate_name(name)
         ProjectValidator.validate_code(code)
@@ -49,4 +52,6 @@ class ProjectFactory:
             created_by=created_by,
             created_at=created_at,
             updated_at=created_at,
+            status=status,
+            voltage_level=voltage_level,
         )

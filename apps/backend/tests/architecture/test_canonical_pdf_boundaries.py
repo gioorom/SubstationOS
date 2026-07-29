@@ -503,6 +503,13 @@ def test_no_context_outside_canonicalisation_consumes_stored_pdf_bytes(
         "app/services/document_ingestion_service.py",
         "app/services/canonical_pdf_service.py",
         "app/services/document_pipeline_service.py",
+        # Milestone 30.1.3: the governed download. It resolves a document
+        # id to an opaque storage reference through the registry and hands
+        # that reference straight back to the content port - it parses no
+        # path, joins no root and accepts nothing from a caller but an
+        # integer. Serving stored bytes is the fourth job that genuinely
+        # needs them.
+        "app/services/document_registry_service.py",
         "app/routers/documents.py",
         "app/routers/document_ingestion.py",
         "app/routers/canonical_pdf.py",

@@ -302,7 +302,7 @@ def _upload_document(
     )
     assert response.status_code == 200
 
-    return response.json()
+    return response.json()["document"]
 
 
 def _register_mention(

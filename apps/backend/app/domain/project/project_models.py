@@ -11,6 +11,7 @@ from app.domain.project.project_lifecycle import (
     ProjectLifecycleState,
     is_transition_valid,
 )
+from app.domain.project.project_status import ProjectStatus
 
 # The Canonical Domain (app/domain/ontology/**) has no version scheme yet
 # (docs/architecture/ARCHITECTURE_FREEZE_V1_CHECKLIST.md, item 7). This is
@@ -34,6 +35,12 @@ class Project:
     lifecycle transition and metadata change returns a new ``Project``
     instance rather than mutating this one in place. ``id`` is ``None``
     for a project that has not yet been persisted.
+
+    ``status`` and ``voltage_level`` joined this aggregate in Milestone
+    30.1.3. They were persisted from the beginning but had no domain
+    home, so the API layer re-read the ORM row to build a response - the
+    one place a router still touched persistence directly. They are here
+    now, and that read is gone.
     """
 
     id: int | None
@@ -51,6 +58,15 @@ class Project:
     updated_at: datetime
     archived_at: datetime | None = None
     deleted_at: datetime | None = None
+
+    #: The delivery phase of the installation. Orthogonal to
+    #: ``lifecycle_state`` - see ``project_status``.
+    status: ProjectStatus = ProjectStatus.PLANNING
+
+    #: Free text, as engineers write it ("150/20 kV"). Deliberately not
+    #: parsed into a quantity: this is a label on a commessa, not a rated
+    #: value of a piece of equipment.
+    voltage_level: str | None = None
 
     @property
     def traceability_reference(self) -> str:
@@ -148,6 +164,8 @@ class Project:
         country: str | None = None,
         location: str | None = None,
         description: str | None = None,
+        status: ProjectStatus | None = None,
+        voltage_level: str | None = None,
     ) -> Project:
         """
         Returns a copy with the given fields overwritten. Fields left as
@@ -155,10 +173,22 @@ class Project:
         replace-with-null. ``code`` is never accepted here: once
         published, a project's code is a contract (CLAUDE.md §16) and is
         not renamed through a metadata update.
+
+        ``status`` moves the installation's delivery phase and is
+        deliberately free: the works can be re-planned, and no transition
+        table constrains them. ``lifecycle_state`` is the opposite - it
+        moves only through :meth:`activate`, :meth:`archive`,
+        :meth:`restore` and :meth:`mark_deleted`, each validated.
         """
 
         return replace(
             self,
+            status=status if status is not None else self.status,
+            voltage_level=(
+                voltage_level
+                if voltage_level is not None
+                else self.voltage_level
+            ),
             name=name if name is not None else self.name,
             customer=(
                 customer if customer is not None else self.customer

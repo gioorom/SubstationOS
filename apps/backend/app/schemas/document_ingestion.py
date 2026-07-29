@@ -40,12 +40,20 @@ class IngestionFailureRead(BaseModel):
 
 
 class DocumentContentIdentityRead(BaseModel):
-    """The bytes' identity at ingestion time (Milestone 25.2).
+    """
+    The bytes' identity at ingestion time (Milestone 25.2).
 
     Identical checksums across two documents are reported and nothing is
-    concluded from them - this is identity, not deduplication."""
+    concluded from them - this is identity, not deduplication.
 
-    storage_reference: str
+    ``storage_reference`` was removed in Milestone 30.1.3. It is where
+    the bytes are, which is private backend state, and it was leaving
+    through this schema - the same defect as ``file_path`` on the
+    document list, under a different name. The checksum identifies the
+    bytes without saying where they live, which is what a caller
+    actually needs.
+    """
+
     checksum_algorithm: str
     checksum: str
     size_bytes: int

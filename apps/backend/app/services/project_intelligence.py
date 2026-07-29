@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 
 from app.models.document import Document
-from app.models.project import Project
 from app.schemas.project_intelligence import (
     DocumentationIntelligence,
     IssuesIntelligence,
@@ -101,11 +100,18 @@ def calculate_next_action(
 
 def build_project_intelligence(
     db: Session,
-    project: Project,
+    project_id: int,
 ) -> ProjectIntelligenceResponse:
+    """
+    Takes a project **id**, not an ORM record: the caller has already
+    confirmed the project exists through the repository, and handing an
+    ORM object across this boundary was the last reason the projects
+    router imported one.
+    """
+
     document_count = (
         db.query(Document)
-        .filter(Document.project_id == project.id)
+        .filter(Document.project_id == project_id)
         .count()
     )
 
@@ -139,7 +145,7 @@ def build_project_intelligence(
     )
 
     return ProjectIntelligenceResponse(
-        project_id=project.id,
+        project_id=project_id,
         health_score=health_score,
         risk_level=calculate_risk_level(
             health_score

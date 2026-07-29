@@ -313,6 +313,10 @@ def test_no_other_context_gained_storage_access() -> None:
         # never calls them itself (asserted in
         # tests/architecture/test_document_pipeline_boundaries.py).
         "app/services/document_pipeline_service.py",
+        # Milestone 30.1.3: the governed download and the
+        # content_available flag on a document's detail. Both go through
+        # the two ports and neither parses, joins or discloses a path.
+        "app/services/document_registry_service.py",
         "app/routers/documents.py",
         "app/routers/document_ingestion.py",
         "app/routers/canonical_pdf.py",

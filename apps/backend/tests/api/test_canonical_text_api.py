@@ -31,7 +31,7 @@ def _upload(api_client: TestClient, content: bytes) -> dict:
 
     assert response.status_code == 200
 
-    return response.json()
+    return response.json()["document"]
 
 
 def _canonicalized(api_client: TestClient, content: bytes) -> dict:

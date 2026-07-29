@@ -21,8 +21,11 @@ from app.domain.project.project_models import (
     UNVERSIONED_CANONICAL_DOMAIN,
     Project,
 )
+from app.domain.project.project_query import ProjectQuery
 from app.domain.project.project_repository import ProjectRepository
+from app.domain.project.project_status import ProjectStatus
 from app.domain.project.project_validator import ProjectValidator
+from app.domain.shared_kernel.pagination import Page
 
 
 def _require_project(
@@ -50,6 +53,8 @@ def create_project(
     description: str | None = None,
     canonical_domain_version: str = UNVERSIONED_CANONICAL_DOMAIN,
     created_by: str | None = None,
+    status: ProjectStatus = ProjectStatus.PLANNING,
+    voltage_level: str | None = None,
 ) -> Project:
     """
     Creates a new Project in the Draft state.
@@ -76,6 +81,8 @@ def create_project(
         description=description,
         canonical_domain_version=canonical_domain_version,
         created_by=created_by,
+        status=status,
+        voltage_level=voltage_level,
     )
 
     return repository.save(project)
@@ -147,6 +154,8 @@ def update_project_metadata(
     country: str | None = None,
     location: str | None = None,
     description: str | None = None,
+    status: ProjectStatus | None = None,
+    voltage_level: str | None = None,
 ) -> Project:
     """
     Updates descriptive metadata on a mutable (Draft or Active) Project.
@@ -174,6 +183,8 @@ def update_project_metadata(
         country=country,
         location=location,
         description=description,
+        status=status,
+        voltage_level=voltage_level,
     )
 
     return repository.save(updated)
@@ -191,4 +202,23 @@ def list_projects(
     *,
     include_deleted: bool = False,
 ) -> list[Project]:
+    """
+    Every project. Unbounded, and therefore not what the public list
+    endpoint uses - see :func:`list_projects_page`.
+    """
+
     return repository.list_all(include_deleted=include_deleted)
+
+
+def list_projects_page(
+    repository: ProjectRepository,
+    query: ProjectQuery,
+) -> Page[Project]:
+    """
+    One governed page of the project registry.
+
+    The query is already valid by construction: an out-of-range page size
+    could not have been built, so nothing is re-checked here.
+    """
+
+    return repository.list_page(query)

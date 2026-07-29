@@ -96,7 +96,7 @@ def test_list_projects_excludes_deleted_by_default(
 
     response = api_client.get("/projects/")
 
-    codes = {project["code"] for project in response.json()}
+    codes = {project["code"] for project in response.json()["items"]}
 
     assert kept["code"] in codes
     assert removed["code"] not in codes
@@ -113,7 +113,7 @@ def test_list_projects_includes_deleted_when_requested(
 
     response = api_client.get("/projects/?include_deleted=true")
 
-    codes = {project["code"] for project in response.json()}
+    codes = {project["code"] for project in response.json()["items"]}
 
     assert removed["code"] in codes
 

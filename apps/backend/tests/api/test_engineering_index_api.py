@@ -45,7 +45,7 @@ def _upload_document(
 
     assert response.status_code == 200
 
-    return response.json()
+    return response.json()["document"]
 
 
 def test_create_index_entry_succeeds_for_a_project_scoped_document(
@@ -402,7 +402,7 @@ def test_clear_document_index_removes_entries_but_keeps_the_document(
         params={"project_id": project["id"]},
     )
 
-    assert [d["id"] for d in documents.json()] == [document["id"]]
+    assert [d["id"] for d in documents.json()["items"]] == [document["id"]]
 
 
 def test_clear_document_index_does_not_affect_a_different_project(

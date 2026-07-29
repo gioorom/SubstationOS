@@ -176,6 +176,52 @@ class FakeProjectRepository(ProjectRepository):
     def list_all(self, *, include_deleted: bool = False):
         raise NotImplementedError
 
+    def list_page(self, query):
+        """
+        In-memory paging. Legitimate here precisely because it is a fake:
+        the SQLAlchemy adapter must page in the database, and an
+        architecture test holds it to that.
+        """
+
+        from app.domain.shared_kernel.pagination import Page
+
+        projects = self.list_all(include_deleted=query.include_deleted)
+
+        if query.lifecycle_state is not None:
+            projects = [
+                project
+                for project in projects
+                if project.lifecycle_state is query.lifecycle_state
+            ]
+
+        if query.status is not None:
+            projects = [
+                project
+                for project in projects
+                if project.status is query.status
+            ]
+
+        if query.search is not None:
+            needle = query.search.value.lower()
+
+            projects = [
+                project
+                for project in projects
+                if needle in project.name.lower()
+                or needle in project.code.lower()
+                or needle in project.customer.lower()
+                or needle in (project.location or "").lower()
+            ]
+
+        start = query.page.offset
+
+        return Page.of(
+            tuple(projects[start : start + query.page.limit]),
+            total=len(projects),
+            request=query.page,
+        )
+
+
 
 def _evidence() -> tuple[EvidenceReference, ...]:
     return (

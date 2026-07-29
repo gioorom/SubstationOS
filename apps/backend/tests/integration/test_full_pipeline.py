@@ -59,7 +59,7 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
             )
         },
         data={"scope": "project", "project_id": str(project["id"])},
-    ).json()
+    ).json()["document"]
 
     # 3. Engineering Index
     cable_entry = api_client.post(

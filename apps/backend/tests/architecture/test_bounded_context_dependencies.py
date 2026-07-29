@@ -80,6 +80,17 @@ def test_domain_layer_does_not_import_persistence_models() -> None:
 # foundation every context may depend on.
 ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
     "project": frozenset(),
+    # The Shared Kernel depends on nothing, by definition. Listed as a
+    # source (with an empty allowed set) as well as exempted as a target,
+    # so a future import *out* of it is caught.
+    "shared_kernel": frozenset(),
+    # The Document Registry (Milestone 30.1.3) is the registry read model
+    # - which documents exist and how one is found. It depends on Project
+    # for DocumentScope, the same foundation every context may use, and
+    # on nothing else. It never imports document_identity: content is
+    # reached through that context's ports, wired by the application
+    # layer, not by a domain import.
+    "document_registry": frozenset({"project"}),
     "engineering_index": frozenset({"project"}),
     "proposed_claims": frozenset({"project", "engineering_index"}),
     "review_workflow": frozenset({"project", "proposed_claims"}),
@@ -243,7 +254,15 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
 
 # Contexts outside app/domain/ontology - not part of the knowledge
 # pipeline's dependency-order table, exempt from it.
-_EXEMPT_DOMAIN_PACKAGES = frozenset({"ontology"})
+# ``ontology`` is the Canonical Domain, which every context instantiates.
+# ``shared_kernel`` (Milestone 30.1.3) is the DDD Shared Kernel: concepts
+# more than one context legitimately shares, where duplicating them would
+# create two definitions of the same idea. It holds pagination and
+# nothing else, it depends on no other context, and its own module
+# docstring states the (deliberately high) bar for membership. Exempting
+# it here rather than adding it to every context's allow-list keeps the
+# pipeline dependency graph readable - it is a kernel, not a stage.
+_EXEMPT_DOMAIN_PACKAGES = frozenset({"ontology", "shared_kernel"})
 
 
 def _domain_context_of(module: str) -> str | None:

@@ -40,7 +40,7 @@ def _upload(api_client: TestClient, project_id: int, filename: str) -> dict:
     )
     assert response.status_code == 200
 
-    return response.json()
+    return response.json()["document"]
 
 
 def _ingest(api_client: TestClient, document_id: int):

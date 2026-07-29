@@ -45,7 +45,7 @@ def test_an_uploaded_pdf_is_stored_as_a_pdf(api_client: TestClient) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["file_format"] == DocumentFormat.PDF
+    assert response.json()["document"]["file_format"] == DocumentFormat.PDF
 
 
 def test_an_uploaded_drawing_is_stored_as_a_drawing(
@@ -58,7 +58,7 @@ def test_an_uploaded_drawing_is_stored_as_a_drawing(
         mime_type="application/octet-stream",
     )
 
-    assert response.json()["file_format"] == DocumentFormat.DWG
+    assert response.json()["document"]["file_format"] == DocumentFormat.DWG
 
 
 def test_an_uploaded_photo_is_stored_as_an_image(
@@ -71,7 +71,7 @@ def test_an_uploaded_photo_is_stored_as_an_image(
         mime_type="image/png",
     )
 
-    assert response.json()["file_format"] == DocumentFormat.IMAGE
+    assert response.json()["document"]["file_format"] == DocumentFormat.IMAGE
 
 
 def test_the_bytes_overrule_the_declared_type_and_the_extension(
@@ -87,7 +87,7 @@ def test_the_bytes_overrule_the_declared_type_and_the_extension(
         mime_type="image/vnd.dwg",
     )
 
-    assert response.json()["file_format"] == DocumentFormat.PDF
+    assert response.json()["document"]["file_format"] == DocumentFormat.PDF
 
 
 def test_an_unclassifiable_upload_is_accepted_and_stored_as_other(
@@ -105,7 +105,7 @@ def test_an_unclassifiable_upload_is_accepted_and_stored_as_other(
     )
 
     assert response.status_code == 200
-    assert response.json()["file_format"] == DocumentFormat.OTHER
+    assert response.json()["document"]["file_format"] == DocumentFormat.OTHER
 
 
 def test_contradictory_evidence_stores_other_rather_than_a_guess(
@@ -121,7 +121,7 @@ def test_contradictory_evidence_stores_other_rather_than_a_guess(
         mime_type="application/pdf",
     )
 
-    assert response.json()["file_format"] == DocumentFormat.OTHER
+    assert response.json()["document"]["file_format"] == DocumentFormat.OTHER
 
 
 def test_the_classified_format_is_persisted_not_merely_reported(
@@ -134,7 +134,7 @@ def test_the_classified_format_is_persisted_not_merely_reported(
         mime_type="application/pdf",
     )
 
-    stored = db_session.get(DocumentRecord, response.json()["id"])
+    stored = db_session.get(DocumentRecord, response.json()["document"]["id"])
 
     assert stored.file_format is DocumentFormat.PDF
 
@@ -155,6 +155,6 @@ def test_documents_stored_as_other_remain_readable(
     listed = api_client.get("/documents/")
 
     assert listed.status_code == 200
-    assert [document["file_format"] for document in listed.json()] == [
-        DocumentFormat.OTHER
-    ]
+    assert [
+        document["file_format"] for document in listed.json()["items"]
+    ] == [DocumentFormat.OTHER]

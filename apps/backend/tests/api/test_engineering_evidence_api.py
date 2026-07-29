@@ -38,7 +38,7 @@ def _prepared(api_client: TestClient, content: bytes) -> int:
         "/documents/upload",
         files={"file": ("schema.pdf", io.BytesIO(content), "application/pdf")},
         data={"scope": "canonical_library"},
-    ).json()
+    ).json()["document"]
 
     assert (
         api_client.post(
@@ -150,7 +150,7 @@ def test_a_document_without_canonical_text_returns_404(
             )
         },
         data={"scope": "canonical_library"},
-    ).json()
+    ).json()["document"]
 
     assert _extract(api_client, document["id"]).status_code == 404
 

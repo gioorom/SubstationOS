@@ -2224,8 +2224,22 @@
     "title": "DesignationValueRead",
     "type": "object"
    },
+   "DocumentCategory": {
+    "description": "The engineering role a document plays. Restated for the same\nreason as :class:`DocumentFormat`, and asserted equal by test.",
+    "enum": [
+     "functional_schematic",
+     "wiring_terminal",
+     "general_technical",
+     "cable_list",
+     "relay_settings",
+     "commissioning_report",
+     "other"
+    ],
+    "title": "DocumentCategory",
+    "type": "string"
+   },
    "DocumentContentIdentityRead": {
-    "description": "The bytes' identity at ingestion time (Milestone 25.2).\n\nIdentical checksums across two documents are reported and nothing is\nconcluded from them - this is identity, not deduplication.",
+    "description": "The bytes' identity at ingestion time (Milestone 25.2).\n\nIdentical checksums across two documents are reported and nothing is\nconcluded from them - this is identity, not deduplication.\n\n``storage_reference`` was removed in Milestone 30.1.3. It is where\nthe bytes are, which is private backend state, and it was leaving\nthrough this schema - the same defect as ``file_path`` on the\ndocument list, under a different name. The checksum identifies the\nbytes without saying where they live, which is what a caller\nactually needs.",
     "properties": {
      "checksum": {
       "title": "Checksum",
@@ -2238,19 +2252,139 @@
      "size_bytes": {
       "title": "Size Bytes",
       "type": "integer"
-     },
-     "storage_reference": {
-      "title": "Storage Reference",
-      "type": "string"
      }
     },
     "required": [
-     "storage_reference",
      "checksum_algorithm",
      "checksum",
      "size_bytes"
     ],
     "title": "DocumentContentIdentityRead",
+    "type": "object"
+   },
+   "DocumentDetailRead": {
+    "description": "One document in full.\n\n``content_checksum`` is public on purpose: the deterministic pipeline\nbinds every artefact to it, so an engineer comparing a canonical\nrepresentation against its document needs to see it. It identifies\n*the bytes*, never *where they are*.\n\n``content_available`` answers \"can I download this?\" honestly - it is\nresolved through the content port, and is ``false`` for a document\nwhose bytes have gone missing under a registry row that remains.",
+    "properties": {
+     "category": {
+      "$ref": "#/components/schemas/DocumentCategory"
+     },
+     "checksum_algorithm": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Checksum Algorithm"
+     },
+     "content_available": {
+      "title": "Content Available",
+      "type": "boolean"
+     },
+     "content_checksum": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Content Checksum"
+     },
+     "file_format": {
+      "$ref": "#/components/schemas/DocumentFormat"
+     },
+     "filename": {
+      "title": "Filename",
+      "type": "string"
+     },
+     "id": {
+      "description": "Stable document identifier.",
+      "title": "Id",
+      "type": "integer"
+     },
+     "ingestion_outcome": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ingestion Outcome"
+     },
+     "ingestion_state": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ingestion State"
+     },
+     "project_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Project Id"
+     },
+     "project_name": {
+      "title": "Project Name",
+      "type": "string"
+     },
+     "revision": {
+      "title": "Revision",
+      "type": "string"
+     },
+     "scope": {
+      "$ref": "#/components/schemas/DocumentScope"
+     },
+     "size_bytes": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Size Bytes"
+     },
+     "uploaded_at": {
+      "format": "date-time",
+      "title": "Uploaded At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "project_id",
+     "project_name",
+     "filename",
+     "file_format",
+     "category",
+     "revision",
+     "scope",
+     "uploaded_at",
+     "content_checksum",
+     "checksum_algorithm",
+     "size_bytes",
+     "content_available",
+     "ingestion_state",
+     "ingestion_outcome"
+    ],
+    "title": "DocumentDetailRead",
     "type": "object"
    },
    "DocumentEvaluationRead": {
@@ -2282,6 +2416,21 @@
     ],
     "title": "DocumentEvaluationRead",
     "type": "object"
+   },
+   "DocumentFormat": {
+    "description": "The registry's own statement of the document format vocabulary.\n\nRestated here rather than imported from ``app.models.document``: a\ndomain module must not depend on the persistence layer, and a public\nschema built from an ORM enum is an ORM detail on the wire. A test\nasserts this set equals the persisted one, so the two cannot drift.\n\n``OTHER`` means **unclassified** - a document the classifier looked\nat and could not name - not \"examined and found unusable\".",
+    "enum": [
+     "pdf",
+     "dwg",
+     "dxf",
+     "model_3d",
+     "xlsx",
+     "docx",
+     "image",
+     "other"
+    ],
+    "title": "DocumentFormat",
+    "type": "string"
    },
    "DocumentFormatRead": {
     "description": "What the classifier decided and on what evidence (Milestone 25.2).\n\n``stored_format`` is what the document record said, kept beside\n``detected_format`` so a divergence is visible rather than silently\nresolved in favour of either.",
@@ -2318,6 +2467,27 @@
      "matches_stored_format"
     ],
     "title": "DocumentFormatRead",
+    "type": "object"
+   },
+   "DocumentListResponse": {
+    "description": "One page of the document registry.",
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/DocumentSummaryRead"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "pagination": {
+      "$ref": "#/components/schemas/PageMetadata"
+     }
+    },
+    "required": [
+     "items",
+     "pagination"
+    ],
+    "title": "DocumentListResponse",
     "type": "object"
    },
    "DocumentMentionReferenceRead": {
@@ -2559,6 +2729,108 @@
     ],
     "title": "DocumentScope",
     "type": "string"
+   },
+   "DocumentSortField": {
+    "description": "The fields a document list may be ordered by.\n\nFour members, each chosen because an engineer has a reason to want\nit. Adding a fifth is a deliberate act with a test behind it - not\nsomething a caller can do by sending a different string.",
+    "enum": [
+     "uploaded_at",
+     "filename",
+     "revision",
+     "document_format"
+    ],
+    "title": "DocumentSortField",
+    "type": "string"
+   },
+   "DocumentSummaryRead": {
+    "description": "What a registry list or a document picker needs.\n\nKept deliberately small: a page of a hundred of these should carry a\nhundred answers to \"which document is this?\", and nothing else.",
+    "properties": {
+     "category": {
+      "$ref": "#/components/schemas/DocumentCategory"
+     },
+     "file_format": {
+      "$ref": "#/components/schemas/DocumentFormat"
+     },
+     "filename": {
+      "title": "Filename",
+      "type": "string"
+     },
+     "id": {
+      "description": "Stable document identifier.",
+      "title": "Id",
+      "type": "integer"
+     },
+     "project_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Project Id"
+     },
+     "project_name": {
+      "title": "Project Name",
+      "type": "string"
+     },
+     "revision": {
+      "title": "Revision",
+      "type": "string"
+     },
+     "scope": {
+      "$ref": "#/components/schemas/DocumentScope"
+     },
+     "uploaded_at": {
+      "format": "date-time",
+      "title": "Uploaded At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "project_id",
+     "project_name",
+     "filename",
+     "file_format",
+     "category",
+     "revision",
+     "scope",
+     "uploaded_at"
+    ],
+    "title": "DocumentSummaryRead",
+    "type": "object"
+   },
+   "DocumentUploadResponse": {
+    "description": "The result of ``POST /documents/upload``.\n\nReplaces the ad-hoc dictionary this endpoint used to return, which\ncarried ``file_path`` and could not be described in OpenAPI at all.\n\n**There is no ``reused`` field.** Upload does not deduplicate:\nMilestone 25.2 established that an identical checksum is recorded and\nnothing is concluded from it, so a document is always newly\nregistered here. Reporting ``reused: false`` on every response would\nimply a comparison that never happens.",
+    "properties": {
+     "analysis": {
+      "$ref": "#/components/schemas/UploadAnalysisRead"
+     },
+     "document": {
+      "$ref": "#/components/schemas/DocumentDetailRead"
+     },
+     "scope": {
+      "$ref": "#/components/schemas/DocumentScope",
+      "description": "The scope the upload was accepted under."
+     },
+     "warnings": {
+      "default": [],
+      "description": "Non-fatal observations about the stored document - an unclassifiable format, a filename that had to be sanitised for storage. Empty when there is nothing to say.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+     }
+    },
+    "required": [
+     "document",
+     "scope",
+     "analysis"
+    ],
+    "title": "DocumentUploadResponse",
+    "type": "object"
    },
    "DocumentationIntelligence": {
     "properties": {
@@ -8612,6 +8884,49 @@
     "title": "MismatchReason",
     "type": "string"
    },
+   "PageMetadata": {
+    "description": "Where this page sits in the whole result set.",
+    "properties": {
+     "has_next": {
+      "title": "Has Next",
+      "type": "boolean"
+     },
+     "has_previous": {
+      "title": "Has Previous",
+      "type": "boolean"
+     },
+     "page": {
+      "description": "1-based index of this page.",
+      "title": "Page",
+      "type": "integer"
+     },
+     "page_size": {
+      "description": "How many items one page holds at most.",
+      "title": "Page Size",
+      "type": "integer"
+     },
+     "total": {
+      "description": "Total items matching the query, across all pages - not the number returned here.",
+      "title": "Total",
+      "type": "integer"
+     },
+     "total_pages": {
+      "description": "How many pages the result set spans.",
+      "title": "Total Pages",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "page",
+     "page_size",
+     "total",
+     "total_pages",
+     "has_next",
+     "has_previous"
+    ],
+    "title": "PageMetadata",
+    "type": "object"
+   },
    "PreparedAggregateUpdatesRead": {
     "description": "Explicitly states that updates were **prepared, not applied** - the\nengine never mutates ``Conversation`` or ``EngineeringSession``\n(ADR-0020). A caller wanting them applied must do so itself through\nthe existing conversation/session services.",
     "properties": {
@@ -8814,7 +9129,8 @@
      },
      "status": {
       "$ref": "#/components/schemas/ProjectStatus",
-      "default": "planning"
+      "default": "planning",
+      "description": "Delivery phase of the installation. Orthogonal to lifecycle_state: a project can be 'energized' and 'archived' at the same time."
      },
      "voltage_level": {
       "anyOf": [
@@ -9057,7 +9373,29 @@
     "title": "ProjectLifecycleState",
     "type": "string"
    },
+   "ProjectListResponse": {
+    "description": "One page of the project registry.",
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/ProjectRead"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "pagination": {
+      "$ref": "#/components/schemas/PageMetadata"
+     }
+    },
+    "required": [
+     "items",
+     "pagination"
+    ],
+    "title": "ProjectListResponse",
+    "type": "object"
+   },
    "ProjectRead": {
+    "description": "One project.\n\nBuilt from the **domain** aggregate, never from an ORM row. Before\nMilestone 30.1.3 the router re-read the ORM record to fill in\n``status`` and ``voltage_level``, which the domain model did not\ncarry; it does now, and that read is gone.",
     "properties": {
      "archived_at": {
       "anyOf": [
@@ -9177,7 +9515,8 @@
      },
      "status": {
       "$ref": "#/components/schemas/ProjectStatus",
-      "default": "planning"
+      "default": "planning",
+      "description": "Delivery phase of the installation. Orthogonal to lifecycle_state: a project can be 'energized' and 'archived' at the same time."
      },
      "updated_at": {
       "format": "date-time",
@@ -9213,7 +9552,19 @@
     "title": "ProjectRead",
     "type": "object"
    },
+   "ProjectSortField": {
+    "description": "The fields a project list may be ordered by.",
+    "enum": [
+     "created_at",
+     "updated_at",
+     "name",
+     "code"
+    ],
+    "title": "ProjectSortField",
+    "type": "string"
+   },
    "ProjectStatus": {
+    "description": "The delivery phase of the installation, in order.",
     "enum": [
      "planning",
      "engineering",
@@ -9226,7 +9577,7 @@
     "type": "string"
    },
    "ProjectUpdateMetadata": {
-    "description": "Partial update of Project metadata. ``code`` is intentionally absent:\nonce published, a project's code is a contract (CLAUDE.md §16) and is\nnever renamed through a metadata update. Fields left unset are\nunchanged.",
+    "description": "Partial update of Project metadata. ``code`` is intentionally absent:\nonce published, a project's code is a contract (CLAUDE.md §16) and is\nnever renamed through a metadata update. Fields left unset are\nunchanged.\n\n``lifecycle_state`` is absent for a different reason: it moves only\nthrough the explicit transitions (``/activate``, ``/archive``,\n``/restore``, ``DELETE``), each of which validates the move. Allowing\nit here would let a caller jump from Draft to Deleted in one PATCH,\nskipping every rule.",
     "properties": {
      "country": {
       "anyOf": [
@@ -9300,6 +9651,29 @@
        }
       ],
       "title": "Name"
+     },
+     "status": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ProjectStatus"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Moves the installation's delivery phase. Unconstrained by design - works can be re-planned - unlike lifecycle_state."
+     },
+     "voltage_level": {
+      "anyOf": [
+       {
+        "maxLength": 50,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Voltage Level"
      }
     },
     "title": "ProjectUpdateMetadata",
@@ -11195,6 +11569,15 @@
     "title": "SessionUpdateProposalRead",
     "type": "object"
    },
+   "SortDirection": {
+    "description": "Ascending or descending. There is no third option, and no\nfree-text direction string reaches a query.",
+    "enum": [
+     "asc",
+     "desc"
+    ],
+    "title": "SortDirection",
+    "type": "string"
+   },
    "SpanProvenanceRead": {
     "description": "The chain back to the canonical representation: which page, which\nblock, which span, which characters of it.",
     "properties": {
@@ -11464,6 +11847,61 @@
      "italic"
     ],
     "title": "TextStyleRead",
+    "type": "object"
+   },
+   "UploadAnalysisRead": {
+    "description": "What the Knowledge Graph made of the uploaded document.\n\nInformational: **a failure here never fails the upload.** The\ndocument is stored, identified and registered whatever the analysis\nmade of it - losing an uploaded file because a downstream step\nstumbled would be the worst possible trade.",
+    "properties": {
+     "entities_found": {
+      "title": "Entities Found",
+      "type": "integer"
+     },
+     "failure": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/UploadPipelineFailureRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "status": {
+      "description": "completed | skipped | failed | no_text | unsupported_file_type",
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "entities_found",
+     "failure"
+    ],
+    "title": "UploadAnalysisRead",
+    "type": "object"
+   },
+   "UploadPipelineFailureRead": {
+    "description": "Which stage of the post-upload analysis stopped, and why.",
+    "properties": {
+     "code": {
+      "title": "Code",
+      "type": "string"
+     },
+     "message": {
+      "title": "Message",
+      "type": "string"
+     },
+     "stage": {
+      "title": "Stage",
+      "type": "string"
+     }
+    },
+    "required": [
+     "stage",
+     "code",
+     "message"
+    ],
+    "title": "UploadPipelineFailureRead",
     "type": "object"
    },
    "ValidationError": {
@@ -12786,6 +13224,33 @@
     "operationId": "get_documents_documents__get",
     "parameters": [
      {
+      "description": "1-based page index.",
+      "in": "query",
+      "name": "page",
+      "required": false,
+      "schema": {
+       "default": 1,
+       "description": "1-based page index.",
+       "minimum": 1,
+       "title": "Page",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Items per page. Maximum 100.",
+      "in": "query",
+      "name": "page_size",
+      "required": false,
+      "schema": {
+       "default": 25,
+       "description": "Items per page. Maximum 100.",
+       "maximum": 100,
+       "minimum": 1,
+       "title": "Page Size",
+       "type": "integer"
+      }
+     },
+     {
       "in": "query",
       "name": "project_id",
       "required": false,
@@ -12800,13 +13265,99 @@
        ],
        "title": "Project Id"
       }
+     },
+     {
+      "in": "query",
+      "name": "scope",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/DocumentScope"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Scope"
+      }
+     },
+     {
+      "in": "query",
+      "name": "file_format",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/DocumentFormat"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "File Format"
+      }
+     },
+     {
+      "in": "query",
+      "name": "category",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/DocumentCategory"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Category"
+      }
+     },
+     {
+      "description": "Case-insensitive partial match over filename and project name. Trimmed at both ends; internal whitespace is significant.",
+      "in": "query",
+      "name": "search",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Case-insensitive partial match over filename and project name. Trimmed at both ends; internal whitespace is significant.",
+       "title": "Search"
+      }
+     },
+     {
+      "in": "query",
+      "name": "sort_by",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/DocumentSortField",
+       "default": "uploaded_at"
+      }
+     },
+     {
+      "in": "query",
+      "name": "direction",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/SortDirection",
+       "default": "desc"
+      }
      }
     ],
     "responses": {
      "200": {
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/DocumentListResponse"
+        }
        }
       },
       "description": "Successful Response"
@@ -12822,7 +13373,7 @@
       "description": "Validation Error"
      }
     },
-    "summary": "Get Documents",
+    "summary": "List documents, filtered, sorted and paginated by the server",
     "tags": [
      "Documents"
     ]
@@ -12970,10 +13521,56 @@
      "200": {
       "content": {
        "application/json": {
-        "schema": {}
+        "schema": {
+         "$ref": "#/components/schemas/DocumentUploadResponse"
+        }
        }
       },
       "description": "Successful Response"
+     },
+     "404": {
+      "description": "The referenced project does not exist."
+     },
+     "409": {
+      "description": "The project is archived or deleted."
+     },
+     "422": {
+      "description": "The scope and project reference disagree."
+     }
+    },
+    "summary": "Upload one document",
+    "tags": [
+     "Documents"
+    ]
+   }
+  },
+  "/documents/{document_id}": {
+   "get": {
+    "operationId": "get_document_documents__document_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DocumentDetailRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "404": {
+      "description": "No such document."
      },
      "422": {
       "content": {
@@ -12986,7 +13583,7 @@
       "description": "Validation Error"
      }
     },
-    "summary": "Upload Document",
+    "summary": "One document's full public record",
     "tags": [
      "Documents"
     ]
@@ -13199,6 +13796,56 @@
     "summary": "Segment a document's canonical representation, or re-use the segmentation it already has",
     "tags": [
      "Canonical Text Segmentation"
+    ]
+   }
+  },
+  "/documents/{document_id}/content": {
+   "get": {
+    "description": "Streams the stored document.\n\nThe only input is the document id. The storage reference comes from\nthe registry and goes straight back to the content port - **no path\nis ever accepted from, or disclosed to, the caller**, which is why\ntraversal is not merely blocked but unrepresentable.\n\nEvery failure is resolved before the first byte is written: once a\nstream has begun the status code is already sent, and a failure could\nno longer be reported as one.",
+    "operationId": "download_document_content_documents__document_id__content_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/octet-stream": {
+        "schema": {
+         "format": "binary",
+         "type": "string"
+        }
+       }
+      },
+      "description": "The document's original bytes."
+     },
+     "404": {
+      "description": "No such document, or its stored content no longer exists. The two are distinguished by the message."
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "500": {
+      "description": "The content exists and could not be read."
+     }
+    },
+    "summary": "Download a document's original bytes",
+    "tags": [
+     "Documents"
     ]
    }
   },
@@ -14686,13 +15333,114 @@
     "operationId": "get_projects_projects__get",
     "parameters": [
      {
+      "description": "1-based page index.",
+      "in": "query",
+      "name": "page",
+      "required": false,
+      "schema": {
+       "default": 1,
+       "description": "1-based page index.",
+       "minimum": 1,
+       "title": "Page",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Items per page. Maximum 100.",
+      "in": "query",
+      "name": "page_size",
+      "required": false,
+      "schema": {
+       "default": 25,
+       "description": "Items per page. Maximum 100.",
+       "maximum": 100,
+       "minimum": 1,
+       "title": "Page Size",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "Delivery phase of the installation.",
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/ProjectStatus"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Delivery phase of the installation.",
+       "title": "Status"
+      }
+     },
+     {
+      "description": "Record lifecycle. Distinct from status: a project can be 'energized' and 'archived' at once.",
+      "in": "query",
+      "name": "lifecycle_state",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/ProjectLifecycleState"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Record lifecycle. Distinct from status: a project can be 'energized' and 'archived' at once.",
+       "title": "Lifecycle State"
+      }
+     },
+     {
+      "description": "Case-insensitive partial match over name, code, customer and location. Trimmed at both ends; internal whitespace is significant.",
+      "in": "query",
+      "name": "search",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Case-insensitive partial match over name, code, customer and location. Trimmed at both ends; internal whitespace is significant.",
+       "title": "Search"
+      }
+     },
+     {
+      "description": "Soft-deleted projects are hidden unless this is set.",
       "in": "query",
       "name": "include_deleted",
       "required": false,
       "schema": {
        "default": false,
+       "description": "Soft-deleted projects are hidden unless this is set.",
        "title": "Include Deleted",
        "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "sort_by",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/ProjectSortField",
+       "default": "created_at"
+      }
+     },
+     {
+      "in": "query",
+      "name": "direction",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/SortDirection",
+       "default": "desc"
       }
      }
     ],
@@ -14701,11 +15449,7 @@
       "content": {
        "application/json": {
         "schema": {
-         "items": {
-          "$ref": "#/components/schemas/ProjectRead"
-         },
-         "title": "Response Get Projects Projects  Get",
-         "type": "array"
+         "$ref": "#/components/schemas/ProjectListResponse"
         }
        }
       },
@@ -14722,7 +15466,7 @@
       "description": "Validation Error"
      }
     },
-    "summary": "Get Projects",
+    "summary": "List projects, filtered, sorted and paginated by the server",
     "tags": [
      "Projects"
     ]
@@ -14750,15 +15494,11 @@
       },
       "description": "Successful Response"
      },
+     "409": {
+      "description": "A project with this code already exists."
+     },
      "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
+      "description": "The name or code is not valid."
      }
     },
     "summary": "Create Project",
@@ -14769,7 +15509,7 @@
   },
   "/projects/{project_id}": {
    "delete": {
-    "description": "Soft deletes the project. No row is ever removed from the database.",
+    "description": "Soft deletes the project. No row is ever removed from the database,\nand the updated project is returned so a caller can see its new\nlifecycle state.",
     "operationId": "delete_project_projects__project_id__delete",
     "parameters": [
      {
@@ -14793,6 +15533,12 @@
       },
       "description": "Successful Response"
      },
+     "404": {
+      "description": "No such project."
+     },
+     "409": {
+      "description": "The transition is not allowed from the project's current lifecycle state."
+     },
      "422": {
       "content": {
        "application/json": {
@@ -14804,7 +15550,7 @@
       "description": "Validation Error"
      }
     },
-    "summary": "Delete Project",
+    "summary": "Soft delete a project",
     "tags": [
      "Projects"
     ]
@@ -14832,6 +15578,9 @@
        }
       },
       "description": "Successful Response"
+     },
+     "404": {
+      "description": "No such project."
      },
      "422": {
       "content": {
@@ -14883,15 +15632,14 @@
       },
       "description": "Successful Response"
      },
+     "404": {
+      "description": "No such project."
+     },
+     "409": {
+      "description": "The project is archived or deleted."
+     },
      "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
+      "description": "The name is not valid."
      }
     },
     "summary": "Update Project Metadata",
@@ -14924,6 +15672,12 @@
        }
       },
       "description": "Successful Response"
+     },
+     "404": {
+      "description": "No such project."
+     },
+     "409": {
+      "description": "The transition is not allowed from the project's current lifecycle state."
      },
      "422": {
       "content": {
@@ -14966,6 +15720,12 @@
        }
       },
       "description": "Successful Response"
+     },
+     "404": {
+      "description": "No such project."
+     },
+     "409": {
+      "description": "The transition is not allowed from the project's current lifecycle state."
      },
      "422": {
       "content": {
@@ -16476,6 +17236,9 @@
       },
       "description": "Successful Response"
      },
+     "404": {
+      "description": "No such project."
+     },
      "422": {
       "content": {
        "application/json": {
@@ -17052,6 +17815,12 @@
        }
       },
       "description": "Successful Response"
+     },
+     "404": {
+      "description": "No such project."
+     },
+     "409": {
+      "description": "The transition is not allowed from the project's current lifecycle state."
      },
      "422": {
       "content": {
