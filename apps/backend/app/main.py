@@ -19,6 +19,8 @@ from app.models import (  # noqa: F401
     document_ingestion,
     engineering_entities,
     engineering_evidence,
+    engineering_facts,
+    engineering_semantics,
     engineering_index,
     evidence_evaluation,
     graph_builder,
@@ -39,6 +41,8 @@ from app.routers import (
     engineering_engine as engineering_engine_router,
     engineering_entities as engineering_entities_router,
     engineering_evidence as engineering_evidence_router,
+    engineering_facts as engineering_facts_router,
+    engineering_semantics as engineering_semantics_router,
     evidence_evaluation as evidence_evaluation_router,
     engineering_index as engineering_index_router,
     engineering_intent as engineering_intent_router,
@@ -97,6 +101,8 @@ app.include_router(canonical_pdf_router.router)
 app.include_router(canonical_text_router.router)
 app.include_router(engineering_evidence_router.router)
 app.include_router(engineering_entities_router.router)
+app.include_router(engineering_facts_router.router)
+app.include_router(engineering_semantics_router.router)
 app.include_router(evidence_evaluation_router.router)
 app.include_router(projects.router)
 app.include_router(knowledge_graph.router)

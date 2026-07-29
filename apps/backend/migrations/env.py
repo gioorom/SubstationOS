@@ -22,6 +22,8 @@ from app.models import (  # noqa: F401
     document_ingestion,
     engineering_entities,
     engineering_evidence,
+    engineering_facts,
+    engineering_semantics,
     engineering_index,
     evidence_evaluation,
     graph_builder,
