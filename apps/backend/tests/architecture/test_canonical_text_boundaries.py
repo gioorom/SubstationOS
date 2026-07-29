@@ -399,6 +399,14 @@ def test_the_canonical_pdf_models_stay_within_their_two_consumers(
         # a column. Part of the canonical_pdf context, not a consumer of
         # it.
         "app/models/canonical_pdf.py",
+        # The reference corpus loader (Milestone 28.2). It *assembles* a
+        # representation from known text so the corpus can be segmented
+        # by the real segmenter - the opposite direction from an
+        # extractor consuming PDF structure. A corpus that hand-built its
+        # own tokens would keep passing on the day segmentation changed.
+        # It imports no PDF library, asserted in
+        # test_evidence_evaluation_boundaries.
+        "app/infrastructure/evidence_evaluation/yaml_reference_corpus_repository.py",  # noqa: E501
     }
     importers = {
         path.relative_to(APP_ROOT.parent).as_posix()

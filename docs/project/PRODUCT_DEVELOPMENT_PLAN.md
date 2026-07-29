@@ -119,6 +119,8 @@ readiness declaration)
 | Document Repository | Functional — upload/storage/scope work, and since Milestone 25.2 the upload endpoint classifies `file_format` from the file's own leading bytes rather than defaulting every document to `other`. `DXF` and `IMAGE` joined the vocabulary in the same milestone. Documents uploaded earlier remain readable as `other` (*unclassified*) until the deterministic backfill command is run against them |
 | Document Identity | Implemented — deterministic content identity and format classification (Milestone 25.2): SHA-256 streamed in chunks with the algorithm recorded beside it, size and accessibility, and a format decided from evidence ranked content signature > declared MIME type > filename extension. **One rule source** (`format_signatures.py`, asserted by architecture test) used by upload, ingestion and the backfill alike, so they cannot disagree about what a document is. Unknown and contradictory evidence produce explicit typed outcomes, never an arbitrary classification. Bytes reach the domain only through the read-only `DocumentContentPort` (`describe`/`read_prefix`/`iter_chunks`, abstract-method set asserted). Identity is **not** deduplication - identical checksums are recorded and nothing is concluded from them |
 | PDF consumption | Consolidated — since Milestone 26.2 there is exactly **one** supported PDF path (`upload → ingestion → identity → canonical representation → canonical text → downstream consumer`) and exactly **one** module permitted to import a PDF library. The four pre-canonical decoders (`pdf_text_extractor`, `pdf_renderer`, `document_analyzer`, `services/intelligence/`) are deleted; the upload endpoint's Knowledge Graph path consumes text assembled from the segmentation. Enforced by architecture tests asserting the single decoder, the shrinking closed list of raw-content consumers, and the absence of the retired files |
+| Engineering Entity Resolution | Implemented — deterministic grouping of evidence into entities (Milestone 29.1): `EngineeringEntitySet → EngineeringEntity`, covering `EQUIPMENT_DESIGNATION` and `ENGINEERING_QUANTITY` under a versioned rule catalogue with no fuzzy matching of any kind. Identity is a SHA-256 over document, evidence source, rule and version, so the same evidence always resolves the same way and a rule bump creates a new set rather than a rewrite. Entities **aggregate** their evidence's provenance and can enumerate the observations that created them; none exists without at least one. Idempotent on `(document_id, content_checksum, resolution_policy_version)`. **Groupings only** — no relationship, no topology, no equipment classification, no LLM, no Knowledge Graph or Engineering Index write, and no column in which any of them could be recorded, all enforced by architecture test |
+| Engineering Evidence Evaluation | Implemented — the permanent framework that measures extraction quality (Milestone 28.2): a version-controlled `ReferenceCorpus` in `app/domain/evidence_evaluation/corpora/*.yaml`, exact-match classification into `TRUE_POSITIVE` / `FALSE_POSITIVE` / `FALSE_NEGATIVE` with **provenance as part of the match**, exact `Decimal` precision/recall/F1 per corpus, document, evidence type and rule, and regression detection naming the exact items that changed. Reports are insert-only and corpora immutable at runtime; evaluation writes no engineering evidence and reaches no document. Measured baseline against `substation_reference` 1.0: precision 1.000000, recall 0.944444, F1 0.971429 (17 TP / 0 FP / 1 FN) |
 | Engineering Evidence Extraction | Implemented — deterministic engineering observation over canonical text (Milestone 28.1): `EngineeringEvidenceSet → EngineeringEvidence` for designations, voltages, currents, powers and cable sections, under a versioned rule catalogue with **one** pattern source and **one** unit catalogue. Quantities held as exact `Decimal` (`Numeric` in the schema, never `Float`); every item carries provenance to the characters, tokens, line, paragraph and page that produced it, plus rule id and version. Idempotent on `(document_id, content_checksum, extraction_policy_version)`. **Observations only** — no entity, no relationship, no equipment type, no LLM, no Engineering Index or Knowledge Graph write, and no column in which any of them could be recorded, all enforced by architecture test |
 | Canonical Text Segmentation | Implemented — semantic-neutral textual structure over the canonical representation (Milestone 27.1): `CanonicalTextDocument → Section → Paragraph → Line → Token`, where a section **is a page**, a paragraph **is a PDF block** and a line **is a PDF line** - only boundaries the parser observed, never an inferred chapter, heading, table or list. Tokens carry original text, a deterministic NFKC normalisation, position in the line, and the full provenance chain `document → page → block → span → character range`, stored as columns so locating a term costs no joins. **The structure every future extractor consumes**, behind `CanonicalTextRepository`, which exposes no PDF structure. Idempotent on `(document_id, content_checksum, segmentation_version)`; no timestamp participates in value equality. Assigns no engineering meaning: no entities, no equipment, no cables, no relationships, no LLM, no ontology lookup, all enforced by architecture test |
 | Canonical PDF Representation | Implemented — deterministic, reproducible textual representation of a PDF (Milestone 26.1): `CanonicalPdfDocument → Page → Block → Span`, preserving page number, the parser's own reading order, verbatim text, bounding boxes, font family and size, and bold/italic, bound to one content checksum, one parser version and one representation version. **The single source of truth for every future semantic extraction**, consumed through `CanonicalRepresentationRepository` - which exposes no route to the original PDF, so the rule is structural. Idempotent (identical bytes re-use the stored representation; changed bytes produce a new one beside it, never over it), and the original PDF is never modified. Records what the parser observed and interprets nothing: no merged paragraphs, no inferred tables, lists, headings or sections, no entities, no OCR, no LLM, no embeddings, all enforced by architecture test |
@@ -2047,6 +2049,157 @@ interruptions, and are ranges, not commitments.
   `docs/architecture/engineering_evidence.md`.
 - Dependencies: Milestone 27.1 (its only input) and, through it, 25.1,
   25.2 and 26.1.
+
+**Milestone 28.2 — Engineering Evidence Evaluation Framework** -
+*Completed*
+- Objective: make the platform able to measure the quality of its own
+  extraction rules, permanently and continuously, before Entity
+  Resolution is built on top of them. An extractor cannot grade itself,
+  and a rule nobody has measured is a rule nobody knows the cost of.
+- Delivered: a new `evidence_evaluation` bounded context (corpus models,
+  a read-only corpus port, evaluation and regression models, exact
+  metrics, a pure matcher, a pure engine, a regression detector, typed
+  failures and a report port); a version-controlled reference corpus in
+  `app/domain/evidence_evaluation/corpora/`; a YAML corpus loader and a
+  SQLAlchemy report repository; four tables (additive migration
+  `58327939f9a5`); `evidence_evaluation_service.py`; and five endpoints.
+- **The corpus is the definition of correct, so it is data, not code.**
+  It lives in the repository beside the ontology's YAML, is loaded and
+  validated on read, and there is **no `save`** on the corpus port -
+  asserted by test. Changing what "correct" means is a reviewed edit and
+  a corpus version bump, so evaluations recorded against the old version
+  stay valid statements about the old definition. A test additionally
+  asserts the reference corpus is never constructed inline in the tests
+  that measure against it: expectations editable beside the assertion
+  would let anybody move the goalposts.
+- **Annotations reuse the evidence domain model** - `EvidenceType`,
+  `EvidenceStatus`, `EvidenceProvenance`, `EngineeringQuantity`,
+  `DesignationValue`. A parallel annotation model would drift, and a
+  format able to express something the evidence model cannot is an
+  annotation nobody could satisfy. The one field omitted is
+  `evidence_key`: asking an annotator to compute the extractor's SHA-256
+  would be asking them to run the extractor.
+- **Only exact matches count, and provenance is part of the match.** An
+  observation with the right text in the wrong place is a false positive
+  **and** a false negative - a consumer that trusted its location would
+  read the wrong part of the document. There is no "near miss" outcome,
+  which would let a rule that misplaces values look almost right. Two
+  named provenance policies exist (`EXACT`, `LOCATION_ONLY`), and the one
+  used is recorded on every report so a comparison is never between two
+  definitions of "match". Approximate *text* matching is absent by
+  design; introducing it would require its own named, versioned policy.
+- **Metrics are exact and honest about being undefined.** `Decimal`
+  quantised to six places, never `float`. F1 is computed from the counts
+  as `2·TP / (2·TP + FP + FN)` rather than from already-quantised
+  precision and recall - deriving it that way loses a digit, and two
+  evaluations differing only in that digit would read as a regression (a
+  real defect this milestone found and fixed). Precision with no
+  predictions is `null`, not 0 or 1: reporting 0 would claim the
+  extractor was wrong about things it never said.
+- **Regression reports name the items, not just the numbers.** New and
+  resolved false positives and negatives, metric deltas, and rule version
+  changes beside them. A comparison across corpus versions is flagged
+  `comparable: false` - still produced, but a metric that moved when the
+  corpus grew has said nothing about the rules.
+- **Reports are insert-only.** No `update`, no `delete` on the port: the
+  history is what regression detection is made of. Evaluation executes
+  the extractor over corpus documents rather than reading stored
+  evidence, because an evaluation against stored evidence would measure
+  what was stored on some past day rather than what the current rules
+  produce - asserted by architecture test.
+- **The measured baseline**, `substation_reference` 1.0 at extraction
+  policy 1.0: 17 true positives, 0 false positives, 1 false negative -
+  precision 1.000000, recall 0.944444, F1 0.971429. The annotations were
+  written by reading the document text, and 17 of 18 agreed with the
+  extractor including full provenance. The single miss is `TR-1`: the
+  designation patterns do not recognise letters-hyphen-digits, and an
+  engineer would call that a designation. It is annotated deliberately so
+  the gap is measured rather than forgotten, and so the milestone that
+  closes it can *show* recall rising.
+- What it deliberately does **not** do, enforced by architecture test: no
+  Entity Resolution, no Knowledge Graph, no Engineering Index write, no
+  LLM, no Engineering Engine, no PDF library and no document storage -
+  a corpus is self-contained in the repository, which is what lets an
+  evaluation run in CI and mean the same thing next year. It also cannot
+  write engineering evidence: a measurement must not modify what it
+  measures.
+- Architecture impact: **no new ADR.** No new persistence strategy and no
+  new external dependency. Reference updated:
+  `docs/architecture/engineering_evidence.md`.
+- Dependencies: Milestone 28.1 (the rules it measures) and 27.1 (the
+  segmenter the corpus is materialised through).
+
+**Milestone 29.1 — Engineering Entity Resolution Foundation** -
+*Completed*
+- Objective: turn engineering observations into engineering *objects*,
+  deterministically, so that a later milestone can populate the
+  Knowledge Graph from entities rather than from document text.
+- Delivered: a new `engineering_entities` bounded context (entity value
+  objects, an evidence-reference model, a versioned resolution rule
+  catalogue, a pure resolver, set validation, typed failures and
+  `EngineeringEntityRepository`); a SQLAlchemy repository over three
+  typed tables (additive migration `46ec4e0fe42f`);
+  `engineering_entity_service.py`; and four endpoints.
+- **Evidence, entity, node are three different things** - the
+  distinction the layer exists to make. Evidence says "I observed this,
+  here, under this rule". An entity says "these observations refer to the
+  same engineering object". A graph node says something about the
+  installation, and this milestone writes none. An entity is a
+  *deterministic hypothesis*: it follows from a stated rule at a stated
+  version and can be recomputed from the same evidence at any time.
+- **What it deliberately does not answer**: what an object is, what it
+  does, what it belongs to, or which quantity is whose rating. `630 kVA`
+  beside `TR1` yields **two entities that do not know about each other** -
+  adjacency is a fact about ink, attribution is a judgement. There is no
+  field in the model and no column in the schema in which a relationship,
+  a topology or an equipment class could be written, and an architecture
+  test asserts both.
+- **The catalogue names no equipment class.** No transformer, breaker,
+  CT, VT, relay or cable. Deciding that `T1` names a transformer is a
+  classification needing a reviewed rule and a governed vocabulary;
+  naming those classes now would let the model's shape imply knowledge
+  the system does not have.
+- **Grouping is by declared key, never similarity.** Designation
+  observations group on the normalised designation **plus** the evidence
+  status **plus** the extraction rule version: an `AMBIGUOUS` observation
+  and an `OBSERVED` one are different claims about how much is known, and
+  two observations recognised under different rule versions were
+  recognised under different definitions. Grouping is within one
+  document - two documents writing `T1` may mean two different
+  transformers, and uniting them is cross-document resolution, which this
+  milestone does not perform.
+- **Quantities are never merged.** Two observations of `630 kVA` may be
+  one rating written twice or two identically-rated transformers; the
+  document does not say, and merging would arrive downstream as one piece
+  of equipment where there were two.
+- **Entities never own provenance; they aggregate it.** Each cites the
+  evidence keys and locations that created it, while the character-level
+  chain stays on the evidence item, which remains authoritative - an
+  entity that copied it would become a second source of truth for where a
+  thing was seen. Validation refuses an entity citing no evidence: that
+  would be an assertion, not a hypothesis.
+- **Status is derived, never invented.** Grouping ambiguous observations
+  yields an ambiguous entity, so the uncertainty recorded at extraction
+  time survives into the hypothesis rather than being laundered away by
+  the act of grouping.
+- Identity is a SHA-256 over document, evidence source, rule id and
+  version, entity contract version and the entity's discriminator - so
+  the same evidence always yields the same keys (schema-enforced
+  idempotency) and a rule version bump yields different ones (a new set,
+  not a silent rewrite). Three versions are recorded because they change
+  for different reasons: extraction policy, resolution policy, and the
+  entity contract itself.
+- Seven typed failures, none collapsed into a generic runtime error.
+- What it deliberately does **not** import, enforced by architecture
+  test: canonical text, the canonical PDF context, any PDF library, the
+  content or storage-location ports, the LLM runtime, Prompt Builder, the
+  Engineering Engine, the ontology, the Engineering Index or the
+  Knowledge Graph. Its whole dependency surface is the evidence model and
+  its own modules.
+- Architecture impact: **no new ADR.** No new persistence strategy and no
+  new external dependency. New as-built reference:
+  `docs/architecture/engineering_entities.md`.
+- Dependencies: Milestone 28.1 (its only input).
 
 **Milestone 17 — AI Assistant**
 - Objective: build the conversational, user-facing surface over the

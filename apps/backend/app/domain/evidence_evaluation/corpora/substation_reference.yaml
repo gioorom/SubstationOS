@@ -1,0 +1,417 @@
+corpus_id: substation_reference
+corpus_version: "1.0"
+description: >-
+  Reference annotations for the deterministic engineering evidence
+  rules. Written by reading the document text, not by recording what
+  the extractor produced - a corpus derived from the extractor could
+  never find a fault in it.
+annotated_against_policy_version: "1.0"
+annotated_rule_versions:
+  designation_generic: "1.0"
+  voltage_value: "1.0"
+  current_value: "1.0"
+  power_value: "1.0"
+  cable_section_value: "1.0"
+documents:
+  - document_ref: bay_data_sheet
+    title: Scheda dati quadro MT - sottostazione Alpha
+    lines:
+      - "SOTTOSTAZIONE ALPHA - QUADRO MT"
+      - "Trasformatore T1 - potenza 630 kVA"
+      - "Tensione primaria 20 kV, secondaria 400 V"
+      - "Corrente nominale 1250 A"
+      - "Interruttore 52-Q1 chiuso in servizio"
+      - "Morsettiera +E01-QA1 in cabina"
+    expected:
+      - evidence_type: designation
+        observed_text: "T1"
+        status: observed
+        rule_id: designation_generic
+        rule_version: "1.0"
+        designation: "T1"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 1
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 1
+              character_start: 14
+              character_end: 16
+          source_text: "T1"
+      - evidence_type: power_value
+        observed_text: "630 kVA"
+        status: observed
+        rule_id: power_value
+        rule_version: "1.0"
+        quantity:
+          value: "630"
+          unit: "kVA"
+          base_value: "630000"
+          base_unit: "VA"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 1
+          token_start: 4
+          token_end: 6
+          spans:
+            - span_reading_order: 1
+              character_start: 27
+              character_end: 34
+          source_text: "630 kVA"
+      - evidence_type: voltage_value
+        observed_text: "20 kV"
+        status: observed
+        rule_id: voltage_value
+        rule_version: "1.0"
+        quantity:
+          value: "20"
+          unit: "kV"
+          base_value: "20000"
+          base_unit: "V"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 2
+          token_start: 2
+          token_end: 4
+          spans:
+            - span_reading_order: 2
+              character_start: 18
+              character_end: 23
+          source_text: "20 kV"
+      - evidence_type: voltage_value
+        observed_text: "400 V"
+        status: observed
+        rule_id: voltage_value
+        rule_version: "1.0"
+        quantity:
+          value: "400"
+          unit: "V"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 2
+          token_start: 5
+          token_end: 7
+          spans:
+            - span_reading_order: 2
+              character_start: 36
+              character_end: 41
+          source_text: "400 V"
+      - evidence_type: current_value
+        observed_text: "1250 A"
+        status: observed
+        rule_id: current_value
+        rule_version: "1.0"
+        quantity:
+          value: "1250"
+          unit: "A"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 3
+          token_start: 2
+          token_end: 4
+          spans:
+            - span_reading_order: 3
+              character_start: 18
+              character_end: 24
+          source_text: "1250 A"
+      - evidence_type: designation
+        observed_text: "52-Q1"
+        status: observed
+        rule_id: designation_generic
+        rule_version: "1.0"
+        designation: "52-Q1"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 4
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 4
+              character_start: 13
+              character_end: 18
+          source_text: "52-Q1"
+      - evidence_type: designation
+        observed_text: "+E01-QA1"
+        status: observed
+        rule_id: designation_generic
+        rule_version: "1.0"
+        designation: "+E01-QA1"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 5
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 5
+              character_start: 12
+              character_end: 20
+          source_text: "+E01-QA1"
+  - document_ref: cable_schedule
+    title: Elenco cavi di potenza
+    lines:
+      - "Elenco cavi di potenza"
+      - "Cavo C1 sezione 240 mm²"
+      - "Cavo C2 sezione 150 mm2"
+      - "Cavo C3 sezione 95 mm², tensione 400 V"
+    expected:
+      - evidence_type: designation
+        observed_text: "C1"
+        status: observed
+        rule_id: designation_generic
+        rule_version: "1.0"
+        designation: "C1"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 1
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 1
+              character_start: 5
+              character_end: 7
+          source_text: "C1"
+      - evidence_type: cable_section_value
+        observed_text: "240 mm²"
+        status: observed
+        rule_id: cable_section_value
+        rule_version: "1.0"
+        quantity:
+          value: "240"
+          unit: "mm²"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 1
+          token_start: 3
+          token_end: 5
+          spans:
+            - span_reading_order: 1
+              character_start: 16
+              character_end: 23
+          source_text: "240 mm²"
+      - evidence_type: designation
+        observed_text: "C2"
+        status: observed
+        rule_id: designation_generic
+        rule_version: "1.0"
+        designation: "C2"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 2
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 2
+              character_start: 5
+              character_end: 7
+          source_text: "C2"
+      - evidence_type: cable_section_value
+        observed_text: "150 mm2"
+        status: observed
+        rule_id: cable_section_value
+        rule_version: "1.0"
+        quantity:
+          value: "150"
+          unit: "mm²"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 2
+          token_start: 3
+          token_end: 5
+          spans:
+            - span_reading_order: 2
+              character_start: 16
+              character_end: 23
+          source_text: "150 mm2"
+      - evidence_type: designation
+        observed_text: "C3"
+        status: observed
+        rule_id: designation_generic
+        rule_version: "1.0"
+        designation: "C3"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 3
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 3
+              character_start: 5
+              character_end: 7
+          source_text: "C3"
+      - evidence_type: cable_section_value
+        observed_text: "95 mm²"
+        status: observed
+        rule_id: cable_section_value
+        rule_version: "1.0"
+        quantity:
+          value: "95"
+          unit: "mm²"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 3
+          token_start: 3
+          token_end: 5
+          spans:
+            - span_reading_order: 3
+              character_start: 16
+              character_end: 22
+          source_text: "95 mm²"
+      - evidence_type: voltage_value
+        observed_text: "400 V"
+        status: observed
+        rule_id: voltage_value
+        rule_version: "1.0"
+        quantity:
+          value: "400"
+          unit: "V"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 3
+          token_start: 6
+          token_end: 8
+          spans:
+            - span_reading_order: 3
+              character_start: 33
+              character_end: 38
+          source_text: "400 V"
+  - document_ref: descriptive_prose
+    title: Premessa contrattuale - nessuna evidenza attesa
+    lines:
+      - "Il presente documento descrive la fornitura di apparecchiature"
+      - "per la sottostazione elettrica, comprensiva di trasporto e posa."
+      - "Tutte le apparecchiature sono conformi alle norme vigenti."
+    expected: []
+  - document_ref: ambiguous_ratings
+    title: Dati di targa con separatori ambigui
+    lines:
+      - "Potenza 1.250 kVA"
+      - "Tensione 20,5 kV"
+    expected:
+      - evidence_type: power_value
+        observed_text: "1.250 kVA"
+        status: ambiguous
+        rule_id: power_value
+        rule_version: "1.0"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 0
+          token_start: 1
+          token_end: 3
+          spans:
+            - span_reading_order: 0
+              character_start: 8
+              character_end: 17
+          source_text: "1.250 kVA"
+      - evidence_type: voltage_value
+        observed_text: "20,5 kV"
+        status: observed
+        rule_id: voltage_value
+        rule_version: "1.0"
+        quantity:
+          value: "20.5"
+          unit: "kV"
+          base_value: "20500"
+          base_unit: "V"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 1
+          token_start: 1
+          token_end: 3
+          spans:
+            - span_reading_order: 1
+              character_start: 9
+              character_end: 16
+          source_text: "20,5 kV"
+  - document_ref: designation_variants
+    title: Varianti di sigla - include una lacuna nota
+    lines:
+      - "Trasformatore TR1 in cabina primaria"
+      - "Trasformatore TR-1 in cabina secondaria"
+    expected:
+      - evidence_type: designation
+        observed_text: "TR1"
+        status: observed
+        rule_id: designation_generic
+        rule_version: "1.0"
+        designation: "TR1"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 0
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 0
+              character_start: 14
+              character_end: 17
+          source_text: "TR1"
+      - evidence_type: designation
+        observed_text: "TR-1"
+        status: observed
+        rule_id: designation_generic
+        rule_version: "1.0"
+        designation: "TR-1"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 1
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 1
+              character_start: 14
+              character_end: 18
+          source_text: "TR-1"

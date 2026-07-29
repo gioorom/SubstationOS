@@ -1,7 +1,8 @@
 # Engineering Evidence
 
 **Status:** As-built reference for the **Engineering Evidence Extraction**
-layer introduced in Milestone 28.1. For the deterministic document
+layer introduced in Milestone 28.1 and the **Engineering Evidence
+Evaluation Framework** introduced in Milestone 28.2. For the deterministic document
 pipeline that feeds it, see
 [document_management.md](document_management.md); for where it sits in
 the wider pipeline, see
@@ -19,11 +20,28 @@ Deterministic Evidence Rules       versioned, findable, no LLM
 Engineering Evidence Set           immutable, persisted, provenance-rich
     |
     v
-Future Entity Resolution           (not this milestone)
+Engineering Evidence Evaluation    measured against a reference corpus
     |
     v
-Future Knowledge Graph Population  (not this milestone)
+Engineering Entity Resolution      Milestone 29.1 - see engineering_entities.md
+    |
+    v
+Knowledge Graph Population         (a later milestone)
 ```
+
+Evidence is an **observation**; an entity is a **deterministic grouping
+of observations**; a graph node is neither, and will later be generated
+from entities. See
+[engineering_entities.md](engineering_entities.md).
+
+> **Every new extraction rule must be evaluated against the reference
+> corpus before it becomes part of the supported deterministic
+> engineering pipeline.** A rule that has not been measured is a rule
+> nobody knows the cost of: it may raise recall and quietly halve
+> precision, and the first place that would surface is an engineer
+> disputing an entity months later. Evaluation is not a one-off exercise
+> or a test-suite detail - it is a product capability with its own API,
+> its own persisted history, and its own version.
 
 ## Four statements this layer is built on
 
@@ -274,9 +292,147 @@ Finding nothing is a success, not a failure: a document may simply
 contain nothing these rules recognise. No ORM model is exposed - no row
 id, no foreign key, no timestamp.
 
+## Evaluation (Milestone 28.2)
+
+The framework that measures whether these rules are any good. The
+extractor cannot grade itself, so quality is defined by a
+**version-controlled reference corpus**: documents whose evidence a human
+wrote down by hand.
+
+### The reference corpus
+
+`app/domain/evidence_evaluation/corpora/*.yaml` - domain data beside the
+domain that defines it, exactly as the ontology's YAML is. A corpus
+declares its documents' text, the observations a human asserts are in
+them, and the rule versions it was annotated against.
+
+Expected observations are built from the **same Engineering Evidence
+value objects** the extractor produces - `EvidenceType`,
+`EvidenceStatus`, `EvidenceProvenance`, `EngineeringQuantity`,
+`DesignationValue`. A parallel annotation model would drift from the
+evidence model, and an annotation format able to express something the
+evidence model cannot is an annotation nobody can ever satisfy.
+
+Corpora are **immutable at runtime**: there is no `save` on the corpus
+port, asserted by test. Changing what "correct" means is an edit to a
+reviewed file and a bump of the corpus version, so evaluations recorded
+against the old version stay valid statements about the old definition.
+
+A reference document's text is turned into canonical text through the
+**real segmenter** - a corpus that hand-built its own tokens would keep
+passing on the day segmentation changed.
+
+### Classification
+
+Documents are paired with expectations by **location** - page,
+paragraph, line, token range - and a pair is a `TRUE_POSITIVE` only when
+everything agrees: evidence type, observed text, status, typed value and
+provenance.
+
+Anything else is **both** a `FALSE_POSITIVE` and a `FALSE_NEGATIVE`: the
+extractor said something that is not so, *and* failed to say something
+that is. There is deliberately no "near miss" outcome, which would let a
+rule that puts values in the wrong place look almost right.
+
+**Provenance is verified, not assumed.** An observation with correct text
+and incorrect provenance is not a match - a consumer that trusted its
+location would be reading the wrong part of the document. Two named
+policies exist: `EXACT` (the default, comparing the full chain including
+span character ranges) and `LOCATION_ONLY` (coarser, for a corpus
+annotated before offsets were recorded). The policy used is recorded on
+every report, so a comparison between two evaluations can never be a
+comparison between two definitions of "match".
+
+Approximate *text* matching is absent. If it is ever introduced it must
+be a named, versioned policy on the report, exactly as the provenance
+policy already is.
+
+### Metrics
+
+Exact `Decimal`, quantised to six places, computed per corpus, per
+document, per evidence type and per rule:
+
+- **precision** - of what the extractor claimed, how much was right;
+- **recall** - of what is there, how much it found;
+- **F1** - computed from the counts as `2·TP / (2·TP + FP + FN)`, which
+  avoids rounding twice; deriving it from already-quantised inputs loses
+  a digit, and two evaluations differing only in that digit would read as
+  a regression;
+- the three **counts**, which are the primary record - "precision 0.75"
+  says nothing about whether that was 3 of 4 or 300 of 400.
+
+**Undefined is reported as `null`, never 0 or 1.** When the extractor
+made no predictions, precision is not a number - it is a question that
+was never asked. Reporting 0 would claim it was wrong about things it
+never said; reporting 1 would claim it was right about them.
+
+No probabilistic metrics: a deterministic extractor over a fixed corpus
+produces the same counts every time, and dressing exact counts in
+statistics would suggest an uncertainty that does not exist.
+
+### Regression detection
+
+Two reports are compared into a regression report that names **the exact
+items**, not just the movement: new false positives, new false negatives,
+and the ones a change resolved. "Precision fell from 0.94 to 0.91" is not
+actionable; "these three observations became false positives, all from
+rule `designation_generic` at 1.1, all on page 4" is.
+
+Rule version changes are reported beside the metrics, so "which rule
+changed?" is answerable from two reports alone. A comparison across
+corpus versions is flagged `comparable: false` - still produced, because
+it is often what you want, but a metric that moved when the corpus grew
+has not told you anything about the rules.
+
+### Persistence
+
+Four tables added by migration `58327939f9a5`. Reports are
+**insert-only**: a new rule version produces a new report and nothing is
+overwritten, because the history is what regression detection is made of.
+
+Evaluation never modifies engineering evidence - it runs the extractor
+over corpus documents rather than reading stored evidence, because an
+evaluation against stored evidence would measure what was stored on some
+past day rather than what the current rules produce.
+
+### API
+
+```
+GET  /evidence-evaluation/corpora
+POST /evidence-evaluation/corpora/{corpus_id}/evaluate
+GET  /evidence-evaluation/corpora/{corpus_id}/reports
+GET  /evidence-evaluation/reports/{report_id}
+GET  /evidence-evaluation/reports/{baseline}/compare/{candidate}
+```
+
+### The measured baseline
+
+Against `substation_reference` version 1.0, at extraction policy 1.0:
+
+| Metric | Value |
+|---|---|
+| True positives | 17 |
+| False positives | 0 |
+| False negatives | 1 |
+| Precision | 1.000000 |
+| Recall | 0.944444 |
+| F1 | 0.971429 |
+
+The single miss is `TR-1` in `designation_variants`: the designation
+patterns recognise letters-then-digits, a numeric function code and an
+IEC 81346 aspect, but **not** letters-hyphen-digits. An engineer reading
+that document would call `TR-1` a designation. It is annotated in the
+corpus so the gap is measured rather than forgotten, and so the milestone
+that closes it can show recall rising rather than merely asserting an
+improvement.
+
 ## Known debt
 
-The live Knowledge Graph upload path still performs ad-hoc LLM extraction
-from assembled text; migrating it onto this layer is a later milestone,
-and an architecture test pins the current absence of that dependency so
-the change will be deliberate when it comes.
+- The live Knowledge Graph upload path still performs ad-hoc LLM
+  extraction from assembled text; migrating it onto this layer is a later
+  milestone, and an architecture test pins the current absence of that
+  dependency so the change will be deliberate when it comes.
+- **The reference corpus is synthetic.** Its documents were written to
+  exercise the rules, not drawn from real substation documentation. The
+  framework is what makes real documents measurable; adding them is the
+  work that turns a measured baseline into a meaningful one.

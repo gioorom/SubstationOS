@@ -20,8 +20,10 @@ EPIC 2), Milestone 25.2 (Document Identity and Content
 Access, EPIC 2), Milestone 26.1 (Canonical PDF
 Representation, EPIC 2), Milestone 27.1 (Canonical Text
 Segmentation, EPIC 2), Milestone 26.2 (PDF Consumption
-Consolidation, EPIC 2), and Milestone 28.1 (Engineering Evidence
-Extraction, EPIC 2).
+Consolidation, EPIC 2), Milestone 28.1 (Engineering Evidence
+Extraction, EPIC 2), Milestone 28.2 (Engineering Evidence
+Evaluation Framework, EPIC 2), and Milestone 29.1 (Engineering
+Entity Resolution, EPIC 2).
 Describes the governed knowledge pipeline as it
 exists today — not the product vision
 (`project_intelligence_architecture.md` describes vision and roadmap;
@@ -35,6 +37,7 @@ its own.
 ```
 Documents → Document Identity → Document Ingestion → Canonical PDF Representation →
 Canonical Text Segmentation → Engineering Evidence Extraction →
+Engineering Evidence Evaluation → Engineering Entity Resolution →
 Engineering Index → Proposed Claims → Review Workflow →
 Canonicalization → Graph Builder → Project Knowledge Graph → Graph Query →
 Structured Retrieval → Context Builder → Prompt Builder →
@@ -148,6 +151,63 @@ the repository already knows about it, and whether it is ready for a
 future extractor - and nothing else. The Engineering Index and the
 Knowledge Graph stay untouched, enforced by architecture test rather than
 by intent.
+
+**Milestone 29.1 turned observations into objects - and stopped
+there.** Engineering Entity Resolution groups compatible evidence into
+entities: designation observations sharing a normalised designation, a
+status and an extraction rule version become one
+`EQUIPMENT_DESIGNATION`; each quantity observation becomes its own
+`ENGINEERING_QUANTITY`. Grouping is by **declared key** - no edit
+distance, no embeddings, no similarity score, no model.
+
+**Evidence is an observation; an entity is a deterministic grouping of
+observations; graph nodes will later be generated from entities.** Those
+are three different things, and the layer exists to keep them apart. An
+entity is a *hypothesis*: it follows from a stated rule at a stated
+version and can be recomputed at any time. It is not a graph node, and
+nothing in this milestone writes one.
+
+What it deliberately does not answer: what an object *is* (no
+transformer, breaker, CT, VT, relay or cable classes exist), what it
+*does*, what it *belongs to*, or which quantity is whose rating. `630
+kVA` beside `TR1` is two entities that do not know about each other -
+adjacency is a fact about ink, attribution is a judgement. There is no
+field in the model and no column in the schema in which any of that could
+be recorded.
+
+Entities **never own provenance; they aggregate it**: each cites the
+evidence keys and locations that created it, while the character-level
+chain stays on the evidence item, which remains authoritative. No entity
+exists without at least one contributing observation.
+
+**Milestone 28.2 made the platform able to measure its own
+extraction rules.** Before entity resolution can be built on evidence,
+somebody has to be able to say how good that evidence is - and an
+extractor cannot grade itself. The Engineering Evidence Evaluation
+Framework compares extractor output against a **version-controlled
+reference corpus** of documents whose evidence a human wrote down by
+hand, classifies every item as a true positive, false positive or false
+negative, and computes exact `Decimal` precision, recall and F1 per
+corpus, document, evidence type and rule.
+
+**Every new extraction rule must be evaluated against the reference
+corpus before it becomes part of the supported deterministic pipeline.**
+A rule that has not been measured is a rule nobody knows the cost of: it
+may raise recall and quietly halve precision, and the first place that
+would surface is an engineer disputing an entity months later.
+
+Only exact matches count, and **provenance is part of the match** - an
+observation with the right text in the wrong place is a false positive
+*and* a false negative, because a consumer that trusted its location
+would be reading the wrong part of the document. Regression reports name
+the exact items that changed rather than only the movement, and reports
+are insert-only, so the history a comparison needs cannot be overwritten.
+
+Evaluation is a **product capability**, not a test-suite detail: it has
+its own API, its own persisted history and its own version. It never
+writes engineering evidence, and it reaches no document - a corpus is
+self-contained in the repository, which is what lets an evaluation run in
+CI and mean the same thing next year.
 
 **Milestone 28.1 added the first governed consumer of canonical
 text.** Engineering Evidence Extraction runs a small, versioned catalogue
@@ -264,6 +324,8 @@ across the whole pipeline).
 | Canonical Text Segmentation | Canonical Text | The semantic-neutral textual structure over the representation (Milestone 27.1): `CanonicalTextDocument → Section → Paragraph → Line → Token`, where a section **is a page**, a paragraph **is a PDF block** and a line **is a PDF line** - only boundaries the parser observed. Tokens carry the original text, a deterministic NFKC normalisation, their position in the line, and the full provenance chain back to the originating span's characters. **The structure every future extractor consumes**, through `CanonicalTextRepository`, which exposes no PDF structure at all. Assigns no engineering meaning: no entities, no equipment, no cables, no tables, no relationships | `app/domain/canonical_text/**` (domain), `app/services/canonical_text_service.py` |
 | Engineering Evidence Extraction | Engineering Evidence | Deterministic engineering observation over canonical text (Milestone 28.1): `EngineeringEvidenceSet → EngineeringEvidence`, covering designations, voltages, currents, powers and cable sections under a versioned rule catalogue with one pattern source and one unit catalogue. Quantities are held as exact `Decimal`; every item carries provenance to the characters, tokens, line, paragraph and page that produced it, plus its rule id and version. **Observations only** - no entity, no relationship, no equipment type, no LLM, and no column in which any of them could be recorded | `app/domain/engineering_evidence/**` (domain), `app/services/engineering_evidence_service.py` |
 | Knowledge Graph ingestion (legacy consumer) | Knowledge Graph | The pre-existing per-project entity extraction the upload endpoint feeds. Since Milestone 26.2 it receives **text assembled from the canonical segmentation** - never PDF bytes, a filesystem path, the content port or a parser object, all enforced by architecture test. Its own semantic policy is unchanged by that milestone: same extractor, same entities, same topology builder, different source of text | `app/services/knowledge_graph.py`, `app/services/ai/**`, `app/services/topology/**` |
+| Engineering Evidence Evaluation | Engineering Evidence Evaluation | The permanent framework that measures extraction quality (Milestone 28.2): a version-controlled `ReferenceCorpus` of hand-annotated documents, exact-match classification into `TRUE_POSITIVE` / `FALSE_POSITIVE` / `FALSE_NEGATIVE` **including provenance**, exact `Decimal` precision/recall/F1 per corpus, document, evidence type and rule, and regression detection that names the exact items that changed between two rule versions. Reports are insert-only; corpora are immutable at runtime. It never writes engineering evidence and reaches no document | `app/domain/evidence_evaluation/**` (domain, incl. `corpora/*.yaml`), `app/services/evidence_evaluation_service.py` |
+| Engineering Entity Resolution | Engineering Entities | Deterministic grouping of evidence into entities (Milestone 29.1): `EngineeringEntitySet → EngineeringEntity`, covering `EQUIPMENT_DESIGNATION` and `ENGINEERING_QUANTITY` under a versioned rule catalogue. Identity is a SHA-256 over document, evidence source, rule and version, so the same evidence always resolves the same way and a rule bump creates a new set rather than a rewrite. Entities aggregate their evidence's provenance and can enumerate the observations that created them. **Groupings only** - no relationship, no topology, no equipment classification, no LLM, and no Knowledge Graph or Engineering Index write | `app/domain/engineering_entities/**` (domain), `app/services/engineering_entity_service.py` |
 | Engineering Index | Engineering Index | A structured, per-document index of extracted content — not yet a claim about the installation. Its **read side** (Document Retrieval, Milestone 23B.1) answers "which documents mention X?" as ranked `DocumentReference`s, scored from a fixed documented weight table | `app/domain/engineering_index/**` (domain), `app/services/document_retrieval_service.py` |
 | Proposed Claims | Proposed Claims | Candidate assertions derived from the index, not yet reviewed | `app/domain/proposed_claims/**` |
 | Review Workflow | Review Workflow | Human review/approval state for a Proposed Claim | `app/domain/review_workflow/**` |
@@ -720,6 +782,7 @@ into the governed pipeline this milestone.
 - **Working Memory:** [working_memory.md](working_memory.md), [ADR-0018](adr/0018-working-memory-foundation.md).
 - **Engineering Request Classification:** [engineering_intent.md](engineering_intent.md), [ADR-0019](adr/0019-engineering-request-classification.md).
 - **Documents, Document Identity, Document Ingestion, the Canonical PDF Representation and the Canonical Text Segmentation:** [document_management.md](document_management.md).
-- **Engineering Evidence Extraction:** [engineering_evidence.md](engineering_evidence.md).
+- **Engineering Evidence Extraction and its Evaluation Framework:** [engineering_evidence.md](engineering_evidence.md).
+- **Engineering Entity Resolution:** [engineering_entities.md](engineering_entities.md).
 - **Classification-to-Retrieval Bridge:** [retrieval_bridge.md](retrieval_bridge.md) (no ADR of its own - it applies ADR-0019 and ADR-0020 rather than departing from either).
 - **Engineering Engine:** [engineering_engine.md](engineering_engine.md), [ADR-0020](adr/0020-engineering-engine-foundation.md).
