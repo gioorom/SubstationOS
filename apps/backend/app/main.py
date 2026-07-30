@@ -23,6 +23,7 @@ from app.models import (  # noqa: F401
     engineering_semantics,
     engineering_index,
     evidence_evaluation,
+    identity,
     graph_builder,
     knowledge_graph,
     project,
@@ -31,6 +32,8 @@ from app.models import (  # noqa: F401
     review_workflow,
 )
 from app.routers import (
+    audit as audit_router,
+    authentication as authentication_router,
     canonical_pdf as canonical_pdf_router,
     canonical_text as canonical_text_router,
     canonicalization as canonicalization_router,
@@ -59,8 +62,10 @@ from app.routers import (
     proposed_claims as proposed_claims_router,
     review_workflow as review_workflow_router,
     structured_retrieval as structured_retrieval_router,
+    users as users_router,
     working_memory as working_memory_router,
 )
+from app.routers.security import install_security
 
 load_dotenv()
 
@@ -80,6 +85,13 @@ app = FastAPI(
 )
 
 
+# Order matters and is not cosmetic. Starlette applies the *last*
+# middleware added as the outermost layer, so authentication is installed
+# first and CORS wraps it - which is what makes a `401` readable by a
+# browser instead of arriving as an opaque network error.
+install_security(app)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -95,6 +107,9 @@ app.add_middleware(
 )
 
 
+app.include_router(authentication_router.router)
+app.include_router(users_router.router)
+app.include_router(audit_router.router)
 app.include_router(documents.router)
 app.include_router(document_ingestion_router.router)
 app.include_router(canonical_pdf_router.router)

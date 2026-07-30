@@ -117,6 +117,37 @@ byte the corresponding page of the full read.
   viewer in the *Originale* tab and is not additionally disabled by
   SubstationOS. Documented in `engineering_workspace.md` §12.
 
+## Rejected Alternatives
+
+**PDF.js or `react-pdf` for the source viewer.** Rejected because either
+would introduce a second source of page geometry alongside the canonical
+representation the provenance already cites. Highlight coordinates and
+evidence provenance would come from two independent layout engines, and
+no test could detect the day they disagreed. Bundle size, worker setup
+and SSR were secondary considerations pointing the same way.
+
+**A dedicated `support-chain` projection endpoint.** Rejected because the
+four artefact endpoints already return each document's whole set with
+support references inline, so there is no request fan-out to eliminate.
+It would only duplicate data the client holds and create a second place
+in which a support relationship is described — which is the condition
+under which two descriptions diverge.
+
+**Bounded batch-read endpoints.** Rejected for the same reason, with the
+added cost of a batching protocol nobody needs at current artefact
+counts.
+
+**Reading the whole canonical representation client-side instead of
+adding a page endpoint.** Rejected because it transfers every span of
+every page of a drawing set to render one page. The page-scoped read is a
+strict projection and an API test asserts it returns exactly what the
+full read holds for that page.
+
+**Drawing approximate highlights when a span cannot be resolved.**
+Rejected outright. A plausible rectangle in the wrong place on a wiring
+diagram is worse than no rectangle, because the engineer cannot tell the
+difference.
+
 ## Related
 
 - `docs/architecture/engineering_workspace.md`

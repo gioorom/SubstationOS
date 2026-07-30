@@ -163,7 +163,7 @@ describe("the workspace route", () => {
     const backend = await renderWorkspace();
 
     const paths = backend.requests.map((request) =>
-      request.url.replace("http://127.0.0.1:8000", ""),
+      request.url.replace("http://localhost:8000", ""),
     );
 
     expect(paths).toContain("/documents/10");
@@ -241,7 +241,7 @@ describe("the source viewer", () => {
 
     expect(frame).toHaveAttribute(
       "src",
-      "http://127.0.0.1:8000/documents/10/content#page=1",
+      "http://localhost:8000/documents/10/content#page=1",
     );
   });
 
@@ -268,7 +268,7 @@ describe("the source viewer", () => {
     expect(screen.queryByTitle(/Documento originale/)).toBeNull();
     expect(
       screen.getByRole("link", { name: /Scarica il documento/ }),
-    ).toHaveAttribute("href", "http://127.0.0.1:8000/documents/10/content");
+    ).toHaveAttribute("href", "http://localhost:8000/documents/10/content");
   });
 
   it("reports missing content instead of embedding nothing", async () => {

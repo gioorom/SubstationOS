@@ -236,7 +236,7 @@ describe("no component bypasses the API client", () => {
 
     await apiClient.get("/health");
 
-    expect(backend.requests[0].url.startsWith("http://127.0.0.1:8000")).toBe(
+    expect(backend.requests[0].url.startsWith("http://localhost:8000")).toBe(
       true,
     );
   });

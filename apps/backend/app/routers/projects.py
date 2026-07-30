@@ -31,6 +31,14 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.database.database import SessionLocal
+from app.domain.audit.audit_models import (
+    AuditAction,
+    AuditOutcome,
+    AuditResource,
+)
+from app.domain.identity.audit_identity import AuditIdentity
+from app.domain.identity.identity_roles import Capability
+from app.domain.identity.project_access import may_administer_project
 from app.domain.project.project_exceptions import (
     DuplicateProjectCodeError,
     InvalidProjectCodeError,
@@ -70,7 +78,11 @@ from app.schemas.project import (
 from app.schemas.project_intelligence import (
     ProjectIntelligenceResponse,
 )
-from app.services import project_service
+from app.infrastructure.audit.sqlalchemy_audit_repository import (
+    SqlAlchemyAuditRepository,
+)
+from app.routers.security import require_capability
+from app.services import audit_service, project_service
 from app.services.project_intelligence import (
     build_project_intelligence,
 )
@@ -186,21 +198,36 @@ def get_projects(
 )
 def create_project(
     payload: ProjectCreate,
+    identity: AuditIdentity = Depends(
+        require_capability(Capability.MANAGE_PROJECTS)
+    ),
     db: Session = Depends(get_db),
 ) -> ProjectRead:
+    """
+    Creates a project owned by the caller.
+
+    ``created_by`` and ``owner_user_id`` come from the **authenticated
+    identity**, never from the request body. Before EPIC 30.3 the body
+    carried ``created_by``, which meant the record of who created a
+    project was whatever the caller chose to type.
+    """
+
+    now = datetime.utcnow()
+
     try:
         project = project_service.create_project(
             _repository(db),
             name=payload.name,
             code=payload.code,
             customer=payload.customer,
-            now=datetime.utcnow(),
+            now=now,
             epc=payload.epc,
             country=payload.country,
             location=payload.location,
             description=payload.description,
             canonical_domain_version=payload.canonical_domain_version,
-            created_by=payload.created_by,
+            created_by=identity.display_name,
+            owner_user_id=identity.user_id,
             status=payload.status,
             voltage_level=payload.voltage_level,
         )
@@ -214,6 +241,16 @@ def create_project(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(error),
         ) from error
+
+    audit_service.record_for_identity(
+        SqlAlchemyAuditRepository(db),
+        identity=identity,
+        action=AuditAction.PROJECT_CREATED,
+        outcome=AuditOutcome.SUCCEEDED,
+        resource=AuditResource("project", str(project.id)),
+        now=now,
+        detail=f"code={project.code}",
+    )
 
     return ProjectRead.of(project)
 
@@ -367,13 +404,42 @@ def restore_project(
 )
 def delete_project(
     project_id: int,
+    identity: AuditIdentity = Depends(
+        require_capability(Capability.MANAGE_PROJECTS)
+    ),
     db: Session = Depends(get_db),
 ) -> ProjectRead:
     """
     Soft deletes the project. No row is ever removed from the database,
     and the updated project is returned so a caller can see its new
     lifecycle state.
+
+    The one place project **ownership** is enforced in this milestone.
+    Deletion is the destructive operation, so it is the one worth
+    guarding while a membership model does not exist yet: an
+    administrator may delete any project, an owner may delete their own,
+    and a project created before ownership existed may be deleted by any
+    engineer - which is exactly what those projects allowed yesterday.
+    See ``domain/identity/project_access.py``.
     """
+
+    project = _require_project(db, project_id)
+
+    if not may_administer_project(identity, project.owner_user_id):
+        audit_service.record_for_identity(
+            SqlAlchemyAuditRepository(db),
+            identity=identity,
+            action=AuditAction.ACCESS_DENIED,
+            outcome=AuditOutcome.DENIED,
+            resource=AuditResource("project", str(project_id)),
+            now=datetime.utcnow(),
+            detail="delete refused: not the owner",
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only this project's owner may delete it.",
+        )
 
     return _transition_endpoint(
         project_id,

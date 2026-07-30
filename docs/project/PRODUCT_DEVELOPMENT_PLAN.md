@@ -148,6 +148,8 @@ readiness declaration)
 | Engineering Engine | Implemented (foundation) — registry-driven workflow selection, explicit deterministic `WorkflowPlan`s, step-handler execution with first-failure stop, 14 typed failure codes, an append-only execution timeline, and explicit never-applied aggregate update proposals (Milestone 23A, ADR-0020); **five workflows** - `KNOWLEDGE_QUERY` (23A), `DOCUMENT_LOOKUP` (23B.1, the first workflow that invokes no LLM at all), `ENGINEERING_EXPLANATION` (23B.2), `ENGINEERING_VERIFICATION` (24.1, the first reasoning workflow) and `ENGINEERING_COMPARISON` (24.2, the first with two subjects and two independent retrievals whose identity is preserved end to end), each added by declaration and registration alone with no change to engine decision logic; the engine evaluates and compares nothing itself; every other intent returns `UNSUPPORTED` and runs nothing; reuses Structured Retrieval, Document Retrieval, Context Builder, Prompt Builder, the provider-neutral runtime and Engineering Response rather than reimplementing them; no persistence, no transaction, no retries, no agents |
 | AI Assistant | Does not exist |
 | Web frontend | Integrated — one centralised API client (the only caller of `fetch`), one transcription of the API contract in `lib/contracts` asserted against the backend's own OpenAPI document, a typed error model with no generic "an error occurred", and two state primitives replacing five hand-rolled hooks. Two document surfaces answering two questions: the **Pipeline UI** (did each stage run) and, since EPIC 30.2, the **Engineering Workspace** (what does the platform claim, and what supports it). **No mock data, no placeholder counters** — `lib/demo-*.ts` and the commissioning/timeline panels are deleted. 205 frontend tests, including architecture tests asserting no fuzzy matching, no engineering rule, no direct `fetch` and no write exists in Workspace code. Still absent: authentication and any human review UI |
+| Identity and access | Implemented — an `identity` bounded context (EPIC 30.3): users, scrypt password credentials in a self-describing upgradable form, server-side authentication sessions with independent idle (2h) and absolute (12h) clocks, three roles (anonymous / engineer / administrator) and capability-declaring routes. Authentication is **deny-by-default middleware**: every route requires a session unless it is on a short, deliberate public list, and a test walks every path in the live OpenAPI document to prove it. The session token leaves the server only as an `HttpOnly` cookie and is stored as a SHA-256 fingerprint, so a copy of the database is neither a set of passwords nor a set of live logins. CSRF is a session-bound token, not plain double-submit |
+| Audit trail | Implemented — an append-only `audit` bounded context (EPIC 30.3) whose port declares no update and no delete. Records login, failed login, logout, password change, user lifecycle, project creation, document upload, pipeline execution and access denials, each with actor, timestamp, action, resource and outcome. **Audit identity attaches to actions, never to artefacts** - no engineering domain module may import identity (asserted), no engineering table may carry a user column (asserted), and running the pipeline under two different logins produces byte-identical artefacts (asserted) |
 | Engineering Workspace | Implemented — `/documents/{id}/workspace` (EPIC 30.2): a document-centric, **inspection-only** projection over governed artefacts. Three regions (source, engineering explorer, inspector); the full support chain `statement → fact → entity → evidence → canonical source location` navigable in both directions, composed client-side from four whole-set reads with **no support-chain endpoint added** — every join is a key the backend declared, never a text or value comparison. Highlights are drawn on an SVG map of the canonical representation at the parser's own bounding boxes, so an observation's provenance and its highlight are the same artefact and cannot drift (ADR-0021); no PDF rendering library was added. Diagnostics are first-class content, and `unrun`/`empty`/`ambiguous`/`declined`/`failed`/`reused` stay distinct, each carried by colour, glyph and word. `interpreted` is stated everywhere to mean *produced by a versioned rule*, never *approved by an engineer*. One read-only endpoint added: `GET /documents/{id}/canonical-representation/pages/{n}` |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
 
@@ -2544,6 +2546,85 @@ interruptions, and are ranges, not commitments.
   addressed, because adding one now would be guessing at a workload
   nobody has measured.
 - Dependencies: EPIC 30.1.2 (whose audit produced the list).
+
+**EPIC 30.3 — Identity, Authentication and Audit Foundations** - *Completed*
+- Objective: make every future engineering action attributable to a
+  verified person. Human Review, collaboration and Knowledge Graph
+  governance all depend on knowing *who*, and none of them could be built
+  before that existed.
+- Delivered: an `identity` bounded context (users, credentials, sessions,
+  roles, capabilities, audit identity, project access), an `audit`
+  bounded context (append-only events), server-side session
+  authentication, deny-by-default authorization at the API boundary, and
+  a frontend session with a login screen, route guard, identity display
+  and expiry handling. **No engineering behaviour changed and no pipeline
+  rule changed.**
+- Two decisions recorded in
+  [ADR-0022](../architecture/adr/0022-session-authentication-and-password-hashing.md):
+  - **Opaque server-side sessions in an `HttpOnly` cookie**, not JWT. A
+    stateless token cannot be revoked, which would make logout a
+    client-side gesture and leave a disabled account's sessions
+    authenticating requests until they expired. SSO and MFA fit the
+    session model without changing it - SSO opens the same session by a
+    different proof, MFA gates its creation.
+  - **scrypt from `hashlib`**, in a self-describing
+    `algorithm$parameters$salt$digest` form, with `needs_rehash` and a
+    re-hash at login. Argon2id is the better algorithm and was declined
+    *for now* because it is a compiled dependency and this repository has
+    no dependency manifest to record one in - the single largest piece of
+    operational debt it has. The upgrade path is built rather than
+    promised.
+- **The rule the whole EPIC turns on: audit identity attaches to actions,
+  never to artefacts.** An entity, a fact and a semantic statement are
+  functions of a document's bytes and the versioned rules that read them;
+  a user on any of them would end determinism. An architecture test fails
+  if any engineering domain module imports the identity or audit context,
+  a second fails on a `user_id`/`actor`/`created_by`/`owner` column in any
+  engineering ORM model, and an API test runs the same stage over the same
+  document as two different engineers and asserts the artefacts compare
+  equal.
+- **Deny by default.** Authentication is middleware plus a short list of
+  explicitly public routes, so a router added next year is protected
+  because nobody did anything. `tests/api/test_api_security.py` walks
+  every path in the live OpenAPI document and requires each to be either
+  declared public or to refuse an anonymous caller `401` - with a
+  companion test asserting the sweep can build a URL for every route, so
+  a new path parameter cannot make a hole look like a pass.
+- Three levels only - anonymous, engineer, administrator - and routes
+  declare a **capability** rather than a role, so a future
+  project-membership model can grant one from a second source without any
+  route changing. Deliberately not a dozen speculative roles.
+- Hardening, each with a test: password never stored or reversible and
+  unrepresentable in any response schema; session fixation structurally
+  impossible; CSRF by a **session-bound** token rather than plain
+  double-submit; `hmac.compare_digest` throughout and a full key
+  derivation paid even for an unknown address, so timing discloses
+  nothing; unknown address, wrong password and disabled account answered
+  identically; no web storage, no `dangerouslySetInnerHTML`, and no
+  redirect to a supplied address anywhere in the frontend.
+- Audit trail: append-only, with no update or delete on the port at all.
+  Records login, failed login, logout, password change, user create and
+  disable, project creation, document upload, pipeline execution and
+  access denials, each with actor, timestamp, action, resource and
+  outcome. Nothing sensitive is *representable* - there is no field a
+  credential could be written to. An audit write that fails deliberately
+  does not fail the audited action, and a test pins that trade.
+- Project ownership is recorded from the authenticated identity and
+  consulted on **deletion only** - the destructive operation, and the one
+  worth guarding while no membership model exists. `created_by` is no
+  longer accepted from the request body, where it meant whatever the
+  caller typed.
+- Existing behaviour preserved: all 3079 backend tests pass, including
+  every pre-existing one, now running against the **protected**
+  application through the same `install_security` the real one uses.
+- Known limits, stated rather than deferred quietly: **no dependency
+  manifest** (the reason Argon2id was declined); no rate limiting on
+  login; no MFA, SSO or password-reset workflow; authorisation is
+  per-role rather than per-project; cookies are set without `Secure` for
+  plain-HTTP development and a TLS deployment must set it; security
+  headers belong to a reverse proxy and are documented but not set.
+- Dependencies: EPIC 30.1.3 (the governed public API it protects) and
+  EPIC 30.2 (the Workspace whose actions it attributes).
 
 **EPIC 30.2 — Engineering Workspace** - *Completed*
 - Objective: give an engineer a way to *validate* the platform's

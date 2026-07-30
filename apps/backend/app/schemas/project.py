@@ -70,8 +70,17 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
+    """
+    A new project.
+
+    ``created_by`` is deliberately **absent** since EPIC 30.3. It used to
+    be accepted from the request body, which meant the record of who
+    created a project was whatever the caller typed. It is now taken from
+    the authenticated identity, and there is no field here through which
+    a caller could claim to be somebody else.
+    """
+
     canonical_domain_version: str = UNVERSIONED_CANONICAL_DOMAIN
-    created_by: str | None = None
 
 
 class ProjectUpdateMetadata(BaseModel):
@@ -145,6 +154,10 @@ class ProjectRead(ProjectBase):
     lifecycle_state: ProjectLifecycleState
     canonical_domain_version: str
     created_by: str | None
+
+    #: The user who owns the project. ``None`` for projects created
+    #: before authentication existed.
+    owner_user_id: int | None
     created_at: datetime
     updated_at: datetime
     archived_at: datetime | None
@@ -170,6 +183,7 @@ class ProjectRead(ProjectBase):
             lifecycle_state=project.lifecycle_state,
             canonical_domain_version=project.canonical_domain_version,
             created_by=project.created_by,
+            owner_user_id=project.owner_user_id,
             created_at=project.created_at,
             updated_at=project.updated_at,
             archived_at=project.archived_at,

@@ -23,6 +23,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  AUDIT_ACTIONS,
+  AUDIT_OUTCOMES,
   CANONICAL_BLOCK_KINDS,
   DOCUMENT_CATEGORIES,
   DOCUMENT_CATEGORY_LABELS,
@@ -47,6 +49,8 @@ import {
   PROJECT_LIFECYCLE_LABELS,
   PROJECT_SORT_FIELDS,
   PROJECT_STATUSES,
+  ROLES,
+  USER_STATUSES,
   PROJECT_STATUS_LABELS,
   MAX_PAGE_SIZE,
   DEFAULT_PAGE_SIZE,
@@ -103,6 +107,11 @@ describe.runIf(schema !== null)("enums match the backend", () => {
     ["FactStatus", FACT_STATUSES],
     ["SupportRole", SUPPORT_ROLES],
     ["CanonicalBlockKind", CANONICAL_BLOCK_KINDS],
+    // EPIC 30.3
+    ["Role", ROLES],
+    ["UserStatus", USER_STATUSES],
+    ["AuditAction", AUDIT_ACTIONS],
+    ["AuditOutcome", AUDIT_OUTCOMES],
     ["SemanticStatementType", SEMANTIC_STATEMENT_TYPES],
     ["SemanticStatementStatus", SEMANTIC_STATEMENT_STATUSES],
     ["RelationType", GRAPH_RELATION_TYPES],

@@ -32,6 +32,7 @@ class ProjectFactory:
         description: str | None = None,
         canonical_domain_version: str = UNVERSIONED_CANONICAL_DOMAIN,
         created_by: str | None = None,
+        owner_user_id: int | None = None,
         status: ProjectStatus = ProjectStatus.PLANNING,
         voltage_level: str | None = None,
     ) -> Project:
@@ -50,6 +51,7 @@ class ProjectFactory:
             lifecycle_state=ProjectLifecycleState.DRAFT,
             canonical_domain_version=canonical_domain_version,
             created_by=created_by,
+            owner_user_id=owner_user_id,
             created_at=created_at,
             updated_at=created_at,
             status=status,

@@ -11,6 +11,7 @@
 import {
   ApiError,
   ConflictError,
+  ForbiddenError,
   type FieldViolation,
   NetworkError,
   NotFoundError,
@@ -18,12 +19,15 @@ import {
   RequestError,
   ServerError,
   TimeoutError,
+  UnauthenticatedError,
   ValidationError,
 } from "./errors";
 
 /** Per-call-site wording, used only where the backend supplies none. */
 export interface ErrorCopy {
   validation?: string;
+  unauthenticated?: string;
+  forbidden?: string;
   notFound?: string;
   conflict?: string;
   server?: string;
@@ -33,6 +37,10 @@ export interface ErrorCopy {
 
 const DEFAULT_COPY: Required<ErrorCopy> = {
   validation: "I dati inviati non sono validi.",
+  unauthenticated:
+    "La sessione non è più valida. Effettua di nuovo l'accesso.",
+  forbidden:
+    "Il tuo ruolo non consente questa operazione.",
   notFound: "La risorsa richiesta non esiste.",
   conflict:
     "L'operazione è in conflitto con lo stato attuale della risorsa.",
@@ -136,6 +144,17 @@ export function describeError(
 
   if (error instanceof ConflictError) {
     return error.detail ?? wording.conflict;
+  }
+
+  if (error instanceof UnauthenticatedError) {
+    return (
+      copy.unauthenticated ??
+      "La sessione non è più valida. Effettua di nuovo l'accesso."
+    );
+  }
+
+  if (error instanceof ForbiddenError) {
+    return error.detail ?? wording.forbidden;
   }
 
   if (error instanceof NotFoundError) {

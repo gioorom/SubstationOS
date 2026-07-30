@@ -6,6 +6,39 @@
 endpoints, see
 [knowledge_pipeline_overview.md](knowledge_pipeline_overview.md).
 
+## Authentication (EPIC 30.3)
+
+**Every endpoint requires a session unless it is on the public list.**
+That is enforced by middleware rather than per-route dependencies, so a
+router added later is protected by default, and
+`tests/api/test_api_security.py` walks every path in the live OpenAPI
+document asserting it.
+
+```
+POST /auth/login    → Set-Cookie: substationos_session (HttpOnly)
+                      Set-Cookie: substationos_csrf    (readable)
+POST /auth/logout   → 204, always
+GET  /auth/session  → who am I, or 401
+```
+
+| Status | Meaning |
+|---|---|
+| `401` | No live session. One message for every cause - no token, unknown, revoked, expired, idle - deliberately, so the API cannot be used to test whether a found token is real. |
+| `403` | Authenticated and not permitted, **or** an unsafe request without a valid `X-CSRF-Token`. Never a reason to re-authenticate. |
+
+Public routes, each a deliberate choice: `/`, `/health`, `/auth/login`,
+`/auth/logout`, `/auth/session`, `/openapi.json`, `/docs`, `/redoc`. See
+[security_architecture.md](security_architecture.md) §7 for why each.
+
+**No response schema anywhere can carry a password, a credential or a
+session token** - two OpenAPI tests assert it, one walking every schema
+reachable from a response, the other asserting the three request models
+that accept a password are unreachable from any response.
+
+`POST /projects/` no longer accepts `created_by`. It used to, which meant
+the record of who created a project was whatever the caller typed; it now
+comes from the authenticated identity, along with `owner_user_id`.
+
 ## The rule
 
 **Every public endpoint exposes a governed application schema.** Never an
@@ -364,11 +397,16 @@ there means the frontend is describing an API that no longer exists.
 - No indexes were added. Search is `ILIKE '%term%'`, which cannot use a
   B-tree; at current registry sizes this is not measurable, and adding a
   speculative index would be guessing.
-- **There is no authentication and no authorisation on any endpoint.**
-  Any caller who can reach the API can read any document, including its
-  original bytes. This is the largest known gap in the public contract,
-  it is deliberate for the current milestones, and it must be closed
-  before any deployment outside a trusted network.
+- **Authorisation is per-role, not per-project.** Any authenticated
+  engineer can read any project and any document, including its original
+  bytes; only user administration and the audit trail are restricted.
+  Project membership is the next milestone. (Authentication itself
+  arrived in EPIC 30.3.)
+- **No rate limiting on `POST /auth/login`.** scrypt makes each attempt
+  expensive, which slows a brute force without stopping one, and gives an
+  unauthenticated caller a way to consume CPU.
+- **Cookies are set without `Secure`** so the platform runs over plain
+  HTTP in development. A TLS deployment must set it.
 - The artefact endpoints (`/engineering-evidence`, `/engineering-entities`,
   `/engineering-facts`, `/engineering-semantics`) return a document's
   **whole** set, unpaged. The Engineering Workspace depends on that, and

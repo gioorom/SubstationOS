@@ -156,6 +156,62 @@ ingestion job have real timestamps, and only those are shown.
 error. They are rendered as strings and never parsed into a JS number. A
 test asserts `20.500 kV` survives as `20.500 kV`.
 
+## Authentication
+
+Since EPIC 30.3 the application is behind a session.
+
+`SessionProvider` wraps the root layout, reads `GET /auth/session` **once
+per page load**, and is the only thing in the frontend that knows who is
+signed in. `RequireSession` wraps the whole authenticated application, so
+a screen added next year is protected because nobody did anything - the
+same deny-by-default shape the backend's middleware has.
+
+Three session states, kept apart deliberately:
+
+| | |
+|---|---|
+| `loading` | The first session read has not answered. Renders neither the app nor the login form: showing the form here would sign every user out, visibly, on every page load. |
+| `anonymous` | No session. The login form is the whole application. |
+| `signed_in` | `identity` says whose. |
+
+**The route guard is usability, not security.** The backend refuses every
+request without a session and would do so whether or not the guard
+existed. What it prevents is an application that renders empty screens
+and error banners to somebody who simply needs to sign in.
+
+### The credential is not reachable from script
+
+The session token lives in an `HttpOnly` cookie. Nothing in this
+application reads it, stores it, or has a type that could hold it -
+`lib/contracts/identity.ts` has no session-token type, and
+`tests/security-architecture.test.ts` fails on `localStorage`,
+`sessionStorage`, `indexedDB`, `substationos_session` or a credential in
+a URL, anywhere in `app/`, `components/`, `hooks/`, `lib/` or `config/`.
+
+The client sends `credentials: "include"` on every request and echoes the
+readable CSRF cookie in `X-CSRF-Token` on every unsafe method. Both live
+in `lib/api/client.ts` and nowhere else.
+
+### 401 and 403 mean different things
+
+A `401` from **any** request means the session ended - it expired, an
+administrator disabled the account, or somebody signed out in another
+tab. `onUnauthenticated` observes that in one place, so no screen has to
+recognise it, and the login form says *"la sessione è scaduta"* rather
+than appearing blank.
+
+A `403` does **not** sign the user out. They are authenticated and not
+permitted; signing in again as the same person cannot change the answer,
+and sending them to the login screen would be a loop that never succeeds.
+
+### Same-site, and why the dev base URL changed
+
+`config/env.ts` defaults to `http://localhost:8000`, **not**
+`127.0.0.1:8000`. The session cookie is `SameSite=Lax`, and "site" is
+scheme plus registrable domain - ports are ignored, but `localhost` and
+`127.0.0.1` are different hosts. Against `127.0.0.1` the cookie would
+silently not travel and every request would arrive anonymous.
+
 ## The Engineering Workspace
 
 `/documents/{id}/workspace` is a **separate route with a different
@@ -321,6 +377,15 @@ nothing. 91 tests across six files:
 - **No PDF rendering library.** PDF.js and `react-pdf` were both
   evaluated and rejected: either would give the Workspace a second source
   of page geometry alongside the canonical representation. See ADR-0021.
+- **No authorization decisions.** The frontend may *hide* a control the
+  backend would refuse; it decides nothing. A permission rule duplicated
+  here is a rule that will eventually disagree with the one that matters,
+  and a test fails on `hasPermission(`, `canManageUsers` or a
+  `CAPABILITIES` map.
+- **No redirect to a supplied address.** There is no `?next=` parameter,
+  and a test fails on `window.location =`, `location.href =`,
+  `redirect_uri` or `returnUrl`. An open redirect turns this application
+  into a credible-looking hop to somebody else's login page.
 
 ## Gaps that Milestone 30.1.3 closed
 
@@ -346,11 +411,13 @@ See [public_api.md](public_api.md) for the contract.
 - There is no page-size selector in the UI; the default of 25 is used
   everywhere except the two places that need a whole small list (the
   upload target picker and a project's own documents), which ask for 100.
-- No E2E test against a live backend — the 205 tests stub HTTP.
-- **No authentication or authorisation anywhere.** Any caller who can
-  reach the API can read any document, and the Workspace inherits that.
-  A deliberate deferral, and one that must be resolved before any
-  deployment outside a trusted network.
+- No E2E test against a live backend — the 243 tests stub HTTP.
+- **Authorization is per-role, not per-project.** Any authenticated
+  engineer can read any project and any document; only user
+  administration and the audit trail are restricted. Project membership
+  is the next milestone. (Authentication itself arrived in EPIC 30.3.)
+- **No MFA, no SSO, no password reset UI.** Explicit non-goals; the
+  session model was chosen to accommodate the first two.
 - The Workspace's canonical page map renders extracted text at its
   recorded coordinates; it shows no images and no vector geometry, so a
   purely graphical drawing looks sparse there. The original document is

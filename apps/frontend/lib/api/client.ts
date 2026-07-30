@@ -17,17 +17,70 @@ import { env } from "@/config/env";
 import {
   ConflictError,
   type FieldViolation,
+  ForbiddenError,
   NetworkError,
   NotFoundError,
   RequestCancelledError,
   RequestError,
   ServerError,
   TimeoutError,
+  UnauthenticatedError,
   ValidationError,
 } from "./errors";
 
 /** Requests that may be retried: reads, and only on a transport fault. */
 const RETRYABLE_METHODS = new Set(["GET", "HEAD"]);
+
+/** Methods the backend requires a CSRF token for. Mirrors its own list. */
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * The CSRF cookie the backend sets alongside the session.
+ *
+ * It is readable by script **on purpose**: echoing it in a header is the
+ * half of the check an attacker on another origin cannot perform. The
+ * session token itself is `HttpOnly` and is never touched by this file -
+ * the browser attaches it, and nothing here can read it, which is what
+ * makes an XSS flaw in this application a limited incident rather than a
+ * credential theft.
+ */
+const CSRF_COOKIE = "substationos_csrf";
+
+const CSRF_HEADER = "X-CSRF-Token";
+
+/**
+ * Notified whenever any request is answered `401`.
+ *
+ * The one piece of module state in this file, and it earns its place: a
+ * session can expire between two page loads, and without a single place
+ * to observe that, every hook in the application would have to recognise
+ * a 401 and decide what it means. One handler, registered by the session
+ * provider, turns "this request was refused" into "you have been signed
+ * out" exactly once.
+ *
+ * It is a notification, not a retry: nothing here re-issues the request
+ * or attempts to refresh anything.
+ */
+let unauthenticatedHandler: (() => void) | null = null;
+
+export function onUnauthenticated(handler: (() => void) | null): void {
+  unauthenticatedHandler = handler;
+}
+
+function csrfToken(): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const match = document.cookie
+    .split(";")
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${CSRF_COOKIE}=`));
+
+  return match === undefined
+    ? null
+    : decodeURIComponent(match.slice(CSRF_COOKIE.length + 1));
+}
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -174,6 +227,20 @@ function failureFor(
     );
   }
 
+  if (status === 401) {
+    return new UnauthenticatedError(
+      detail ?? "È necessario autenticarsi.",
+      detail,
+    );
+  }
+
+  if (status === 403) {
+    return new ForbiddenError(
+      detail ?? "Il tuo ruolo non consente questa operazione.",
+      detail,
+    );
+  }
+
   if (status === 404) {
     return new NotFoundError(detail ?? "Risorsa non trovata.", detail);
   }
@@ -251,6 +318,14 @@ async function performRequest(
     body = JSON.stringify(options.json);
   }
 
+  if (!SAFE_METHODS.has(method)) {
+    const token = csrfToken();
+
+    if (token !== null) {
+      headers[CSRF_HEADER] = token;
+    }
+  }
+
   const timeout = withTimeout(
     options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     options.signal,
@@ -262,6 +337,10 @@ async function performRequest(
       headers,
       body,
       signal: timeout.signal,
+      // The session lives in a cookie the browser will not send
+      // cross-origin unless asked. Without this every request arrives
+      // anonymous and every page looks signed out.
+      credentials: "include",
     });
   } catch (cause) {
     if (timeout.timedOut()) {
@@ -328,7 +407,13 @@ export async function request<T>(
     }
 
     if (!response.ok) {
-      throw failureFor(response, await readBody(response));
+      const failure = failureFor(response, await readBody(response));
+
+      if (failure instanceof UnauthenticatedError) {
+        unauthenticatedHandler?.();
+      }
+
+      throw failure;
     }
 
     if (options.raw === true) {

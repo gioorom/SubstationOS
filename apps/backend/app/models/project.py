@@ -100,6 +100,28 @@ class Project(Base):
         String(150),
         nullable=True,
     )
+    """
+    Who created the project, as a display name.
+
+    Since EPIC 30.3 this is written from the **authenticated identity**
+    and is no longer accepted from the request body - a caller claiming
+    to be somebody was never evidence that they were.
+    """
+
+    owner_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        index=True,
+    )
+    """
+    The user who owns this project.
+
+    Nullable, and staying nullable: every project created before EPIC
+    30.3 has no owner, and inventing one would be recording a fact nobody
+    established. Deliberately **not** a foreign key to ``users`` - a
+    project must survive the disabling or removal of the account that
+    created it.
+    """
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

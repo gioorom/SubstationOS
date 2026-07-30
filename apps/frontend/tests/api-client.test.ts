@@ -29,7 +29,7 @@ describe("request construction", () => {
     await apiClient.get("/projects/");
 
     expect(backend.requests[0].url).toBe(
-      "http://127.0.0.1:8000/projects/",
+      "http://localhost:8000/projects/",
     );
   });
 
@@ -41,7 +41,7 @@ describe("request construction", () => {
     });
 
     expect(backend.requests[0].url).toBe(
-      "http://127.0.0.1:8000/documents/?project_id=7",
+      "http://localhost:8000/documents/?project_id=7",
     );
   });
 

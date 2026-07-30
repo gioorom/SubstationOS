@@ -162,7 +162,7 @@ describe("the governed download", () => {
     const content = await downloadDocumentContent(7);
 
     expect(calls).toEqual([
-      "http://127.0.0.1:8000/documents/7/content",
+      "http://localhost:8000/documents/7/content",
     ]);
     expect(content.filename).toBe("schema.pdf");
     expect(content.blob.size).toBeGreaterThan(0);
@@ -194,7 +194,7 @@ describe("the governed download", () => {
     await downloadDocumentContent(42);
 
     // No storage reference, no filename, no directory in the URL.
-    expect(calls[0]).toBe("http://127.0.0.1:8000/documents/42/content");
+    expect(calls[0]).toBe("http://localhost:8000/documents/42/content");
     expect(calls[0]).not.toContain("storage");
   });
 

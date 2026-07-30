@@ -62,6 +62,36 @@ export class ValidationError extends ApiError {
   }
 }
 
+/**
+ * 401 - there is no live session.
+ *
+ * Deliberately one type for every way of not being authenticated: no
+ * cookie, an unknown token, a revoked one, an expired one and an idle one
+ * all arrive here, because the backend answers all of them identically
+ * and on purpose. Telling a caller which would let them use the API to
+ * test whether a token they found is real.
+ *
+ * Distinct from `ForbiddenError`: this one is worth reacting to by
+ * signing the user out and showing the login screen. That one is not.
+ */
+export class UnauthenticatedError extends ApiError {
+  readonly status = 401;
+  readonly kind = "unauthenticated";
+}
+
+/**
+ * 403 - authenticated, and not permitted.
+ *
+ * Never a reason to send the user back to the login screen: they are
+ * signed in, and signing in again as the same person cannot change the
+ * answer. Also raised when a state-changing request arrives without a
+ * valid CSRF token.
+ */
+export class ForbiddenError extends ApiError {
+  readonly status = 403;
+  readonly kind = "forbidden";
+}
+
 /** 404 - the resource does not exist, or the stage has not run yet. */
 export class NotFoundError extends ApiError {
   readonly status = 404;
@@ -132,4 +162,9 @@ export function isApiError(error: unknown): error is ApiError {
 
 export function isCancellation(error: unknown): boolean {
   return error instanceof RequestCancelledError;
+}
+
+/** Whether this failure means "your session is gone, sign in again". */
+export function isUnauthenticated(error: unknown): boolean {
+  return error instanceof UnauthenticatedError;
 }

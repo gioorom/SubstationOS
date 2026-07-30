@@ -115,6 +115,153 @@
     "title": "AnthropicPreparedRequestRead",
     "type": "object"
    },
+   "AuditAction": {
+    "description": "The catalogue of auditable actions.\n\nA closed vocabulary, so \"what can appear in the trail?\" has an answer\nthat can be read rather than discovered. It grows when a milestone\nadds an action worth recording, and each addition is a deliberate\ndecision rather than a free-text string somebody typed at a call\nsite.",
+    "enum": [
+     "login_succeeded",
+     "login_failed",
+     "logout",
+     "password_changed",
+     "user_created",
+     "user_disabled",
+     "project_created",
+     "document_uploaded",
+     "pipeline_executed",
+     "workspace_accessed",
+     "access_denied"
+    ],
+    "title": "AuditAction",
+    "type": "string"
+   },
+   "AuditActorRead": {
+    "description": "Who acted.\n\n``authenticated`` is the field that matters: it says whether\n``description`` names a verified identity or merely records what an\nanonymous caller claimed.",
+    "properties": {
+     "authenticated": {
+      "title": "Authenticated",
+      "type": "boolean"
+     },
+     "description": {
+      "title": "Description",
+      "type": "string"
+     },
+     "session_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Session Id"
+     },
+     "user_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Id"
+     }
+    },
+    "required": [
+     "authenticated",
+     "user_id",
+     "session_id",
+     "description"
+    ],
+    "title": "AuditActorRead",
+    "type": "object"
+   },
+   "AuditEventListResponse": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/AuditEventRead"
+      },
+      "title": "Items",
+      "type": "array"
+     }
+    },
+    "required": [
+     "items"
+    ],
+    "title": "AuditEventListResponse",
+    "type": "object"
+   },
+   "AuditEventRead": {
+    "properties": {
+     "action": {
+      "$ref": "#/components/schemas/AuditAction"
+     },
+     "actor": {
+      "$ref": "#/components/schemas/AuditActorRead"
+     },
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
+     },
+     "event_id": {
+      "title": "Event Id",
+      "type": "integer"
+     },
+     "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+     },
+     "outcome": {
+      "$ref": "#/components/schemas/AuditOutcome"
+     },
+     "resource_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Resource Id"
+     },
+     "resource_type": {
+      "title": "Resource Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "event_id",
+     "occurred_at",
+     "action",
+     "outcome",
+     "actor",
+     "resource_type",
+     "resource_id",
+     "detail"
+    ],
+    "title": "AuditEventRead",
+    "type": "object"
+   },
+   "AuditOutcome": {
+    "description": "How the action ended.\n\n``DENIED`` is kept apart from ``FAILED`` because they are different\nevents to whoever reads the trail: one is the system refusing a\nrequest it understood, the other is a request that was permitted and\ndid not work.",
+    "enum": [
+     "succeeded",
+     "failed",
+     "denied"
+    ],
+    "title": "AuditOutcome",
+    "type": "string"
+   },
    "Body_upload_document_documents_upload_post": {
     "properties": {
      "file": {
@@ -836,6 +983,26 @@
      "review_candidate_id"
     ],
     "title": "CanonicalizeReviewCandidateRequest",
+    "type": "object"
+   },
+   "ChangePasswordRequest": {
+    "properties": {
+     "current_password": {
+      "maxLength": 1024,
+      "title": "Current Password",
+      "type": "string"
+     },
+     "new_password": {
+      "maxLength": 1024,
+      "title": "New Password",
+      "type": "string"
+     }
+    },
+    "required": [
+     "current_password",
+     "new_password"
+    ],
+    "title": "ChangePasswordRequest",
     "type": "object"
    },
    "ClaimType": {
@@ -2200,6 +2367,36 @@
      "overall_completeness"
     ],
     "title": "CoverageReportRead",
+    "type": "object"
+   },
+   "CreateUserRequest": {
+    "properties": {
+     "display_name": {
+      "maxLength": 120,
+      "title": "Display Name",
+      "type": "string"
+     },
+     "email": {
+      "maxLength": 254,
+      "title": "Email",
+      "type": "string"
+     },
+     "password": {
+      "maxLength": 1024,
+      "title": "Password",
+      "type": "string"
+     },
+     "role": {
+      "$ref": "#/components/schemas/Role",
+      "default": "engineer"
+     }
+    },
+    "required": [
+     "email",
+     "display_name",
+     "password"
+    ],
+    "title": "CreateUserRequest",
     "type": "object"
    },
    "DesignationResolution": {
@@ -6949,6 +7146,34 @@
     "title": "HTTPValidationError",
     "type": "object"
    },
+   "IdentityRead": {
+    "description": "Who the caller is.\n\nDeliberately small: an id, an address, a name, a role. Everything a\nUI needs to greet somebody and decide which controls to render, and\nnothing that would be worth stealing.",
+    "properties": {
+     "display_name": {
+      "title": "Display Name",
+      "type": "string"
+     },
+     "email": {
+      "title": "Email",
+      "type": "string"
+     },
+     "role": {
+      "$ref": "#/components/schemas/Role"
+     },
+     "user_id": {
+      "title": "User Id",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "user_id",
+     "email",
+     "display_name",
+     "role"
+    ],
+    "title": "IdentityRead",
+    "type": "object"
+   },
    "IndexEntryLocatorKind": {
     "description": "The kind of position a source locator points to within a document.\nDeliberately not restricted to PDF pages (architecture doc §5 covers\nPDF, Excel, DWG, and Image document families) - a locator may point\nto a spreadsheet cell range or a CAD drawing's layout just as\nmeaningfully as a page number.",
     "enum": [
@@ -8739,6 +8964,27 @@
     "title": "LexicalMatchMode",
     "type": "string"
    },
+   "LoginRequest": {
+    "description": "Credentials presented at the login form.\n\n``password`` is bounded so an unauthenticated request cannot make the\nserver perform an unbounded key derivation - see\n``password_credential.MAX_PASSWORD_LENGTH``.",
+    "properties": {
+     "email": {
+      "maxLength": 254,
+      "title": "Email",
+      "type": "string"
+     },
+     "password": {
+      "maxLength": 1024,
+      "title": "Password",
+      "type": "string"
+     }
+    },
+    "required": [
+     "email",
+     "password"
+    ],
+    "title": "LoginRequest",
+    "type": "object"
+   },
    "MetricDeltaRead": {
     "description": "``delta`` is ``null`` when either side was undefined - a movement\nfrom \"unanswerable\" to 0.9 is not an improvement of 0.9.",
     "properties": {
@@ -9045,6 +9291,7 @@
     "type": "object"
    },
    "ProjectCreate": {
+    "description": "A new project.\n\n``created_by`` is deliberately **absent** since EPIC 30.3. It used to\nbe accepted from the request body, which meant the record of who\ncreated a project was whatever the caller typed. It is now taken from\nthe authenticated identity, and there is no field here through which\na caller could claim to be somebody else.",
     "properties": {
      "canonical_domain_version": {
       "default": "unversioned",
@@ -9068,17 +9315,6 @@
        }
       ],
       "title": "Country"
-     },
-     "created_by": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Created By"
      },
      "customer": {
       "maxLength": 150,
@@ -9513,6 +9749,17 @@
       "title": "Name",
       "type": "string"
      },
+     "owner_user_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Owner User Id"
+     },
      "status": {
       "$ref": "#/components/schemas/ProjectStatus",
       "default": "planning",
@@ -9544,6 +9791,7 @@
      "lifecycle_state",
      "canonical_domain_version",
      "created_by",
+     "owner_user_id",
      "created_at",
      "updated_at",
      "archived_at",
@@ -11079,6 +11327,15 @@
     "title": "ReviewStatus",
     "type": "string"
    },
+   "Role": {
+    "description": "The role carried by an authenticated user.\n\n``ENGINEER`` is the ordinary authenticated user of this platform:\nthey may read and run everything the engineering pipeline exposes.\n``ADMINISTRATOR`` additionally manages identities and reads the\naudit trail.\n\nThere is no ``ANONYMOUS`` member on purpose. Anonymous is the\n*absence* of an identity, not a role an identity can hold, and a\nmember here would be a value that could be stored on a user row.",
+    "enum": [
+     "engineer",
+     "administrator"
+    ],
+    "title": "Role",
+    "type": "string"
+   },
    "RuleVersionChangeRead": {
     "properties": {
      "baseline_version": {
@@ -11547,6 +11804,25 @@
     "title": "SemanticStatementType",
     "type": "string"
    },
+   "SessionRead": {
+    "description": "The current session.\n\n``expires_at`` is the **absolute** ceiling and is exposed so a client\ncan warn before it arrives. The idle timeout is deliberately not\nexposed: it moves with every request, so a client that displayed it\nwould be showing a number that was already wrong.",
+    "properties": {
+     "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+     },
+     "identity": {
+      "$ref": "#/components/schemas/IdentityRead"
+     }
+    },
+    "required": [
+     "identity",
+     "expires_at"
+    ],
+    "title": "SessionRead",
+    "type": "object"
+   },
    "SessionUpdateProposalRead": {
     "properties": {
      "description": {
@@ -11567,6 +11843,18 @@
      "description"
     ],
     "title": "SessionUpdateProposalRead",
+    "type": "object"
+   },
+   "SetUserStatusRequest": {
+    "properties": {
+     "status": {
+      "$ref": "#/components/schemas/UserStatus"
+     }
+    },
+    "required": [
+     "status"
+    ],
+    "title": "SetUserStatusRequest",
     "type": "object"
    },
    "SortDirection": {
@@ -11903,6 +12191,69 @@
     ],
     "title": "UploadPipelineFailureRead",
     "type": "object"
+   },
+   "UserListResponse": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/UserRead"
+      },
+      "title": "Items",
+      "type": "array"
+     }
+    },
+    "required": [
+     "items"
+    ],
+    "title": "UserListResponse",
+    "type": "object"
+   },
+   "UserRead": {
+    "description": "One account, as an administrator sees it.",
+    "properties": {
+     "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+     },
+     "display_name": {
+      "title": "Display Name",
+      "type": "string"
+     },
+     "email": {
+      "title": "Email",
+      "type": "string"
+     },
+     "role": {
+      "$ref": "#/components/schemas/Role"
+     },
+     "status": {
+      "$ref": "#/components/schemas/UserStatus"
+     },
+     "user_id": {
+      "title": "User Id",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "user_id",
+     "email",
+     "display_name",
+     "role",
+     "status",
+     "created_at"
+    ],
+    "title": "UserRead",
+    "type": "object"
+   },
+   "UserStatus": {
+    "description": "Whether this user may authenticate at all.\n\n``DISABLED`` is deliberately not deletion: an engineering platform\nmust be able to say who performed an action years after that person\nleft, and a deleted user makes every audit event they produced\nunreadable. Disabling ends access and preserves the record.",
+    "enum": [
+     "active",
+     "disabled"
+    ],
+    "title": "UserStatus",
+    "type": "string"
    },
    "ValidationError": {
     "properties": {
@@ -13134,6 +13485,170 @@
      }
     },
     "summary": "Root"
+   }
+  },
+  "/audit/events": {
+   "get": {
+    "operationId": "list_audit_events_audit_events_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 100,
+       "maximum": 500,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "action",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/AuditAction"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Action"
+      }
+     },
+     {
+      "in": "query",
+      "name": "user_id",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AuditEventListResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "403": {
+      "description": "The caller may not read the audit trail."
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "The most recent audit events, newest first",
+    "tags": [
+     "Audit"
+    ]
+   }
+  },
+  "/auth/login": {
+   "post": {
+    "operationId": "login_auth_login_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LoginRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SessionRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "The credentials were refused. The response does not say which part was wrong, deliberately."
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Exchange a password for a session",
+    "tags": [
+     "Authentication"
+    ]
+   }
+  },
+  "/auth/logout": {
+   "post": {
+    "description": "Always succeeds.\n\nLogging out without a session, with an unknown token or with one that\nhas already been revoked all produce `204`. Answering differently\nwould make this endpoint a way to test whether a token is still live.\n\nThe cookies are cleared either way, so a client that arrives holding\nsomething unusable leaves holding nothing.",
+    "operationId": "logout_auth_logout_post",
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     }
+    },
+    "summary": "End the current session",
+    "tags": [
+     "Authentication"
+    ]
+   }
+  },
+  "/auth/session": {
+   "get": {
+    "description": "What the client needs on a page load: who am I, and until when.\n\nPublic, because a client has to be able to ask before it knows. It\ndiscloses nothing to an anonymous caller - `401` and a sentence.\n\nCosts no database read of its own: the middleware has already\nvalidated the session in order to decide whether this request was\nallowed at all.",
+    "operationId": "read_session_auth_session_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SessionRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "There is no live session."
+     }
+    },
+    "summary": "The current session, if there is one",
+    "tags": [
+     "Authentication"
+    ]
    }
   },
   "/canonical-facts": {
@@ -15524,6 +16039,7 @@
     ]
    },
    "post": {
+    "description": "Creates a project owned by the caller.\n\n``created_by`` and ``owner_user_id`` come from the **authenticated\nidentity**, never from the request body. Before EPIC 30.3 the body\ncarried ``created_by``, which meant the record of who created a\nproject was whatever the caller chose to type.",
     "operationId": "create_project_projects__post",
     "requestBody": {
      "content": {
@@ -15561,7 +16077,7 @@
   },
   "/projects/{project_id}": {
    "delete": {
-    "description": "Soft deletes the project. No row is ever removed from the database,\nand the updated project is returned so a caller can see its new\nlifecycle state.",
+    "description": "Soft deletes the project. No row is ever removed from the database,\nand the updated project is returned so a caller can see its new\nlifecycle state.\n\nThe one place project **ownership** is enforced in this milestone.\nDeletion is the destructive operation, so it is the one worth\nguarding while a membership model does not exist yet: an\nadministrator may delete any project, an owner may delete their own,\nand a project created before ownership existed may be deleted by any\nengineer - which is exactly what those projects allowed yesterday.\nSee ``domain/identity/project_access.py``.",
     "operationId": "delete_project_projects__project_id__delete",
     "parameters": [
      {
@@ -18688,6 +19204,179 @@
     "summary": "Resubmit Review Candidate",
     "tags": [
      "Review Workflow"
+    ]
+   }
+  },
+  "/users/": {
+   "get": {
+    "operationId": "list_users_users__get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UserListResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Every account",
+    "tags": [
+     "Users"
+    ]
+   },
+   "post": {
+    "operationId": "create_user_users__post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CreateUserRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UserRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "403": {
+      "description": "The caller is not an administrator."
+     },
+     "409": {
+      "description": "That address already has an account."
+     },
+     "422": {
+      "description": "The address, name or password is invalid."
+     }
+    },
+    "summary": "Register an account",
+    "tags": [
+     "Users"
+    ]
+   }
+  },
+  "/users/me": {
+   "get": {
+    "operationId": "read_me_users_me_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/IdentityRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "The caller's own identity",
+    "tags": [
+     "Users"
+    ]
+   }
+  },
+  "/users/me/password": {
+   "post": {
+    "description": "Requires the current password, and **ends every session including\nthis one**.\n\nBoth are deliberate. Without the current password, an unlocked\nbrowser would be a permanent account takeover rather than a temporary\none; without the revocation, a password changed because it may be\nknown to someone else would leave that someone else logged in.",
+    "operationId": "change_own_password_users_me_password_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ChangePasswordRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "401": {
+      "description": "The current password is not correct."
+     },
+     "422": {
+      "description": "The new password fails the policy."
+     }
+    },
+    "summary": "Change one's own password",
+    "tags": [
+     "Users"
+    ]
+   }
+  },
+  "/users/{user_id}/status": {
+   "post": {
+    "description": "Disabling revokes every live session of that user immediately.\n\nAn administrator may not disable their own account: an installation\nwhose last administrator locks themselves out has no supported way\nback in, and `409` is a cheaper answer than that.",
+    "operationId": "set_user_status_users__user_id__status_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "user_id",
+      "required": true,
+      "schema": {
+       "title": "User Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SetUserStatusRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UserRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "403": {
+      "description": "The caller is not an administrator."
+     },
+     "404": {
+      "description": "No such user."
+     },
+     "409": {
+      "description": "An administrator may not disable themselves."
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Enable or disable an account",
+    "tags": [
+     "Users"
     ]
    }
   }

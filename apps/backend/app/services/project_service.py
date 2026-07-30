@@ -53,6 +53,7 @@ def create_project(
     description: str | None = None,
     canonical_domain_version: str = UNVERSIONED_CANONICAL_DOMAIN,
     created_by: str | None = None,
+    owner_user_id: int | None = None,
     status: ProjectStatus = ProjectStatus.PLANNING,
     voltage_level: str | None = None,
 ) -> Project:
@@ -81,6 +82,7 @@ def create_project(
         description=description,
         canonical_domain_version=canonical_domain_version,
         created_by=created_by,
+        owner_user_id=owner_user_id,
         status=status,
         voltage_level=voltage_level,
     )

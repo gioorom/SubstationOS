@@ -191,6 +191,7 @@ class SqlAlchemyProjectRepository(ProjectRepository):
         record.lifecycle_state = project.lifecycle_state
         record.canonical_domain_version = project.canonical_domain_version
         record.created_by = project.created_by
+        record.owner_user_id = project.owner_user_id
         record.created_at = project.created_at
         record.updated_at = project.updated_at
         record.archived_at = project.archived_at
@@ -214,6 +215,7 @@ class SqlAlchemyProjectRepository(ProjectRepository):
             lifecycle_state=record.lifecycle_state,
             canonical_domain_version=record.canonical_domain_version,
             created_by=record.created_by,
+            owner_user_id=record.owner_user_id,
             created_at=record.created_at,
             updated_at=record.updated_at,
             archived_at=record.archived_at,

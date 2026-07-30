@@ -9,6 +9,7 @@
  */
 
 export * from "./document";
+export * from "./identity";
 export * from "./knowledge-graph";
 export * from "./pagination";
 export * from "./pipeline";

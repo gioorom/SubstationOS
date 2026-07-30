@@ -68,6 +68,15 @@ class Project:
     #: value of a piece of equipment.
     voltage_level: str | None = None
 
+    #: The user who owns the project, when one is known.
+    #:
+    #: Defaulted to ``None``, and that is the honest default rather than a
+    #: convenience: every project created before EPIC 30.3 has no owner,
+    #: and giving one an owner retroactively would be recording a fact
+    #: nobody established. See ``domain/identity/project_access.py`` for
+    #: what an unowned project permits.
+    owner_user_id: int | None = None
+
     @property
     def traceability_reference(self) -> str:
         """

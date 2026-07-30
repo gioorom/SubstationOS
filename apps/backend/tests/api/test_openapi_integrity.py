@@ -235,17 +235,134 @@ def test_governed_knowledge_pipeline_routes_declare_response_models() -> (
     assert missing_response_model == []
 
 
-def test_llm_provider_schemas_have_no_credential_fields() -> None:
+def _response_schema_names(schema: dict) -> set[str]:
     """
-    No response schema anywhere in the OpenAPI document may expose an
-    API key, credential, secret, or password field (Milestone 16's own
-    "no credential fields in output schemas" requirement) - checked
-    across every schema, not only the LLM Provider ones, since a leak
-    could in principle appear anywhere.
+    Every component schema reachable from a response body.
+
+    Walks the `$ref` graph from each response outwards, so a credential
+    field is caught whether it sits on the response model itself or three
+    levels down inside it.
+    """
+
+    definitions = schema.get("components", {}).get("schemas", {})
+    pending: list[str] = []
+
+    def collect_refs(node: object) -> list[str]:
+        if isinstance(node, dict):
+            found: list[str] = []
+            reference = node.get("$ref")
+
+            if isinstance(reference, str) and reference.startswith(
+                "#/components/schemas/"
+            ):
+                found.append(reference.rsplit("/", 1)[1])
+
+            for value in node.values():
+                found.extend(collect_refs(value))
+
+            return found
+
+        if isinstance(node, list):
+            return [name for item in node for name in collect_refs(item)]
+
+        return []
+
+    for operations in schema.get("paths", {}).values():
+        for operation in operations.values():
+            if not isinstance(operation, dict):
+                continue
+
+            for response in operation.get("responses", {}).values():
+                pending.extend(collect_refs(response))
+
+    reachable: set[str] = set()
+
+    while pending:
+        name = pending.pop()
+
+        if name in reachable or name not in definitions:
+            continue
+
+        reachable.add(name)
+        pending.extend(collect_refs(definitions[name]))
+
+    return reachable
+
+
+def test_no_response_schema_anywhere_exposes_a_credential() -> None:
+    """
+    No schema reachable from a **response** may carry an API key, a
+    credential, a secret or a password (Milestone 16's own requirement),
+    checked across every path rather than only the LLM Provider ones.
+
+    Scoped to responses since EPIC 30.3, and the scoping is the point:
+    a password must be able to travel *inbound* - there is no other way
+    to log in or to change one - and must never travel back out. The
+    companion test below asserts the second half.
     """
 
     schema = app_instance.openapi()
-    forbidden_substrings = ("api_key", "apikey", "credential", "secret", "password")
+    definitions = schema.get("components", {}).get("schemas", {})
+    forbidden_substrings = (
+        "api_key",
+        "apikey",
+        "credential",
+        "secret",
+        "password",
+    )
+
+    offenders = [
+        f"{name}.{property_name}"
+        for name in _response_schema_names(schema)
+        for property_name in definitions[name].get("properties", {})
+        if any(
+            forbidden in property_name.lower()
+            for forbidden in forbidden_substrings
+        )
+    ]
+
+    assert offenders == []
+
+
+def test_the_models_that_accept_a_password_are_never_returned() -> None:
+    """
+    The other half. `LoginRequest`, `CreateUserRequest` and
+    `ChangePasswordRequest` exist to carry a password in; a response that
+    echoed one of them would send it straight back out.
+    """
+
+    reachable = _response_schema_names(app_instance.openapi())
+
+    for name in (
+        "LoginRequest",
+        "CreateUserRequest",
+        "ChangePasswordRequest",
+    ):
+        assert name not in reachable
+
+
+def test_no_schema_anywhere_can_carry_a_session_token() -> None:
+    """
+    The session token leaves the server exactly once, in a `Set-Cookie`
+    header. No model in the contract has a field it could be written to.
+
+    Deliberately matched on *authentication* token names rather than on
+    the word "token": this domain is full of legitimate ones - canonical
+    text has `token_start` and `token_end`, LLM usage has `input_tokens`
+    - and a test that flagged those would be turned off rather than
+    fixed.
+    """
+
+    schema = app_instance.openapi()
+
+    forbidden = (
+        "session_token",
+        "access_token",
+        "refresh_token",
+        "auth_token",
+        "bearer",
+        "token_fingerprint",
+    )
 
     offenders = [
         f"{name}.{property_name}"
@@ -253,10 +370,7 @@ def test_llm_provider_schemas_have_no_credential_fields() -> None:
         .get("schemas", {})
         .items()
         for property_name in definition.get("properties", {})
-        if any(
-            forbidden in property_name.lower()
-            for forbidden in forbidden_substrings
-        )
+        if any(item in property_name.lower() for item in forbidden)
     ]
 
     assert offenders == []

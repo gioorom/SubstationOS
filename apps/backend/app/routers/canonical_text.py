@@ -29,6 +29,8 @@ Engineering Index nor the Knowledge Graph.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
@@ -42,6 +44,13 @@ from app.infrastructure.canonical_pdf.sqlalchemy_canonical_representation_reposi
 from app.infrastructure.canonical_text.sqlalchemy_canonical_text_repository import (  # noqa: E501
     SqlAlchemyCanonicalTextRepository,
 )
+from app.domain.identity.audit_identity import AuditIdentity
+from app.domain.identity.identity_roles import Capability
+from app.infrastructure.audit.sqlalchemy_audit_repository import (
+    SqlAlchemyAuditRepository,
+)
+from app.routers.security import require_capability
+from app.services import audit_service
 from app.schemas.canonical_text import (
     CanonicalTextRead,
     SegmentationResultRead,
@@ -82,6 +91,9 @@ def get_db():
 def segment_document(
     document_id: int,
     response: Response,
+    actor: AuditIdentity = Depends(
+        require_capability(Capability.USE_ENGINEERING_PLATFORM)
+    ),
     db: Session = Depends(get_db),
 ) -> SegmentationResultRead:
     result = canonical_text_service.segment_document(
@@ -102,6 +114,19 @@ def segment_document(
     elif result.reused:
         # Nothing was created; the existing segmentation is returned.
         response.status_code = status.HTTP_200_OK
+
+    # Who ran the stage, recorded on the *action*. The artefacts the
+    # stage produced carry no actor and no timestamp, which is why two
+    # runs under two different logins compare equal.
+    audit_service.record_pipeline_execution(
+        SqlAlchemyAuditRepository(db),
+        identity=actor,
+        stage="canonical_text",
+        document_id=document_id,
+        succeeded=result.succeeded,
+        reused=result.reused,
+        now=datetime.utcnow(),
+    )
 
     return SegmentationResultRead.from_domain(result)
 

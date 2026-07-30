@@ -97,3 +97,4 @@ one.
 | [0019](0019-engineering-request-classification.md) | Engineering Request Classification | Accepted |
 | [0020](0020-engineering-engine-foundation.md) | Engineering Engine Foundation | Accepted |
 | [0021](0021-engineering-workspace-document-viewer.md) | Engineering Workspace Document Viewer and Support-Chain Strategy | Accepted |
+| [0022](0022-session-authentication-and-password-hashing.md) | Session Authentication and Password Hashing | Accepted |

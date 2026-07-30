@@ -28,6 +28,8 @@ No ORM model is exposed, and nothing here writes a graph node.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
@@ -41,6 +43,13 @@ from app.infrastructure.engineering_entities.sqlalchemy_engineering_entity_repos
 from app.infrastructure.engineering_evidence.sqlalchemy_engineering_evidence_repository import (  # noqa: E501
     SqlAlchemyEngineeringEvidenceRepository,
 )
+from app.domain.identity.audit_identity import AuditIdentity
+from app.domain.identity.identity_roles import Capability
+from app.infrastructure.audit.sqlalchemy_audit_repository import (
+    SqlAlchemyAuditRepository,
+)
+from app.routers.security import require_capability
+from app.services import audit_service
 from app.schemas.engineering_entities import (
     EngineeringEntityRead,
     EntityResolutionResultRead,
@@ -110,6 +119,9 @@ def _require_entity(db: Session, document_id: int, entity_key: str):
 def resolve_engineering_entities(
     document_id: int,
     response: Response,
+    actor: AuditIdentity = Depends(
+        require_capability(Capability.USE_ENGINEERING_PLATFORM)
+    ),
     db: Session = Depends(get_db),
 ) -> EntityResolutionResultRead:
     result = engineering_entity_service.resolve_document_entities(
@@ -131,6 +143,19 @@ def resolve_engineering_entities(
         # Nothing was created; the set this evidence already had is
         # returned unchanged.
         response.status_code = status.HTTP_200_OK
+
+    # Who ran the stage, recorded on the *action*. The artefacts the
+    # stage produced carry no actor and no timestamp, which is why two
+    # runs under two different logins compare equal.
+    audit_service.record_pipeline_execution(
+        SqlAlchemyAuditRepository(db),
+        identity=actor,
+        stage="engineering_entities",
+        document_id=document_id,
+        succeeded=result.succeeded,
+        reused=result.reused,
+        now=datetime.utcnow(),
+    )
 
     return EntityResolutionResultRead.from_domain(result)
 

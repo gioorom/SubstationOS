@@ -11,6 +11,7 @@ import { vi } from "vitest";
 
 import type {
   CanonicalPdfPage,
+  Session,
   DocumentDetail,
   DocumentSummary,
   EntitySet,
@@ -36,6 +37,10 @@ export interface RecordedRequest {
   method: string;
   url: string;
   body: unknown;
+  /** Lower-cased, so a test never depends on header capitalisation. */
+  headers: Record<string, string>;
+  /** `"include"` is what makes the session cookie travel. */
+  credentials: RequestCredentials | undefined;
 }
 
 export interface BackendStub {
@@ -44,7 +49,7 @@ export interface BackendStub {
   requestsFor: (method: string, path: string) => RecordedRequest[];
 }
 
-const BASE = "http://127.0.0.1:8000";
+const BASE = "http://localhost:8000";
 
 function keyFor(method: string, url: string): string {
   return `${method.toUpperCase()} ${url.replace(BASE, "").split("?")[0]}`;
@@ -77,7 +82,21 @@ export function stubBackend(routes: Routes): BackendStub {
         body = Object.fromEntries(init.body.entries());
       }
 
-      requests.push({ method, url, body });
+      const headers: Record<string, string> = {};
+
+      for (const [name, value] of Object.entries(
+        (init?.headers ?? {}) as Record<string, string>,
+      )) {
+        headers[name.toLowerCase()] = value;
+      }
+
+      requests.push({
+        method,
+        url,
+        body,
+        headers,
+        credentials: init?.credentials,
+      });
 
       const queue = queues.get(key);
 
@@ -507,5 +526,28 @@ export function aCanonicalPage(
       },
     ],
     ...overrides,
+  };
+}
+
+
+/**
+ * `GET /auth/session` / `POST /auth/login`, as the backend serialises it.
+ *
+ * There is no token here, and no fixture could add one: the session
+ * token leaves the server only in a `Set-Cookie` header, and no response
+ * model has a field for it.
+ */
+export function aSession(
+  overrides: Partial<Session["identity"]> = {},
+): Session {
+  return {
+    identity: {
+      user_id: 1,
+      email: "ada@substationos.test",
+      display_name: "Ada Lovelace",
+      role: "engineer",
+      ...overrides,
+    },
+    expires_at: "2026-07-30T21:00:00",
   };
 }

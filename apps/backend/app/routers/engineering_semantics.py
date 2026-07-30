@@ -27,6 +27,8 @@ No ORM model is exposed, and nothing here writes a graph node or edge.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
@@ -40,6 +42,13 @@ from app.infrastructure.engineering_facts.sqlalchemy_engineering_fact_repository
 from app.infrastructure.engineering_semantics.sqlalchemy_engineering_semantic_repository import (  # noqa: E501
     SqlAlchemyEngineeringSemanticRepository,
 )
+from app.domain.identity.audit_identity import AuditIdentity
+from app.domain.identity.identity_roles import Capability
+from app.infrastructure.audit.sqlalchemy_audit_repository import (
+    SqlAlchemyAuditRepository,
+)
+from app.routers.security import require_capability
+from app.services import audit_service
 from app.schemas.engineering_facts import EngineeringFactRead
 from app.schemas.engineering_semantics import (
     SemanticInterpretationResultRead,
@@ -111,6 +120,9 @@ def _require_statement(db: Session, document_id: int, statement_key: str):
 def interpret_engineering_semantics(
     document_id: int,
     response: Response,
+    actor: AuditIdentity = Depends(
+        require_capability(Capability.USE_ENGINEERING_PLATFORM)
+    ),
     db: Session = Depends(get_db),
 ) -> SemanticInterpretationResultRead:
     result = engineering_semantic_service.interpret_document_facts(
@@ -132,6 +144,19 @@ def interpret_engineering_semantics(
         # Nothing was created; the interpretation these facts already had
         # is returned unchanged.
         response.status_code = status.HTTP_200_OK
+
+    # Who ran the stage, recorded on the *action*. The artefacts the
+    # stage produced carry no actor and no timestamp, which is why two
+    # runs under two different logins compare equal.
+    audit_service.record_pipeline_execution(
+        SqlAlchemyAuditRepository(db),
+        identity=actor,
+        stage="engineering_semantics",
+        document_id=document_id,
+        succeeded=result.succeeded,
+        reused=result.reused,
+        now=datetime.utcnow(),
+    )
 
     return SemanticInterpretationResultRead.from_domain(result)
 

@@ -169,11 +169,62 @@ curl http://127.0.0.1:8000/documents/1/canonical-representation/pages/1
 backend state; the download takes a document id and nothing else, so a
 path can never be supplied or disclosed. Tests enforce both.
 
+## Authentication
+
+Since EPIC 30.3 the API denies anonymous callers by default. Before
+anything works, create the first administrator:
+
+```bash
+cd apps/backend && alembic upgrade head       # users, sessions, audit_events
+cd ../.. && python scripts/create_administrator.py     --email you@example.com --name "Your Name"
+```
+
+The password is read from the terminal without echo, or from
+`SUBSTATIONOS_ADMIN_PASSWORD`. It is **never** taken from a command-line
+argument - arguments land in shell history and in the process list. The
+script refuses to run once any account exists.
+
+Then sign in at the frontend. Additional accounts are created by an
+administrator through `POST /users/`; there is no self-registration,
+because a private engineering platform does not admit whoever finds the
+address.
+
+### The dev origin matters
+
+The session cookie is `HttpOnly` and `SameSite=Lax`. "Site" is scheme
+plus registrable domain - ports are ignored, but `localhost` and
+`127.0.0.1` are **different hosts**. Run the backend on
+`http://localhost:8000` (the default `config/env.ts` points at), not
+`http://127.0.0.1:8000`, or the cookie will silently not travel and every
+request will arrive anonymous.
+
+```bash
+cd apps/backend && uvicorn app.main:app --reload --host localhost
+```
+
+### Trying it with curl
+
+```bash
+# Sign in, keeping the cookie jar.
+curl -c cookies.txt -X POST http://localhost:8000/auth/login     -H 'Content-Type: application/json'     -d '{"email":"you@example.com","password":"..."}'
+
+# Reads need only the cookie.
+curl -b cookies.txt http://localhost:8000/projects/
+
+# Writes additionally need the CSRF token echoed from its cookie.
+CSRF=$(grep substationos_csrf cookies.txt | awk '{print $7}')
+curl -b cookies.txt -H "X-CSRF-Token: $CSRF"     -X POST http://localhost:8000/projects/     -H 'Content-Type: application/json'     -d '{"name":"Cabina","code":"CP-1","customer":"Distributore Nazionale"}'
+```
+
+Anonymous requests answer `401`; an authenticated caller without the
+capability answers `403`. `/`, `/health`, `/auth/*` and the API docs are
+the only public routes - `security_architecture.md` §7 lists each and why.
+
 ## Running the whole loop
 
 To exercise a document end to end:
 
-1. Start the backend and the frontend.
+1. Start the backend and the frontend, and sign in.
 2. Create a project at `/projects/new` — code, name and customer are
    required by the API.
 3. Upload a **PDF** at `/documents` (only PDFs enter the canonical

@@ -42,6 +42,13 @@ from sqlalchemy.orm import Session
 
 from app.database.database import SessionLocal
 from app.domain.document_identity.document_format import FormatClassification
+from app.domain.audit.audit_models import (
+    AuditAction,
+    AuditOutcome,
+    AuditResource,
+)
+from app.domain.identity.audit_identity import AuditIdentity
+from app.domain.identity.identity_roles import Capability
 from app.domain.document_registry.document_failures import (
     DocumentContentAccessError,
     DocumentContentNotFoundError,
@@ -105,7 +112,15 @@ from app.schemas.document import (
     UploadPipelineFailureRead,
 )
 from app.schemas.pagination import PageMetadata
-from app.services import document_pipeline_service, document_registry_service
+from app.infrastructure.audit.sqlalchemy_audit_repository import (
+    SqlAlchemyAuditRepository,
+)
+from app.routers.security import require_capability
+from app.services import (
+    audit_service,
+    document_pipeline_service,
+    document_registry_service,
+)
 from app.services.document_identity_service import resolve_document_identity
 from app.services.document_pipeline_service import PipelineStage
 from app.services.knowledge_graph import ingest_document
@@ -366,6 +381,9 @@ async def upload_document(
     file: UploadFile = File(...),
     project_id: int | None = Form(default=None),
     scope: DocumentScope = Form(default=DocumentScope.PROJECT),
+    actor: AuditIdentity = Depends(
+        require_capability(Capability.USE_ENGINEERING_PLATFORM)
+    ),
     db: Session = Depends(get_db),
 ) -> DocumentUploadResponse:
     # Repository rule (ADR-0005): every document belongs to exactly one
@@ -441,6 +459,18 @@ async def upload_document(
         _content_port(),
         _storage_location(db),
         document_id=document.id,
+    )
+
+    # Who put this document into the platform. Recorded on the *action*;
+    # nothing about the document row or anything derived from it changes.
+    audit_service.record_for_identity(
+        SqlAlchemyAuditRepository(db),
+        identity=actor,
+        action=AuditAction.DOCUMENT_UPLOADED,
+        outcome=AuditOutcome.SUCCEEDED,
+        resource=AuditResource("document", str(document.id)),
+        now=datetime.utcnow(),
+        detail=f"scope={scope.value}",
     )
 
     return DocumentUploadResponse(
