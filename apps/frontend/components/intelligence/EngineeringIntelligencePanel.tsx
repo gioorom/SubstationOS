@@ -1,42 +1,39 @@
-import {
-  ArrowRight,
-  BrainCircuit,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowRight, BrainCircuit, ShieldCheck } from "lucide-react";
 
 import GlassPanel from "@/components/design-system/GlassPanel";
-import { ProjectIntelligence } from "@/types/project-intelligence";
+import {
+  DOCUMENTATION_STATUS_LABELS,
+  READINESS_LABELS,
+  RISK_LEVEL_LABELS,
+  type ProjectIntelligence,
+  type ReadinessStatus,
+} from "@/lib/contracts";
 
 interface EngineeringIntelligencePanelProps {
   intelligence: ProjectIntelligence;
 }
 
-const readinessLabels = {
-  not_ready: "Non pronto",
-  partially_ready: "Parzialmente pronto",
-  ready: "Pronto",
+const readinessClasses: Record<ReadinessStatus, string> = {
+  not_ready: "bg-red-50 text-red-700 ring-1 ring-red-100",
+  partially_ready: "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
+  ready: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
 };
 
-const readinessClasses = {
-  not_ready:
-    "bg-red-50 text-red-700 ring-1 ring-red-100",
-
-  partially_ready:
-    "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
-
-  ready:
-    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
-};
-
+/**
+ * Presents only what the backend computes: documentation completeness,
+ * the health score derived from it, readiness, risk and the next action.
+ *
+ * `commissioning`, `relay_testing` and `issues` are part of the contract
+ * but are returned as constant zeros - modules that do not exist yet.
+ * They are deliberately not rendered: a fabricated 0% beside a real
+ * figure reads as a measurement, and it is not one.
+ */
 export default function EngineeringIntelligencePanel({
   intelligence,
 }: EngineeringIntelligencePanelProps) {
   return (
-    <GlassPanel
-      padding="lg"
-      className="overflow-hidden"
-    >
-      <div className="flex items-start justify-between gap-6">
+    <GlassPanel padding="lg" className="overflow-hidden">
+      <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-between">
         <div className="max-w-3xl">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -55,16 +52,10 @@ export default function EngineeringIntelligencePanel({
           </div>
 
           <p className="mt-6 text-base leading-8 text-muted-foreground">
-            La documentazione tecnica è attualmente al{" "}
-            <strong>
-              {intelligence.documentation.completion}%
-            </strong>
-            .
-
-            {" "}Per raggiungere uno stato operativo
-            completo è consigliato consolidare la
-            documentazione e proseguire con le
-            attività di commissioning.
+            {DOCUMENTATION_STATUS_LABELS[intelligence.documentation.status]}
+            : {intelligence.documentation.document_count} documenti,
+            completezza{" "}
+            <strong>{intelligence.documentation.completion}%</strong>.
           </p>
 
           <div className="mt-8 rounded-2xl border border-primary/10 bg-primary/5 p-5">
@@ -94,39 +85,31 @@ export default function EngineeringIntelligencePanel({
               <span
                 className={[
                   "mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                  readinessClasses[
-                    intelligence.readiness
-                  ],
+                  readinessClasses[intelligence.readiness],
                 ].join(" ")}
               >
-                {
-                  readinessLabels[
-                    intelligence.readiness
-                  ]
-                }
+                {READINESS_LABELS[intelligence.readiness]}
               </span>
             </div>
           </div>
 
           <div className="mt-8">
-            <p className="text-sm text-muted-foreground">
-              Health Score
-            </p>
+            <p className="text-sm text-muted-foreground">Health Score</p>
 
             <p className="mt-2 text-5xl font-semibold tracking-tight">
               {intelligence.health_score}
             </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              {RISK_LEVEL_LABELS[intelligence.risk_level]}
+            </p>
           </div>
 
-          <div className="mt-8">
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full rounded-full bg-primary transition-all duration-700"
-                style={{
-                  width: `${intelligence.health_score}%`,
-                }}
-              />
-            </div>
+          <div className="mt-8 h-2 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-700"
+              style={{ width: `${intelligence.health_score}%` }}
+            />
           </div>
         </div>
       </div>

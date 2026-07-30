@@ -1,161 +1,102 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import {
-  ArrowLeft,
-  FileText,
-  Network,
-  TriangleAlert,
-  Zap,
-} from "lucide-react";
+import { useState } from "react";
+import { Archive, ArrowLeft, Network, RotateCcw } from "lucide-react";
 
-import { OverviewPanel } from "@/components/commissioning/OverviewPanel";
-import MetricCard from "@/components/design-system/MetricCard";
 import EngineeringIntelligencePanel from "@/components/intelligence/EngineeringIntelligencePanel";
-import TodaysFocusPanel from "@/components/intelligence/TodaysFocusPanel";
 import ProjectDocumentsPanel from "@/components/projects/ProjectDocumentsPanel";
 import ProjectHero from "@/components/projects/ProjectHero";
-import TimelinePanel from "@/components/timeline/TimelinePanel";
-import { buttonVariants } from "@/components/ui/button";
+import UploadBox from "@/components/UploadBox";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { useDocuments } from "@/hooks/useDocuments";
-import { useProjectIntelligence } from "@/hooks/useProjectIntelligence";
-import { demoCommissioning } from "@/lib/demo-commissioning";
-import { demoTimelineEvents } from "@/lib/demo-timeline";
-import { getProject } from "@/lib/projects";
-import type { Project } from "@/types/project";
-
-const documentationStatusLabels = {
-  empty: "Nessun documento disponibile",
-  incomplete: "Set documentale incompleto",
-  available: "Documentazione disponibile",
-} as const;
-
-const moduleStatusLabels = {
-  not_started: "Modulo non avviato",
-  in_progress: "Attività in corso",
-  completed: "Attività completate",
-} as const;
+import {
+  useProject,
+  type ProjectTransition,
+} from "@/hooks/useProjects";
+import { useProjectIntelligence } from "@/hooks/usePlatform";
+import { isMutable } from "@/lib/contracts";
 
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
-
-  const projectId = useMemo(
-    () => Number(params.projectId),
-    [params.projectId]
-  );
-
-  const validProjectId = Number.isInteger(projectId)
-    ? projectId
-    : undefined;
-
-  const [project, setProject] = useState<Project | null>(null);
-  const [loadingProject, setLoadingProject] = useState(true);
-  const [projectError, setProjectError] = useState("");
+  const parsed = Number(params.projectId);
+  const projectId = Number.isInteger(parsed) ? parsed : undefined;
 
   const {
-    documents,
-    loading: documentsLoading,
-  } = useDocuments(validProjectId);
+    project,
+    loading: projectLoading,
+    error: projectError,
+    transition,
+    transitioning,
+    transitionError,
+  } = useProject(projectId);
 
   const {
     intelligence,
     loading: intelligenceLoading,
     error: intelligenceError,
-  } = useProjectIntelligence(validProjectId);
+  } = useProjectIntelligence(projectId);
 
-  useEffect(() => {
-    async function loadProject() {
-      if (validProjectId === undefined) {
-        setProjectError("Identificativo progetto non valido.");
-        setLoadingProject(false);
-        return;
-      }
+  const {
+    documents,
+    loading: documentsLoading,
+    error: documentsError,
+    upload,
+    uploading,
+    uploadError,
+    // Server-side filter: this project's documents only.
+  } = useDocuments({ project_id: projectId, page_size: 100 });
 
-      setLoadingProject(true);
-      setProjectError("");
+  const [uploadProjectId, setUploadProjectId] = useState<number | undefined>(
+    projectId,
+  );
 
-      try {
-        const loadedProject = await getProject(validProjectId);
-        setProject(loadedProject);
-      } catch {
-        setProject(null);
-        setProjectError("Impossibile caricare il progetto.");
-      } finally {
-        setLoadingProject(false);
-      }
-    }
-
-    void loadProject();
-  }, [validProjectId]);
-
-  if (loadingProject || intelligenceLoading) {
+  if (projectId === undefined) {
     return (
       <main className="px-6 py-8 lg:px-10 lg:py-10">
-        <Skeleton className="h-10 w-40" />
-
-        <section className="mt-6">
-          <Skeleton className="h-[440px] rounded-[2rem]" />
-        </section>
-
-        <section className="mt-8">
-          <Skeleton className="h-80 rounded-[2rem]" />
-        </section>
-
-        <section className="mt-8">
-          <Skeleton className="h-[760px] rounded-[2rem]" />
-        </section>
-
-        <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton
-              key={index}
-              className="h-44 rounded-[2rem]"
-            />
-          ))}
-        </section>
-
-        <section className="mt-8 grid gap-6 xl:grid-cols-2">
-          <Skeleton className="h-[420px] rounded-[2rem]" />
-          <Skeleton className="h-[420px] rounded-[2rem]" />
-        </section>
-
-        <section className="mt-8">
-          <Skeleton className="h-[520px] rounded-[2rem]" />
-        </section>
+        <p className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
+          Identificativo progetto non valido.
+        </p>
       </main>
     );
   }
 
-  if (
-    projectError ||
-    intelligenceError ||
-    !project ||
-    !intelligence ||
-    validProjectId === undefined
-  ) {
+  if (projectLoading || intelligenceLoading) {
     return (
       <main className="px-6 py-8 lg:px-10 lg:py-10">
-        <section className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
-          <p className="font-semibold">
-            Progetto non disponibile
-          </p>
+        <Skeleton className="h-10 w-40" />
+
+        <div className="mt-6 space-y-8">
+          <Skeleton className="h-[420px] rounded-[2rem]" />
+          <Skeleton className="h-72 rounded-[2rem]" />
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Skeleton className="h-96 rounded-[2rem]" />
+            <Skeleton className="h-96 rounded-[2rem]" />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (projectError || !project) {
+    return (
+      <main className="px-6 py-8 lg:px-10 lg:py-10">
+        <section className="rounded-3xl border border-red-200 bg-red-50 p-6 text-red-700">
+          <p className="font-semibold">Progetto non disponibile</p>
 
           <p className="mt-2 text-sm">
-            {projectError ||
-              intelligenceError ||
-              "Il progetto richiesto non esiste."}
+            {projectError ?? "Il progetto richiesto non esiste."}
           </p>
 
           <Link
             href="/projects"
-            className={[
-              buttonVariants({ variant: "outline" }),
-              "mt-5",
-            ].join(" ")}
+            className={[buttonVariants({ variant: "outline" }), "mt-5"].join(
+              " ",
+            )}
           >
             <ArrowLeft className="h-4 w-4" />
             Torna ai progetti
@@ -170,202 +111,130 @@ export default function ProjectDetailPage() {
     .sort(
       (first, second) =>
         new Date(second.uploaded_at).getTime() -
-        new Date(first.uploaded_at).getTime()
+        new Date(first.uploaded_at).getTime(),
     )[0];
 
   const lastActivityLabel = documentsLoading
     ? "Caricamento..."
     : lastDocument
       ? new Date(lastDocument.uploaded_at).toLocaleString("it-IT")
-      : "Nessuna attività recente";
+      : "Nessuna attività registrata";
 
-  const documentationStatus =
-    documentationStatusLabels[
-      intelligence.documentation.status
-    ];
+  const editable = isMutable(project);
 
-  const commissioningStatus =
-    moduleStatusLabels[
-      intelligence.commissioning.status
-    ];
-
-  const relayTestingStatus =
-    moduleStatusLabels[
-      intelligence.relay_testing.status
-    ];
-
-  const focusItems = [
-    {
-      id: "documentation",
-      title:
-        intelligence.documentation.status === "available"
-          ? "Verifica revisioni documentali"
-          : "Completa il set documentale minimo",
-      description:
-        intelligence.documentation.status === "available"
-          ? "Controlla che schemi, liste cavi e report siano aggiornati all’ultima revisione disponibile."
-          : intelligence.next_action,
-      priority:
-        intelligence.documentation.status === "empty"
-          ? ("high" as const)
-          : intelligence.documentation.status === "incomplete"
-            ? ("medium" as const)
-            : ("low" as const),
-      estimatedMinutes:
-        intelligence.documentation.status === "available"
-          ? 30
-          : 45,
-      completed: false,
-    },
-    {
-      id: "commissioning",
-      title: "Prepara il piano di commissioning",
-      description:
-        "Definisci attività, responsabilità e prerequisiti per la prossima fase operativa.",
-      priority:
-        intelligence.commissioning.status === "not_started"
-          ? ("medium" as const)
-          : ("low" as const),
-      estimatedMinutes: 40,
-      completed:
-        intelligence.commissioning.status === "completed",
-    },
-    {
-      id: "relay-testing",
-      title: "Verifica il perimetro delle prove relè",
-      description:
-        "Conferma relè installati, configurazioni disponibili e prove ancora da pianificare.",
-      priority:
-        intelligence.relay_testing.status === "not_started"
-          ? ("medium" as const)
-          : ("low" as const),
-      estimatedMinutes: 35,
-      completed:
-        intelligence.relay_testing.status === "completed",
-    },
-  ];
-
-  const projectTimelineEvents = demoTimelineEvents.map(
-    (event) => ({
-      ...event,
-      project_id: project.id,
-    })
-  );
-
-  const projectCommissioningAssets =
-    demoCommissioning.assets.map((asset) => ({
-      ...asset,
-      projectId: String(project.id),
-    }));
+  async function runTransition(action: ProjectTransition) {
+    try {
+      await transition(action);
+    } catch {
+      // Rendered below by `transitionError`.
+    }
+  }
 
   return (
     <main className="px-6 py-8 lg:px-10 lg:py-10">
-      <Link
-        href="/projects"
-        className={buttonVariants({ variant: "ghost" })}
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Torna ai progetti
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          href="/projects"
+          className={buttonVariants({ variant: "ghost" })}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Torna ai progetti
+        </Link>
+
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href={`/projects/${project.id}/knowledge-graph`}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <Network className="h-4 w-4" />
+            Knowledge Graph
+          </Link>
+
+          {/* Only transitions the project's lifecycle state allows. */}
+          {editable && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={transitioning}
+              onClick={() => void runTransition("archive")}
+            >
+              <Archive className="h-4 w-4" />
+              Archivia
+            </Button>
+          )}
+
+          {project.lifecycle_state === "archived" && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={transitioning}
+              onClick={() => void runTransition("restore")}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Ripristina
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {transitionError && (
+        <p
+          role="alert"
+          className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700"
+        >
+          {transitionError}
+        </p>
+      )}
 
       <section className="mt-6">
         <ProjectHero
           project={project}
           documentCount={
-            intelligence.documentation.document_count
+            intelligence?.documentation.document_count ?? documents.length
           }
           lastActivityLabel={lastActivityLabel}
-          healthScore={intelligence.health_score}
+          healthScore={intelligence?.health_score ?? 0}
         />
       </section>
 
-      <section className="mt-8">
-        <EngineeringIntelligencePanel
-          intelligence={intelligence}
-        />
-      </section>
+      {intelligenceError && (
+        <p className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+          {intelligenceError}
+        </p>
+      )}
 
-      <section className="mt-8">
-        <OverviewPanel
-          assets={projectCommissioningAssets}
-          summary={demoCommissioning.summary}
-        />
-      </section>
-
-      <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="Documentazione"
-          value={`${intelligence.documentation.completion}%`}
-          description={`${intelligence.documentation.document_count} documenti associati`}
-          trend={documentationStatus}
-          status={
-            intelligence.documentation.status === "available"
-              ? "positive"
-              : intelligence.documentation.status === "incomplete"
-                ? "warning"
-                : "critical"
-          }
-          icon={<FileText className="h-6 w-6" />}
-        />
-
-        <MetricCard
-          label="Commissioning"
-          value={`${intelligence.commissioning.completion}%`}
-          description={`${intelligence.commissioning.completed} attività completate su ${intelligence.commissioning.total}`}
-          trend={commissioningStatus}
-          status={
-            intelligence.commissioning.status === "completed"
-              ? "positive"
-              : intelligence.commissioning.status === "in_progress"
-                ? "warning"
-                : "neutral"
-          }
-          icon={<Zap className="h-6 w-6" />}
-        />
-
-        <MetricCard
-          label="Relay Testing"
-          value={`${intelligence.relay_testing.completed} / ${intelligence.relay_testing.total}`}
-          description={`${intelligence.relay_testing.completion}% delle prove completate`}
-          trend={relayTestingStatus}
-          status={
-            intelligence.relay_testing.status === "completed"
-              ? "positive"
-              : intelligence.relay_testing.status === "in_progress"
-                ? "warning"
-                : "neutral"
-          }
-          icon={<Network className="h-6 w-6" />}
-        />
-
-        <MetricCard
-          label="Open Issues"
-          value={intelligence.issues.open}
-          description={`${intelligence.issues.critical} criticità ad alta priorità`}
-          trend={
-            intelligence.issues.open === 0
-              ? "Nessuna criticità aperta"
-              : "Intervento richiesto"
-          }
-          status={
-            intelligence.issues.critical > 0
-              ? "critical"
-              : intelligence.issues.open > 0
-                ? "warning"
-                : "positive"
-          }
-          icon={<TriangleAlert className="h-6 w-6" />}
-        />
-      </section>
+      {intelligence && (
+        <section className="mt-8">
+          <EngineeringIntelligencePanel intelligence={intelligence} />
+        </section>
+      )}
 
       <section className="mt-8 grid gap-6 xl:grid-cols-2">
-        <TodaysFocusPanel items={focusItems} />
+        <div id="project-upload-box">
+          {editable ? (
+            <UploadBox
+              onUpload={upload}
+              uploading={uploading}
+              uploadError={uploadError}
+              projects={[project]}
+              selectedProjectId={uploadProjectId ?? project.id}
+              onProjectChange={setUploadProjectId}
+              description="Il documento viene archiviato e classificato dal backend, poi può essere elaborato dalla pipeline di ingegneria."
+            />
+          ) : (
+            <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
+              Il progetto è{" "}
+              <strong>{project.lifecycle_state}</strong> e non accetta
+              nuovi documenti.
+            </section>
+          )}
+        </div>
 
-        <ProjectDocumentsPanel projectId={project.id} />
-      </section>
-
-      <section className="mt-8">
-        <TimelinePanel events={projectTimelineEvents} />
+        <ProjectDocumentsPanel
+          documents={documents}
+          loading={documentsLoading}
+          error={documentsError}
+        />
       </section>
     </main>
   );

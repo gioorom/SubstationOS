@@ -13717,6 +13717,58 @@
     ]
    }
   },
+  "/documents/{document_id}/canonical-representation/pages/{page_number}": {
+   "get": {
+    "description": "The page-scoped read of an artefact that already exists in full.\n\nA reader displaying page 7 of a 200-page drawing set needs the spans\nand bounding boxes of page 7, and this endpoint is the difference\nbetween transferring those and transferring all two hundred pages to\nuse one. It **adds nothing**: every field comes from the stored\nrepresentation, no coordinate is computed here, and no page that the\nparser did not record can be requested into existence.\n\n``page_number`` is 1-based, as the representation records it.",
+    "operationId": "read_canonical_representation_page_documents__document_id__canonical_representation_pages__page_number__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "page_number",
+      "required": true,
+      "schema": {
+       "title": "Page Number",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CanonicalPdfPageRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Read one page of a document's canonical representation - the spans, and where on the page the parser saw them",
+    "tags": [
+     "Canonical PDF Representation"
+    ]
+   }
+  },
   "/documents/{document_id}/canonical-text": {
    "get": {
     "operationId": "read_canonical_text_documents__document_id__canonical_text_get",

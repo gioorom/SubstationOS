@@ -1,0 +1,263 @@
+# Engineering Facts
+
+**Status:** As-built reference for the **Engineering Fact Construction**
+layer introduced in Milestone 29.2. For the entities it consumes, see
+[engineering_entities.md](engineering_entities.md); for the layer that
+assigns meaning to these facts, see
+[engineering_semantics.md](engineering_semantics.md); for where it sits
+in the wider pipeline, see
+[knowledge_pipeline_overview.md](knowledge_pipeline_overview.md).
+
+## The pipeline
+
+```
+Engineering Evidence
+    |
+    v
+Engineering Entity Resolution
+    |
+    v
+Engineering Fact Construction     deterministic, versioned, no LLM
+    |
+    v
+Engineering Semantic Interpretation   (Milestone 30.1)
+    |
+    v
+Future Knowledge Graph Population     (a later milestone)
+```
+
+## Four meanings, kept apart
+
+| Layer | Says |
+|---|---|
+| Evidence | "I observed `TR1` at this location." |
+| Entity | "These `TR1` observations refer to one document-scoped object." |
+| **Fact** | "This designation entity and this quantity entity satisfy a declared association rule." |
+| Graph edge *(later)* | "This equipment has this rated property." |
+
+**A fact is a structured association, not a classified engineering
+property.** It records that a rule was satisfied - nothing more.
+
+> **`HAS_ASSOCIATED_QUANTITY` does not mean rated power, voltage or
+> current.** It means two entities appeared together under a stated
+> structural rule. A transformer data sheet listing a *test* voltage
+> beside a designation would produce exactly the same predicate as one
+> listing a rated voltage, because the line does not say which it is.
+> Promoting a quantity into a role is a semantic milestone with its own
+> rule, its own version and its own evaluation. Milestone 30.1 does
+> exactly that for **power alone** - see
+> [engineering_semantics.md](engineering_semantics.md) - and leaves
+> voltage and current uninterpreted for precisely this reason.
+
+## The predicate vocabulary
+
+Exactly one member, in one module:
+
+```
+HAS_ASSOCIATED_QUANTITY
+```
+
+Deliberately absent: `HAS_VOLTAGE`, `HAS_CURRENT`, `HAS_POWER`,
+`HAS_CABLE_SECTION`, `CONNECTED_TO`, `PROTECTS`, `FEEDS`, `BELONGS_TO`,
+`IS_A`. The first four are property roles this layer cannot prove; the
+last five are topology and classification, which are not its subject
+matter at all.
+
+The quantity's evidence type - voltage, current, power, cable section -
+stays reachable through the fact's **support**, so a later milestone has
+what it needs to promote a role. Reading the evidence type as a predicate
+here would be that promotion happening by accident. An architecture test
+asserts the enum stays closed and that nothing else in the context
+declares a predicate.
+
+## The construction rule catalogue
+
+### `same_line_association` 1.0
+
+A designation entity and a quantity entity are associated when
+contributing observations of both occur on the **same document line** -
+same page, same block, same line index.
+
+### Why no paragraph rule
+
+The milestone brief permits a paragraph-level rule only if the
+repository's evidence proves it can be conservative. **It does not.**
+
+The canonical parser makes each separately-placed run of text its own
+block, so a "paragraph" here is sometimes exactly one line and sometimes
+a wrapped run of several unrelated ones - a title bar, a column of a
+table, a stack of data-sheet rows. A paragraph rule would behave as a
+line rule on some documents and as a several-lines-wide cartesian join on
+others, with nothing in the data to tell the two apart. A rule whose
+strictness depends on how the parser happened to block a page is not
+deterministic; it is a coin flip with a version number.
+
+### What is deliberately not used
+
+No token-distance scoring, no nearest-neighbour, no geometry, no
+same-page association, no punctuation-based inference, no document-wide
+proximity, no thresholds, no fuzzy matching, no embeddings. Each would
+introduce a number nobody calibrated deciding which equipment a rating
+belongs to. An architecture test asserts that no similarity library is
+imported and that no distance, score or threshold is computed anywhere in
+the construction path.
+
+## Cardinality and ambiguity
+
+The policy is **declared**, not implied:
+
+| On one line | Result | Why |
+|---|---|---|
+| 1 designation, N quantities | N facts | `ONE_SUBJECT_MANY_OBJECTS` - a data-sheet line listing a designation and several ratings is a real shape |
+| M ≥ 2 designations, ≥ 1 quantity | **no facts**, one diagnostic | the line does not say which designation the quantity belongs to |
+| 0 designations, or 0 quantities | nothing | no candidates |
+
+**Ambiguous layout must not become a confirmed fact.** `TR1 TR2 630 kVA`
+produces nothing: guessing would put a rating on the wrong equipment,
+which is invisible in a graph and expensive in a substation.
+
+Distinct entities are counted, not observations: `Trasformatore TR1,
+sigla TR1, 630 kVA` names one transformer twice, and both observations
+become support for one fact rather than triggering a false ambiguity.
+
+A pair declined on an ambiguous line may still be confirmed from a
+different, unambiguous line. The rule was satisfied there; the diagnostic
+still records where it was not.
+
+### Diagnostics are not facts
+
+An ambiguous line is recorded as a `FactConstructionDiagnostic` in its
+**own table**. It names no subject and no object - which is which is
+precisely what could not be determined - and it is structurally invisible
+to anyone querying `engineering_facts`. It is not a fact with a softer
+status.
+
+## Fact status
+
+Derived from the contributing entities, never invented:
+
+| Status | Meaning |
+|---|---|
+| `CONSTRUCTED` | The rule was satisfied and both entities are resolved |
+| `AMBIGUOUS` | The rule was satisfied - the association is real - and a contributing entity is itself ambiguous, typically a quantity whose number could not be read exactly |
+
+Note the distinction: `AMBIGUOUS` is about the **value** being unsettled,
+not about whether the association holds. A pairing that could not be
+determined produces no fact at all.
+
+No numerical confidence scores. A rule matched or it did not.
+
+## Support and provenance
+
+**Facts invent no provenance. They aggregate support.**
+
+Every fact can answer, without a text search:
+
+- which subject entity created it (by key);
+- which object entity created it (by key);
+- which observations support it (by evidence key, with role);
+- which rule at which version constructed it;
+- where those observations occur - page, paragraph, line, token range.
+
+The character-level chain is **not duplicated**: it stays on the evidence
+item, which remains the authoritative record, and is reachable through
+the immutable evidence key. Support is recorded at construction time and
+never reconstructed later by searching text.
+
+The line is stored on the support deliberately: a same-line association
+is only credible if the line it matched on can be re-checked, and an
+unverifiable rule is an assertion.
+
+## Identity
+
+`fact_key` is a SHA-256 over the document, the content checksum, the
+resolution policy version, the triple (subject, predicate, object), the
+construction rule and version, and the fact contract version.
+
+- The same entities under the same rules always yield the same key.
+- A rule or contract version bump yields different keys, so a
+  re-construction is a **new set** rather than a silent rewrite.
+
+The **line is deliberately absent** from the key: a fact is identified by
+what it asserts, not by where it was seen, and its support accumulates
+every co-occurrence that produced it.
+
+## Persistence
+
+Four tables added by migration `86c866388a33`: `engineering_fact_sets`,
+`engineering_facts`, `engineering_fact_support`,
+`engineering_fact_diagnostics`.
+
+The stored key is `(document_id, content_checksum,
+resolution_policy_version, fact_policy_version)` - the **entity source
+identity** as well as the fact policy, because a re-resolution under new
+entity rules is a different source even when the document has not
+changed.
+
+**Entities are referenced by key, not by foreign key.** A later
+re-resolution produces a new entity set, and a foreign key would either
+block it or cascade a historical fact set into nothing. Fact history must
+survive newer entities, so the reference is the deterministic entity key.
+An architecture test asserts those columns carry no foreign key.
+
+Insert-only: nothing is overwritten.
+
+## API
+
+```
+POST /documents/{document_id}/engineering-facts            construct or re-use
+GET  /documents/{document_id}/engineering-facts            the current set
+GET  /documents/{document_id}/engineering-facts/{fact_key} one fact
+GET  /documents/{document_id}/engineering-facts/{fact_key}/support
+```
+
+Five outcomes are distinguishable: constructed, constructed with
+ambiguities, nothing associable, an existing set reused, and failed.
+Constructing nothing is a success, and so is declining an ambiguous line.
+No ORM model is exposed.
+
+## The realistic cases
+
+| Document text | Facts | Why |
+|---|---|---|
+| `TR1 630 kVA` | 1 | one designation, one quantity, one line |
+| `TR1 20 kV 630 kVA` | 2 | one designation, two quantities - the declared one-to-many policy |
+| `TR1 TR2 630 kVA` | **0** | two designations: which one the rating belongs to is not stated |
+| `TR1` / `630 kVA` | **0** | different lines; the rule is same-line |
+| `TR1 — 630 kVA` | 1 | the dash is another token; punctuation carries no meaning here |
+| `TR1 \| 630 kVA` | 1 | a pipe is not a separator this layer interprets |
+| `TR1 630 kVA 20/0.4 kV` | 1 | `20/0.4` is not a number the extractor reads, so there is no second quantity to associate |
+
+The rules were **not** broadened to make every example produce output.
+Two of them deliberately produce none.
+
+## What the Knowledge Graph must do later
+
+**Graph population must consume governed facts rather than
+reconstructing relationships from text.** A graph builder that read
+canonical text, or re-associated entities itself, would be deciding what
+counts as an association in a second place under no rule version - and
+two answers about the same document would exist.
+
+**Every fact must be explainable through its entity and evidence
+support.** That chain - fact → entities → evidence → characters - is what
+lets an engineer disputing a graph edge be shown the line it came from.
+
+## Known debt
+
+- **One rule, one predicate.** The layer is deliberately narrow. Its
+  usefulness depends entirely on the semantic milestones that read the
+  support and promote roles - Milestone 30.1 promoted power and nothing
+  else, so most facts still say something true and thin.
+- **Construction is unmeasured.** Milestone 28.2's evaluation framework
+  measures *extraction*. There is no corpus of expected entities or
+  facts, so grouping and association quality are asserted by unit test
+  rather than measured against annotated documents. This is now the
+  second layer built on unmeasured rules.
+- **Multi-line data sheets associate nothing.** A designation on a header
+  line with ratings beneath it - a common real layout - produces no
+  facts, because no rule covers it conservatively. Closing that gap needs
+  either a table-structure notion in the canonical layer or a rule with
+  evidence behind it.
+- **Cross-document facts do not exist**, following cross-document entity
+  resolution not existing.

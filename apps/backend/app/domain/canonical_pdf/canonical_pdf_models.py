@@ -232,6 +232,22 @@ class CanonicalPdfDocument:
 
         return not self.pages
 
+    def page(self, page_number: int) -> CanonicalPdfPage | None:
+        """
+        One page by its 1-based number, or ``None`` when the
+        representation has no such page.
+
+        A lookup, never a search: ``page_number`` is the parser's own
+        1-based number, so this cannot silently return a neighbouring
+        page for an out-of-range request.
+        """
+
+        for page in self.pages:
+            if page.page_number == page_number:
+                return page
+
+        return None
+
     @property
     def has_text(self) -> bool:
         """Whether the parser found any text span anywhere.

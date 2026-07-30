@@ -36,6 +36,7 @@ from app.domain.canonical_pdf.canonical_pdf_failures import (
 )
 from app.domain.canonical_pdf.canonical_pdf_models import (
     CanonicalPdfDocument,
+    CanonicalPdfPage,
 )
 from app.domain.canonical_pdf.canonical_pdf_policy import (
     SUPPORTED_CANONICALIZATION_FORMATS,
@@ -254,6 +255,33 @@ def get_representation(
     """
 
     return repository.find_latest_for_document(document_id)
+
+
+def get_page(
+    repository: CanonicalRepresentationRepository,
+    document_id: int,
+    page_number: int,
+) -> CanonicalPdfPage | None:
+    """
+    One page of a document's canonical representation.
+
+    Exists so a reader that needs the spans of the page it is displaying
+    does not have to load every page of the document to get them. It
+    reads the same artefact ``get_representation`` returns and selects
+    from it; nothing is recomputed, and a page absent from the
+    representation is absent here.
+
+    ``None`` covers both "never canonicalised" and "no such page". The
+    caller distinguishes them if it needs to, by asking for the
+    representation - this function does not invent a page either way.
+    """
+
+    representation = repository.find_latest_for_document(document_id)
+
+    if representation is None:
+        return None
+
+    return representation.page(page_number)
 
 
 def _find_document(

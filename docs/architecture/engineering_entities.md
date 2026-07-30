@@ -18,8 +18,21 @@ Engineering Entity Resolution     deterministic, versioned, no LLM
 Engineering Entity Set            immutable, persisted, evidence-backed
     |
     v
+Engineering Fact Construction     Milestone 29.2 - see engineering_facts.md
+    |
+    v
+Engineering Semantic Interpretation
+                                  Milestone 30.1 - see engineering_semantics.md
+    |
+    v
 Future Knowledge Graph Population (a later milestone)
 ```
+
+Evidence is an **observation**; an entity is a **deterministic grouping
+of observations**; a fact is a **structured association between
+entities**; a graph node or edge is none of those, and will later be
+generated from facts. See
+[engineering_facts.md](engineering_facts.md).
 
 ## Evidence, entity, node - three different things
 
@@ -204,10 +217,11 @@ observations these rules group into anything. No ORM model is exposed.
   limitation: a substation's equipment appears across a drawing set, and
   uniting those observations needs a rule about document scope that
   nobody has written yet.
-- **Quantities are never attributed.** Every quantity is its own entity,
-  which is honest and not yet useful: the value of `630 kVA` is knowing
-  what it rates. That attribution is the next reasoning step and needs
-  its own evaluation before it can be trusted.
+- **Quantities are never attributed *here*.** Every quantity is its own
+  entity. Milestone 29.2 added the first association between them -
+  `HAS_ASSOCIATED_QUANTITY`, when a designation and a quantity share a
+  document line - but that still does not say what the quantity *is* to
+  the designation. Role attribution remains a later, reviewable step.
 - **Resolution is unmeasured.** Milestone 28.2's evaluation framework
   measures *extraction*; there is no corpus of expected **entities** yet,
   so grouping quality is asserted by unit test rather than measured

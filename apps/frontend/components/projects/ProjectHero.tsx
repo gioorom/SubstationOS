@@ -1,6 +1,7 @@
 import {
   Activity,
   Building2,
+  Globe2,
   MapPin,
   Network,
   Sparkles,
@@ -8,113 +9,104 @@ import {
 } from "lucide-react";
 
 import GlassPanel from "@/components/design-system/GlassPanel";
-import { Project } from "@/types/project";
+import {
+  PROJECT_LIFECYCLE_LABELS,
+  PROJECT_STATUS_LABELS,
+  type Project,
+  type ProjectLifecycleState,
+  type ProjectStatus,
+} from "@/lib/contracts";
 
 interface ProjectHeroProps {
   project: Project;
   documentCount: number;
-  lastActivityLabel?: string;
-  healthScore?: number;
+  lastActivityLabel: string;
+  /** From `GET /projects/{id}/intelligence`. Never a default. */
+  healthScore: number;
 }
 
-const statusLabels: Record<Project["status"], string> = {
-  planning: "Pianificazione",
-  active: "Attivo",
-  on_hold: "In sospeso",
-  completed: "Completato",
-  cancelled: "Annullato",
+/**
+ * `status` is the delivery phase; `lifecycle_state` is whether the record
+ * is editable. Both are shown because they answer different questions and
+ * a project can be `energized` and `archived` at once.
+ */
+const statusStyles: Record<ProjectStatus, string> = {
+  planning: "border-blue-200 bg-blue-50 text-blue-700",
+  engineering: "border-indigo-200 bg-indigo-50 text-indigo-700",
+  construction: "border-amber-200 bg-amber-50 text-amber-700",
+  commissioning: "border-violet-200 bg-violet-50 text-violet-700",
+  energized: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  closed: "border-slate-200 bg-slate-100 text-slate-700",
 };
 
-const statusStyles: Record<Project["status"], string> = {
-  planning:
-    "border-blue-200 bg-blue-50 text-blue-700",
-  active:
-    "border-emerald-200 bg-emerald-50 text-emerald-700",
-  on_hold:
-    "border-amber-200 bg-amber-50 text-amber-700",
-  completed:
-    "border-slate-200 bg-slate-100 text-slate-700",
-  cancelled:
-    "border-red-200 bg-red-50 text-red-700",
+const lifecycleStyles: Record<ProjectLifecycleState, string> = {
+  draft: "border-slate-200 bg-slate-100 text-slate-600",
+  active: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  archived: "border-amber-200 bg-amber-50 text-amber-700",
+  deleted: "border-red-200 bg-red-50 text-red-700",
 };
 
-function getHealthLabel(score: number) {
-  if (score >= 90) {
-    return "Eccellente";
-  }
-
-  if (score >= 75) {
-    return "Buono";
-  }
-
-  if (score >= 60) {
-    return "Da monitorare";
-  }
-
+function healthLabel(score: number): string {
+  if (score >= 90) return "Eccellente";
+  if (score >= 75) return "Buono";
+  if (score >= 60) return "Da monitorare";
   return "Critico";
 }
 
-function getHealthClasses(score: number) {
+function healthClasses(score: number) {
   if (score >= 90) {
-    return {
-      text: "text-emerald-700",
-      ring: "stroke-emerald-500",
-      glow: "shadow-[0_0_35px_rgba(16,185,129,0.24)]",
-    };
+    return { text: "text-emerald-700", ring: "stroke-emerald-500" };
   }
 
   if (score >= 75) {
-    return {
-      text: "text-blue-700",
-      ring: "stroke-blue-500",
-      glow: "shadow-[0_0_35px_rgba(59,130,246,0.22)]",
-    };
+    return { text: "text-blue-700", ring: "stroke-blue-500" };
   }
 
   if (score >= 60) {
-    return {
-      text: "text-amber-700",
-      ring: "stroke-amber-500",
-      glow: "shadow-[0_0_35px_rgba(245,158,11,0.22)]",
-    };
+    return { text: "text-amber-700", ring: "stroke-amber-500" };
   }
 
-  return {
-    text: "text-red-700",
-    ring: "stroke-red-500",
-    glow: "shadow-[0_0_35px_rgba(239,68,68,0.22)]",
-  };
+  return { text: "text-red-700", ring: "stroke-red-500" };
+}
+
+function Fact({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | null;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/70 bg-white/58 p-4 shadow-sm backdrop-blur-xl">
+      <div className="flex items-center gap-3 text-primary">
+        {icon}
+
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          {label}
+        </p>
+      </div>
+
+      <p className="mt-3 truncate text-sm font-semibold text-foreground">
+        {value || "Non specificato"}
+      </p>
+    </div>
+  );
 }
 
 export default function ProjectHero({
   project,
   documentCount,
-  lastActivityLabel = "Nessuna attività recente",
-  healthScore = 82,
+  lastActivityLabel,
+  healthScore,
 }: ProjectHeroProps) {
-  const healthClasses = getHealthClasses(healthScore);
-  const healthLabel = getHealthLabel(healthScore);
-
+  const classes = healthClasses(healthScore);
   const circumference = 2 * Math.PI * 52;
-  const dashOffset =
-    circumference -
-    (healthScore / 100) * circumference;
+  const dashOffset = circumference - (healthScore / 100) * circumference;
 
   return (
-    <GlassPanel
-      padding="lg"
-      className="overflow-hidden"
-    >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full bg-blue-400/16 blur-3xl"
-      />
-
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-violet-400/12 blur-3xl"
-      />
-
+    <GlassPanel padding="lg" className="overflow-hidden">
       <div className="relative grid gap-8 xl:grid-cols-[1fr_auto] xl:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
@@ -124,12 +116,20 @@ export default function ProjectHero({
 
             <span
               className={[
-                "rounded-full border px-3 py-1",
-                "text-xs font-semibold",
+                "rounded-full border px-3 py-1 text-xs font-semibold",
                 statusStyles[project.status],
               ].join(" ")}
             >
-              {statusLabels[project.status]}
+              {PROJECT_STATUS_LABELS[project.status]}
+            </span>
+
+            <span
+              className={[
+                "rounded-full border px-3 py-1 text-xs font-semibold",
+                lifecycleStyles[project.lifecycle_state],
+              ].join(" ")}
+            >
+              {PROJECT_LIFECYCLE_LABELS[project.lifecycle_state]}
             </span>
           </div>
 
@@ -137,67 +137,42 @@ export default function ProjectHero({
             {project.name}
           </h1>
 
-          <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground lg:text-base">
-            {project.description ||
-              "Workspace tecnico della commessa, con documenti, attività e dati operativi centralizzati."}
-          </p>
+          {project.description && (
+            <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground lg:text-base">
+              {project.description}
+            </p>
+          )}
 
-          <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-white/70 bg-white/58 p-4 shadow-sm backdrop-blur-xl">
-              <div className="flex items-center gap-3">
-                <Building2 className="h-5 w-5 text-primary" />
+          <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <Fact
+              icon={<Building2 className="h-5 w-5" />}
+              label="Committente"
+              value={project.customer}
+            />
 
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Committente
-                </p>
-              </div>
+            <Fact
+              icon={<Network className="h-5 w-5" />}
+              label="EPC"
+              value={project.epc}
+            />
 
-              <p className="mt-3 truncate text-sm font-semibold text-foreground">
-                {project.customer || "Non specificato"}
-              </p>
-            </div>
+            <Fact
+              icon={<Zap className="h-5 w-5" />}
+              label="Tensione"
+              value={project.voltage_level}
+            />
 
-            <div className="rounded-2xl border border-white/70 bg-white/58 p-4 shadow-sm backdrop-blur-xl">
-              <div className="flex items-center gap-3">
-                <Network className="h-5 w-5 text-primary" />
+            <Fact
+              icon={<MapPin className="h-5 w-5" />}
+              label="Località"
+              value={project.location}
+            />
 
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  EPC
-                </p>
-              </div>
-
-              <p className="mt-3 truncate text-sm font-semibold text-foreground">
-                {project.epc || "Non specificato"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/70 bg-white/58 p-4 shadow-sm backdrop-blur-xl">
-              <div className="flex items-center gap-3">
-                <Zap className="h-5 w-5 text-primary" />
-
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Tensione
-                </p>
-              </div>
-
-              <p className="mt-3 truncate text-sm font-semibold text-foreground">
-                {project.voltage_level || "Non specificata"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/70 bg-white/58 p-4 shadow-sm backdrop-blur-xl">
-              <div className="flex items-center gap-3">
-                <MapPin className="h-5 w-5 text-primary" />
-
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Località
-                </p>
-              </div>
-
-              <p className="mt-3 truncate text-sm font-semibold text-foreground">
-                {project.location || "Non specificata"}
-              </p>
-            </div>
+            <Fact
+              icon={<Globe2 className="h-5 w-5" />}
+              label="Paese"
+              value={project.country}
+            />
           </div>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -205,8 +180,7 @@ export default function ProjectHero({
               <Activity className="h-4 w-4 text-primary" />
 
               <span>
-                Ultima attività:
-                {" "}
+                Ultima attività:{" "}
                 <strong className="font-semibold text-foreground">
                   {lastActivityLabel}
                 </strong>
@@ -216,9 +190,7 @@ export default function ProjectHero({
             <div className="inline-flex items-center gap-2 rounded-2xl border border-white/70 bg-white/58 px-4 py-3 text-sm text-muted-foreground shadow-sm backdrop-blur-xl">
               <Sparkles className="h-4 w-4 text-primary" />
 
-              <span>
-                {documentCount} documenti associati
-              </span>
+              <span>{documentCount} documenti associati</span>
             </div>
           </div>
         </div>
@@ -228,13 +200,7 @@ export default function ProjectHero({
             Project Health
           </p>
 
-          <div
-            className={[
-              "relative mt-5 flex h-40 w-40 items-center justify-center rounded-full",
-              "bg-white/80",
-              healthClasses.glow,
-            ].join(" ")}
-          >
+          <div className="relative mt-5 flex h-40 w-40 items-center justify-center rounded-full bg-white/80">
             <svg
               viewBox="0 0 120 120"
               className="absolute inset-0 h-full w-full -rotate-90"
@@ -259,10 +225,9 @@ export default function ProjectHero({
                 strokeLinecap="round"
                 strokeDasharray={circumference}
                 strokeDashoffset={dashOffset}
-                className={[
-                  "transition-all duration-700",
-                  healthClasses.ring,
-                ].join(" ")}
+                className={["transition-all duration-700", classes.ring].join(
+                  " ",
+                )}
               />
             </svg>
 
@@ -272,18 +237,17 @@ export default function ProjectHero({
               </p>
 
               <p
-                className={[
-                  "mt-1 text-xs font-semibold",
-                  healthClasses.text,
-                ].join(" ")}
+                className={["mt-1 text-xs font-semibold", classes.text].join(
+                  " ",
+                )}
               >
-                {healthLabel}
+                {healthLabel(healthScore)}
               </p>
             </div>
           </div>
 
-          <p className="mt-5 text-center text-sm leading-6 text-muted-foreground">
-            Indicatore sintetico dello stato della commessa.
+          <p className="mt-5 text-center text-xs leading-5 text-muted-foreground">
+            Calcolato dal backend sulla sola completezza documentale.
           </p>
         </div>
       </div>

@@ -5,18 +5,18 @@ import { UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Project } from "@/types/project";
+import { isMutable, type Project } from "@/lib/contracts";
+import type { UploadInput } from "@/hooks/useDocuments";
 
 interface UploadBoxProps {
-  onUpload: (
-    file: File,
-    projectId: number
-  ) => Promise<unknown>;
+  onUpload: (input: UploadInput) => Promise<unknown>;
   projects: Project[];
   selectedProjectId?: number;
   onProjectChange: (projectId: number) => void;
   uploading?: boolean;
   projectsLoading?: boolean;
+  /** The backend's own refusal, shown verbatim rather than paraphrased. */
+  uploadError?: string | null;
   title?: string;
   description?: string;
 }
@@ -28,13 +28,16 @@ export default function UploadBox({
   onProjectChange,
   uploading = false,
   projectsLoading = false,
+  uploadError = null,
   title = "Carica documento tecnico",
-  description = "Seleziona un progetto e un file tecnico.",
+  description = "Seleziona un progetto e un documento. Il backend classifica il formato dai byte del file.",
 }: UploadBoxProps) {
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const fileInputRef =
-    useRef<HTMLInputElement | null>(null);
+  // A project that is archived or deleted is read-only and the upload
+  // would come back 409. It is not offered.
+  const selectableProjects = projects.filter(isMutable);
 
   async function handleUpload() {
     if (selectedProjectId === undefined) {
@@ -48,14 +51,13 @@ export default function UploadBox({
     }
 
     try {
-      await onUpload(file, selectedProjectId);
+      await onUpload({
+        file,
+        projectId: selectedProjectId,
+        scope: "project",
+      });
 
-      toast.success(
-        "Documento caricato correttamente",
-        {
-          description: file.name,
-        }
-      );
+      toast.success("Documento caricato", { description: file.name });
 
       setFile(null);
 
@@ -63,17 +65,16 @@ export default function UploadBox({
         fileInputRef.current.value = "";
       }
     } catch {
-      toast.error("Upload non riuscito", {
-        description:
-          "Controlla il backend e riprova.",
-      });
+      // The typed cause is rendered inline below by `uploadError`;
+      // the toast only reports that the upload did not happen.
+      toast.error("Caricamento non riuscito");
     }
   }
 
   const uploadDisabled =
     uploading ||
     projectsLoading ||
-    projects.length === 0 ||
+    selectableProjects.length === 0 ||
     selectedProjectId === undefined ||
     !file;
 
@@ -109,7 +110,7 @@ export default function UploadBox({
           disabled={
             uploading ||
             projectsLoading ||
-            projects.length === 0
+            selectableProjects.length === 0
           }
           onChange={(event) => {
             const value = Number(event.target.value);
@@ -121,24 +122,16 @@ export default function UploadBox({
           className="block w-full rounded-2xl border border-input bg-white/80 px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {projectsLoading && (
-            <option value="">
-              Caricamento progetti...
-            </option>
+            <option value="">Caricamento progetti...</option>
+          )}
+
+          {!projectsLoading && selectableProjects.length === 0 && (
+            <option value="">Nessun progetto modificabile</option>
           )}
 
           {!projectsLoading &&
-            projects.length === 0 && (
-              <option value="">
-                Nessun progetto disponibile
-              </option>
-            )}
-
-          {!projectsLoading &&
-            projects.map((project) => (
-              <option
-                key={project.id}
-                value={project.id}
-              >
+            selectableProjects.map((project) => (
+              <option key={project.id} value={project.id}>
                 {project.code} — {project.name}
               </option>
             ))}
@@ -159,9 +152,7 @@ export default function UploadBox({
           type="file"
           disabled={uploading}
           onChange={(event) => {
-            setFile(
-              event.target.files?.[0] ?? null
-            );
+            setFile(event.target.files?.[0] ?? null);
           }}
           className="block w-full rounded-2xl border border-input bg-white/80 px-4 py-3 text-sm text-foreground file:mr-4 file:rounded-xl file:border-0 file:bg-secondary file:px-4 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-60"
         />
@@ -173,6 +164,15 @@ export default function UploadBox({
         </p>
       )}
 
+      {uploadError && (
+        <p
+          role="alert"
+          className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          {uploadError}
+        </p>
+      )}
+
       <Button
         type="button"
         onClick={() => void handleUpload()}
@@ -181,9 +181,7 @@ export default function UploadBox({
       >
         <UploadCloud className="h-4 w-4" />
 
-        {uploading
-          ? "Caricamento..."
-          : "Carica documento"}
+        {uploading ? "Caricamento..." : "Carica documento"}
       </Button>
     </section>
   );

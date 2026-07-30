@@ -168,6 +168,154 @@ def test_reading_a_representation_that_was_never_built_returns_404(
     assert response.status_code == 404
 
 
+# --- Reading one page (EPIC 30.2) ---------------------------------------
+#
+# The Engineering Workspace renders one page at a time. These tests pin
+# the two properties that make the page read safe to build a viewer on:
+# it returns exactly what the full representation holds for that page,
+# and it invents nothing for a page the parser never recorded.
+
+
+def _page(
+    api_client: TestClient, document_id: int, page_number: int
+) -> httpx.Response:
+    return api_client.get(
+        f"/documents/{document_id}/canonical-representation"
+        f"/pages/{page_number}"
+    )
+
+
+def test_one_page_can_be_read_on_its_own(api_client: TestClient) -> None:
+    document = _ready_document(
+        api_client, content=multi_page_pdf("Bay 21", "Bay 22")
+    )
+    _canonicalize(api_client, document["id"])
+
+    response = _page(api_client, document["id"], 2)
+
+    assert response.status_code == 200
+    assert response.json()["page_number"] == 2
+
+
+def test_a_page_read_is_identical_to_that_page_of_the_whole(
+    api_client: TestClient,
+) -> None:
+    """The point of the projection: fewer bytes, never different ones.
+
+    A viewer that highlights a span at these coordinates must be looking
+    at the same artefact the full read describes, or the highlight is
+    drawn somewhere the parser never said anything was.
+    """
+
+    document = _ready_document(
+        api_client, content=multi_page_pdf("Bay 21", "Bay 22")
+    )
+    _canonicalize(api_client, document["id"])
+
+    whole = api_client.get(
+        f"/documents/{document['id']}/canonical-representation"
+    ).json()
+
+    for page in whole["pages"]:
+        assert (
+            _page(api_client, document["id"], page["page_number"]).json()
+            == page
+        )
+
+
+def test_the_page_read_carries_the_parsers_own_geometry(
+    api_client: TestClient,
+) -> None:
+    document = _ready_document(
+        api_client, content=single_page_pdf("145 kV", font_size=17.0)
+    )
+    _canonicalize(api_client, document["id"])
+
+    span = _page(api_client, document["id"], 1).json()["blocks"][0][
+        "spans"
+    ][0]
+
+    assert span["bounding_box"]["x0"] == 72.0
+    # `reading_order` is the key evidence provenance joins on: an
+    # observation names the span it read, and this is that span.
+    assert span["reading_order"] == 0
+    assert span["style"]["font_size"] == 17.0
+
+
+def test_a_page_the_representation_does_not_record_returns_404(
+    api_client: TestClient,
+) -> None:
+    document = _ready_document(api_client, content=single_page_pdf())
+    _canonicalize(api_client, document["id"])
+
+    assert _page(api_client, document["id"], 2).status_code == 404
+    assert _page(api_client, document["id"], 0).status_code == 404
+
+
+def test_reading_a_page_before_canonicalisation_returns_404(
+    api_client: TestClient,
+) -> None:
+    document = _ready_document(api_client)
+
+    assert _page(api_client, document["id"], 1).status_code == 404
+
+
+def test_a_page_of_an_unknown_document_returns_404(
+    api_client: TestClient,
+) -> None:
+    assert _page(api_client, 4321, 1).status_code == 404
+
+
+def test_one_documents_page_cannot_be_read_through_another(
+    api_client: TestClient,
+) -> None:
+    """Page numbers are not identities. Asking document B for a page
+    only document A was canonicalised into must not answer with A's."""
+
+    canonicalised = _ready_document(
+        api_client, content=multi_page_pdf("Bay 21", "Bay 22")
+    )
+    _canonicalize(api_client, canonicalised["id"])
+
+    other = _ready_document(
+        api_client, filename="altro-schema.pdf", content=single_page_pdf()
+    )
+
+    assert _page(api_client, other["id"], 2).status_code == 404
+
+
+def test_a_page_read_discloses_no_storage_location(
+    api_client: TestClient, db_session: Session
+) -> None:
+    document = _ready_document(api_client, content=single_page_pdf())
+    _canonicalize(api_client, document["id"])
+
+    stored = db_session.get(DocumentRecord, document["id"])
+    body = _page(api_client, document["id"], 1).text
+
+    assert stored.file_path not in body
+    assert "file_path" not in body
+    assert "storage_reference" not in body
+
+
+def test_the_page_read_is_described_by_openapi(
+    api_client: TestClient,
+) -> None:
+    schema = api_client.get("/openapi.json").json()
+    path = schema["paths"][
+        "/documents/{document_id}/canonical-representation"
+        "/pages/{page_number}"
+    ]
+
+    assert "get" in path
+    assert (
+        path["get"]["responses"]["200"]["content"]["application/json"][
+            "schema"
+        ]["$ref"]
+        == "#/components/schemas/CanonicalPdfPageRead"
+    )
+
+
 # --- Refusals -----------------------------------------------------------
 
 

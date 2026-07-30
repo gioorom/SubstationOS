@@ -83,6 +83,26 @@ def test_a_document_reports_its_page_count() -> None:
     assert document.page_count == 3
 
 
+def test_a_document_returns_a_page_by_its_own_number() -> None:
+    document = _document(pages=(_page(1), _page(2), _page(3)))
+
+    assert document.page(2) is document.pages[1]
+
+
+def test_asking_for_a_page_the_document_does_not_have_returns_none() -> (
+    None
+):
+    """A lookup, not a search. Returning the nearest page would put a
+    reader in front of the wrong drawing while telling it nothing went
+    wrong."""
+
+    document = _document(pages=(_page(1), _page(2)))
+
+    assert document.page(3) is None
+    assert document.page(0) is None
+    assert document.page(-1) is None
+
+
 def test_a_page_with_no_blocks_is_empty_and_still_valid() -> None:
     """A blank page in a drawing set is a fact about the document, not an
     error."""

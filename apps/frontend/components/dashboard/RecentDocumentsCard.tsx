@@ -1,12 +1,7 @@
-interface RecentDocument {
-  id: number;
-  filename: string;
-  project: string;
-  revision: string;
-}
+import type { DocumentSummary } from "@/lib/contracts";
 
 interface RecentDocumentsCardProps {
-  documents: RecentDocument[];
+  documents: DocumentSummary[];
 }
 
 export default function RecentDocumentsCard({
@@ -47,7 +42,7 @@ export default function RecentDocumentsCard({
                 </p>
 
                 <p className="text-sm text-muted-foreground">
-                  {document.project}
+                  {document.project_name}
                 </p>
               </div>
 

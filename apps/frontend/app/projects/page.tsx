@@ -1,27 +1,58 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   FolderKanban,
   MapPin,
   Plus,
   RefreshCw,
+  Search,
 } from "lucide-react";
+
+import Pagination from "@/components/common/Pagination";
 
 import {
   Button,
   buttonVariants,
 } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useProjects } from "@/hooks/useProjects";
+import { useProjectQuery, useProjects } from "@/hooks/useProjects";
+import {
+  PROJECT_STATUSES,
+  PROJECT_LIFECYCLE_LABELS,
+  PROJECT_STATUS_LABELS,
+  type ProjectStatus,
+} from "@/lib/contracts";
 
+/** Typing should not fire a request per keystroke. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * The project registry. Search, filtering and paging are executed by the
+ * backend over the whole registry - never client-side over one page.
+ */
 export default function ProjectsPage() {
+  const { query, setFilter, setPage } = useProjectQuery();
+
   const {
     projects,
+    pagination,
     loading,
+    refreshing,
     error,
     reload,
-  } = useProjects();
+  } = useProjects(query);
+
+  const [searchInput, setSearchInput] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilter({ search: searchInput || undefined });
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [searchInput, setFilter]);
 
   return (
     <main className="px-6 py-8 lg:px-10 lg:py-10">
@@ -48,6 +79,61 @@ export default function ProjectsPage() {
           <Plus className="h-4 w-4" />
           Nuovo progetto
         </Link>
+      </section>
+
+      <section className="mt-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <label
+            htmlFor="project-search"
+            className="mb-2 block text-sm font-medium text-slate-700"
+          >
+            Ricerca
+          </label>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+            <input
+              id="project-search"
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Nome, codice, committente o località"
+              className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70"
+            />
+          </div>
+        </div>
+
+        <div className="sm:w-64">
+          <label
+            htmlFor="project-status-filter"
+            className="mb-2 block text-sm font-medium text-slate-700"
+          >
+            Fase
+          </label>
+
+          <select
+            id="project-status-filter"
+            value={query.status ?? ""}
+            onChange={(event) =>
+              setFilter({
+                status:
+                  (event.target.value || undefined) as
+                    | ProjectStatus
+                    | undefined,
+              })
+            }
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70"
+          >
+            <option value="">Tutte le fasi</option>
+
+            {PROJECT_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {PROJECT_STATUS_LABELS[status]}
+              </option>
+            ))}
+          </select>
+        </div>
       </section>
 
       {loading && (
@@ -89,7 +175,13 @@ export default function ProjectsPage() {
         </section>
       )}
 
-      {!loading && !error && projects.length === 0 && (
+      {!loading && !error && projects.length === 0 && (query.search || query.status) && (
+        <section className="mt-8 rounded-2xl border border-slate-200 bg-white/70 px-6 py-10 text-center text-sm text-muted-foreground">
+          Nessun progetto corrisponde ai criteri selezionati.
+        </section>
+      )}
+
+      {!loading && !error && projects.length === 0 && !query.search && !query.status && (
         <section className="mt-8 rounded-[2rem] border border-dashed border-border bg-white/60 px-6 py-16 text-center shadow-sm backdrop-blur-xl">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-primary/10 text-primary">
             <FolderKanban className="h-8 w-8" />
@@ -131,9 +223,17 @@ export default function ProjectsPage() {
                   <FolderKanban className="h-6 w-6" />
                 </div>
 
-                <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
-                  {project.status}
-                </span>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
+                    {PROJECT_STATUS_LABELS[project.status]}
+                  </span>
+
+                  {project.lifecycle_state !== "active" && (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                      {PROJECT_LIFECYCLE_LABELS[project.lifecycle_state]}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <p className="mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -164,6 +264,15 @@ export default function ProjectsPage() {
             </Link>
           ))}
         </section>
+      )}
+
+      {!loading && !error && projects.length > 0 && (
+        <Pagination
+          pagination={pagination}
+          onPageChange={setPage}
+          disabled={refreshing}
+          itemLabel={{ singular: "progetto", plural: "progetti" }}
+        />
       )}
     </main>
   );

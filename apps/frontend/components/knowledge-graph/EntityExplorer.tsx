@@ -1,6 +1,6 @@
 "use client";
 
-import type { KnowledgeGraphNode } from "@/types/knowledge-graph";
+import type { KnowledgeGraphNode } from "@/lib/contracts";
 
 interface Props {
   nodes: KnowledgeGraphNode[];

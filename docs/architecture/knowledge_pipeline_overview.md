@@ -22,8 +22,10 @@ Representation, EPIC 2), Milestone 27.1 (Canonical Text
 Segmentation, EPIC 2), Milestone 26.2 (PDF Consumption
 Consolidation, EPIC 2), Milestone 28.1 (Engineering Evidence
 Extraction, EPIC 2), Milestone 28.2 (Engineering Evidence
-Evaluation Framework, EPIC 2), and Milestone 29.1 (Engineering
-Entity Resolution, EPIC 2).
+Evaluation Framework, EPIC 2), Milestone 29.1 (Engineering
+Entity Resolution, EPIC 2), Milestone 29.2 (Engineering Fact
+Construction, EPIC 2), and Milestone 30.1 (Engineering Semantic
+Interpretation, EPIC 2).
 Describes the governed knowledge pipeline as it
 exists today — not the product vision
 (`project_intelligence_architecture.md` describes vision and roadmap;
@@ -38,6 +40,7 @@ its own.
 Documents → Document Identity → Document Ingestion → Canonical PDF Representation →
 Canonical Text Segmentation → Engineering Evidence Extraction →
 Engineering Evidence Evaluation → Engineering Entity Resolution →
+Engineering Fact Construction → Engineering Semantic Interpretation →
 Engineering Index → Proposed Claims → Review Workflow →
 Canonicalization → Graph Builder → Project Knowledge Graph → Graph Query →
 Structured Retrieval → Context Builder → Prompt Builder →
@@ -151,6 +154,84 @@ the repository already knows about it, and whether it is ready for a
 future extractor - and nothing else. The Engineering Index and the
 Knowledge Graph stay untouched, enforced by architecture test rather than
 by intent.
+
+**Milestone 30.1 finally assigned meaning - to one association, under
+one rule.** Engineering Semantic Interpretation reads constructed facts
+and produces `EngineeringSemanticStatement`s from a versioned catalogue
+of engineering rules. The statement vocabulary has exactly one member,
+`HAS_RATED_POWER`, produced by exactly one rule: a designation
+associated with **exactly one** power quantity has that quantity as its
+rated power. Deterministic - no LLM, no embeddings, no machine learning,
+no probabilistic inference.
+
+Three responsibilities, deliberately separated:
+
+- **Semantic Interpretation assigns engineering meaning.**
+- **The Knowledge Graph stores interpreted knowledge.**
+- **Reasoning consumes interpreted knowledge.**
+
+This stage is the first of the three, and it stops when the meaning is
+assigned. Nothing here writes a node or an edge.
+
+**Voltage was left uninterpreted on purpose.** `HAS_NOMINAL_VOLTAGE`
+looks like the obvious second rule and is not: a voltage beside a
+designation may be a rated voltage, a test voltage, an insulation level
+or the voltage of the busbar the equipment connects to, and the
+association alone does not distinguish them. `TR1 20 kV` and `TR1 240
+mm²` therefore produce **no statement** - not a failure, an honest
+absence. `TR1 20 kV 630 kVA` produces one statement, for the power only.
+The catalogue was not widened to give every association a meaning.
+
+**No executable engineering rule exists outside the catalogue**, enforced
+by architecture test, because every stored statement cites a rule id and
+version and a judgement made elsewhere would be one nobody could find or
+review.
+
+**Ambiguity produces no statement.** Two power quantities associated with
+one designation yield a diagnostic in its own table and nothing else - a
+fact carries entity *keys*, not values, so this stage cannot see whether
+the figures agree, and reaching for them would mean depending on
+entities. A boundary that forces the conservative answer is a boundary in
+the right place.
+
+**Semantic statements own no provenance and carry no value or unit.**
+They cite the facts that support them; the fact cites entities, the
+entity cites evidence, and the evidence cites the characters on the page.
+The figure lives on the quantity entity, where a rated value has exactly
+one source of truth.
+
+**Milestone 29.2 associated those objects - and said as little as
+possible about the association.** Engineering Fact Construction produces
+structured statements between resolved entities under one declared rule:
+a designation entity and a quantity entity are associated when
+contributing observations of both occur on the **same document line**.
+No proximity score, no nearest-neighbour, no geometry, no fuzzy matching,
+no thresholds.
+
+**A fact is a structured association, not a classified engineering
+property.** The predicate vocabulary has exactly one member,
+`HAS_ASSOCIATED_QUANTITY`, and it **does not mean rated power, voltage or
+current** - a data sheet listing a *test* voltage beside a designation
+produces the same predicate as one listing a rated voltage, because the
+line does not say which it is. Promoting a quantity into a role is a
+semantic milestone with its own rule and its own evaluation; the
+quantity's evidence type stays reachable through the fact's support so
+that milestone has what it needs.
+
+**Ambiguous layout must not become a confirmed fact.** `TR1 TR2 630 kVA`
+produces nothing - the line does not say which transformer the rating
+belongs to, and a guess would put a rating on the wrong equipment.
+Declined lines are recorded as diagnostics in their own table, so an
+ambiguity is structurally invisible to anyone querying facts.
+
+**Every fact is explainable through its entity and evidence support**:
+subject entity, object entity, the observations that put them on one
+line, and the rule and version that constructed it - with the
+character-level chain still on the evidence, reachable by key rather than
+copied. When the Knowledge Graph is eventually populated it must consume
+these governed facts rather than reconstructing relationships from text,
+or it would be deciding what counts as an association in a second place
+under no rule version.
 
 **Milestone 29.1 turned observations into objects - and stopped
 there.** Engineering Entity Resolution groups compatible evidence into
@@ -326,6 +407,8 @@ across the whole pipeline).
 | Knowledge Graph ingestion (legacy consumer) | Knowledge Graph | The pre-existing per-project entity extraction the upload endpoint feeds. Since Milestone 26.2 it receives **text assembled from the canonical segmentation** - never PDF bytes, a filesystem path, the content port or a parser object, all enforced by architecture test. Its own semantic policy is unchanged by that milestone: same extractor, same entities, same topology builder, different source of text | `app/services/knowledge_graph.py`, `app/services/ai/**`, `app/services/topology/**` |
 | Engineering Evidence Evaluation | Engineering Evidence Evaluation | The permanent framework that measures extraction quality (Milestone 28.2): a version-controlled `ReferenceCorpus` of hand-annotated documents, exact-match classification into `TRUE_POSITIVE` / `FALSE_POSITIVE` / `FALSE_NEGATIVE` **including provenance**, exact `Decimal` precision/recall/F1 per corpus, document, evidence type and rule, and regression detection that names the exact items that changed between two rule versions. Reports are insert-only; corpora are immutable at runtime. It never writes engineering evidence and reaches no document | `app/domain/evidence_evaluation/**` (domain, incl. `corpora/*.yaml`), `app/services/evidence_evaluation_service.py` |
 | Engineering Entity Resolution | Engineering Entities | Deterministic grouping of evidence into entities (Milestone 29.1): `EngineeringEntitySet → EngineeringEntity`, covering `EQUIPMENT_DESIGNATION` and `ENGINEERING_QUANTITY` under a versioned rule catalogue. Identity is a SHA-256 over document, evidence source, rule and version, so the same evidence always resolves the same way and a rule bump creates a new set rather than a rewrite. Entities aggregate their evidence's provenance and can enumerate the observations that created them. **Groupings only** - no relationship, no topology, no equipment classification, no LLM, and no Knowledge Graph or Engineering Index write | `app/domain/engineering_entities/**` (domain), `app/services/engineering_entity_service.py` |
+| Engineering Fact Construction | Engineering Facts | Deterministic structured associations between resolved entities (Milestone 29.2): `EngineeringFactSet → EngineeringFact`, under one rule (`same_line_association`) and one closed predicate (`HAS_ASSOCIATED_QUANTITY`) that deliberately asserts no property role. Declared cardinality policy: one designation may associate with many quantities on a line; two or more designations produce **no fact** and a diagnostic in a separate table. Facts aggregate support from subject entity, object entity and contributing evidence, and reference entities by deterministic key so fact history survives a newer entity set. **Associations only** - no classification, no topology, no LLM, no proximity scoring, no Knowledge Graph or Engineering Index write | `app/domain/engineering_facts/**` (domain), `app/services/engineering_fact_service.py` |
+| Engineering Semantic Interpretation | Engineering Semantics | Deterministic assignment of engineering meaning to constructed facts (Milestone 30.1): `EngineeringSemanticSet → EngineeringSemanticStatement`, from a versioned rule catalogue that is the **only** place an executable engineering rule may live. One statement type (`HAS_RATED_POWER`) from one rule: a designation associated with exactly one power quantity has that quantity as its rated power. Voltage, current and cable section are deliberately left uninterpreted - the association does not say whether a voltage is rated, test, insulation or busbar. Two candidate powers produce **no statement** and a diagnostic in a separate table. Statements own no provenance, carry no value or unit, and cite the facts supporting them by key. **Meaning only** - no LLM, no embeddings, no machine learning, no probabilistic inference, no reasoning, no Knowledge Graph or Engineering Index write | `app/domain/engineering_semantics/**` (domain), `app/services/engineering_semantic_service.py` |
 | Engineering Index | Engineering Index | A structured, per-document index of extracted content — not yet a claim about the installation. Its **read side** (Document Retrieval, Milestone 23B.1) answers "which documents mention X?" as ranked `DocumentReference`s, scored from a fixed documented weight table | `app/domain/engineering_index/**` (domain), `app/services/document_retrieval_service.py` |
 | Proposed Claims | Proposed Claims | Candidate assertions derived from the index, not yet reviewed | `app/domain/proposed_claims/**` |
 | Review Workflow | Review Workflow | Human review/approval state for a Proposed Claim | `app/domain/review_workflow/**` |
@@ -762,6 +845,32 @@ with no review gate — a known, tracked, unremediated violation of
 inventory, isolation guarantees, and why it was not removed or merged
 into the governed pipeline this milestone.
 
+## Inspecting the pipeline's output
+
+The pipeline's stages are read by two different UIs, answering two
+different questions:
+
+- **Pipeline UI** (`/documents/{id}/pipeline`) — did each stage run, what
+  did it produce, was an artefact re-used, under which policy versions.
+- **Engineering Workspace** (`/documents/{id}/workspace`) — what does the
+  platform claim about this document, and what supports each claim, all
+  the way back to the line it was read from.
+
+The Workspace makes the support chain navigable in both directions:
+
+```
+Semantic Statement → Fact → Entity → Evidence → Canonical Source Location
+```
+
+It is a **projection**, not a second engine. Every relationship it shows
+comes from a key an artefact declares, and it creates no engineering
+knowledge, no support relationship and no source location of its own. It
+is also inspection-only: nothing in it approves, edits or overrides an
+artefact, because no Human Review bounded context exists yet.
+
+See [engineering_workspace.md](engineering_workspace.md) and
+[ADR-0021](adr/0021-engineering-workspace-document-viewer.md).
+
 ## Where to look for more detail
 
 - **Vision and roadmap:** `project_intelligence_architecture.md`.
@@ -769,6 +878,7 @@ into the governed pipeline this milestone.
 - **Transaction ownership:** [repository_transaction_conventions.md](repository_transaction_conventions.md).
 - **Migrations:** [ADR-0008](adr/0008-database-migration-governance.md), [database_migrations.md](database_migrations.md).
 - **Legacy isolation:** [ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md).
+- **Engineering Workspace:** [engineering_workspace.md](engineering_workspace.md), [ADR-0021](adr/0021-engineering-workspace-document-viewer.md).
 - **Performance baseline:** [performance_baseline.md](performance_baseline.md).
 - **Startup/health/config:** [operational_reliability.md](operational_reliability.md).
 - **Structured Retrieval:** [structured_retrieval.md](structured_retrieval.md), [ADR-0010](adr/0010-structured-retrieval-foundation.md).
@@ -784,5 +894,7 @@ into the governed pipeline this milestone.
 - **Documents, Document Identity, Document Ingestion, the Canonical PDF Representation and the Canonical Text Segmentation:** [document_management.md](document_management.md).
 - **Engineering Evidence Extraction and its Evaluation Framework:** [engineering_evidence.md](engineering_evidence.md).
 - **Engineering Entity Resolution:** [engineering_entities.md](engineering_entities.md).
+- **Engineering Fact Construction:** [engineering_facts.md](engineering_facts.md).
+- **Engineering Semantic Interpretation:** [engineering_semantics.md](engineering_semantics.md).
 - **Classification-to-Retrieval Bridge:** [retrieval_bridge.md](retrieval_bridge.md) (no ADR of its own - it applies ADR-0019 and ADR-0020 rather than departing from either).
 - **Engineering Engine:** [engineering_engine.md](engineering_engine.md), [ADR-0020](adr/0020-engineering-engine-foundation.md).

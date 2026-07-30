@@ -22,8 +22,8 @@ and the small set of facts the system holds about it:
 
 | Field | Meaning |
 |---|---|
-| `filename` | The stored name - today the only human-readable title |
-| `file_path` | Where the bytes live - the *storage reference* |
+| `filename` | The name the engineer uploaded - the only human-readable title |
+| `file_path` | Where the bytes live - the *storage reference*. **Private backend state; never public** (Milestone 30.1.3) |
 | `file_format` | `pdf` / `dwg` / `dxf` / `model_3d` / `xlsx` / `docx` / `image` / `other` |
 | `category` | Functional schematic, wiring, cable list, relay settings, … |
 | `revision` | The document's own revision, as supplied |
@@ -32,6 +32,42 @@ and the small set of facts the system holds about it:
 **Every document belongs to exactly one Project, or to the Canonical
 Library - never both, never neither.** The upload endpoint enforces that
 and refuses a project-scoped upload into a non-mutable project.
+
+### `filename` and the storage name are two different things
+
+`filename` is what the engineer uploaded and what everyone sees.
+`file_path` ends in a **sanitised** name derived from it by an allow-list
+plus a random suffix (Milestone 30.1.3). Before that the uploaded name
+became the path directly, so `../../app/main.py` was written wherever it
+resolved and two uploads of the same name silently overwrote each other.
+
+Sanitising the storage name changes nothing an engineer sees; sanitising
+the display name would rename their documents.
+
+## The public document contract (Milestone 30.1.3)
+
+The registry read model lives in `app/domain/document_registry` - the
+first Document bounded context this system has had. Before it, documents
+existed only as ORM rows and routers serialised them straight onto the
+wire.
+
+```
+GET  /documents/                     one page, filtered and sorted by the server
+GET  /documents/{id}                 DocumentDetailRead
+GET  /documents/{id}/content         the original bytes
+POST /documents/upload               DocumentUploadResponse
+```
+
+**Storage location is private backend state.** No value object in the
+context has a field for it, so no schema built from one can leak it;
+`DocumentDownload` is the single exception, because the transport has to
+hand the reference back to the content port, and an architecture test
+asserts it is the only carrier.
+
+The download resolves `id → registry → opaque reference → content port`.
+No step accepts a path from the caller, so traversal is not blocked -
+it is unrepresentable. Full contract in
+[public_api.md](public_api.md).
 
 `other` means **unclassified** - "nobody has named this format yet" -
 and never "examined and found unusable". Every document uploaded before
@@ -96,7 +132,7 @@ text extraction, embedding or model call anywhere in this context.
 | `checksum` | SHA-256 of the bytes, streamed in 1 MiB chunks |
 | `checksum_algorithm` | Recorded, not assumed, so a future change makes old identities recognisably old |
 | `size_bytes` | As read |
-| `storage_reference` | *Which* stored object was hashed - not part of what the checksum covers |
+| `storage_reference` | *Which* stored object was hashed - not part of what the checksum covers. **Internal only**: it was removed from `DocumentContentIdentityRead` in Milestone 30.1.3, where a test walking the OpenAPI document found it leaving through the ingestion API |
 
 The same bytes always produce the same identity, whatever the file is
 called and wherever it is stored.
@@ -330,7 +366,7 @@ an undefined format produces a `FAILED` *job*, so the attempt stays
 visible. Only the two failures where no job could legitimately exist -
 duplicate request, illegal transition - raise.
 
-## API
+## Ingestion API
 
 ```
 POST /documents/ingestion/jobs                 request + queue + execute
@@ -381,6 +417,26 @@ The canonical representation is the **single source of truth for every
 future semantic extraction**. The original PDF remains authoritative as a
 *document* - it is what an engineer signs, prints and archives - but
 nothing downstream ever parses it again.
+
+### Reading one page of it (EPIC 30.2)
+
+```
+GET /documents/{document_id}/canonical-representation/pages/{page_number}
+```
+
+A page-scoped projection of the same stored artefact, added for the
+Engineering Workspace's canonical page map. It selects rather than
+recomputes: an API test asserts its response is identical to that page of
+the full read. `404` covers "no such document", "never canonicalised" and
+"no such page", and a page number is never treated as an identity that
+could reach another document's representation.
+
+This is what lets a viewer draw a highlight at a **governed** coordinate.
+An observation cites a span by `(page_number, block_reading_order,
+span_reading_order)`; that span carries the bounding box the parser
+recorded; the box is the highlight. No second parser is involved, so an
+observation's provenance and its highlight cannot drift apart — see
+[ADR-0021](adr/0021-engineering-workspace-document-viewer.md).
 
 ### Why extraction must consume the representation, not the PDF
 

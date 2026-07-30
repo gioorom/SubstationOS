@@ -41,7 +41,7 @@ export default function SearchBar({
           type="search"
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Cerca per nome file..."
+          placeholder="Cerca per nome file o progetto..."
           autoComplete="off"
           className="w-full rounded-2xl border border-gray-200 bg-white py-3.5 pr-12 pl-12 text-gray-900 shadow-sm outline-none transition duration-200 placeholder:text-gray-400 hover:border-gray-300 focus:border-gray-400 focus:ring-4 focus:ring-gray-200/70"
         />

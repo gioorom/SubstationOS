@@ -14,12 +14,12 @@ import EntityDetailsPanel from "@/components/knowledge-graph/EntityDetailsPanel"
 import EntityExplorer from "@/components/knowledge-graph/EntityExplorer";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useKnowledgeGraph } from "@/hooks/useKnowledgeGraph";
+import { useKnowledgeGraph } from "@/hooks/usePlatform";
 
 import type {
-  EntityType,
+  GraphEntityType,
   KnowledgeGraphNode,
-} from "@/types/knowledge-graph";
+} from "@/lib/contracts";
 
 export default function KnowledgeGraphPage() {
   const params = useParams<{
@@ -37,7 +37,7 @@ export default function KnowledgeGraphPage() {
 
   const [search, setSearch] = useState("");
   const [entityType, setEntityType] =
-    useState<EntityType | "all">("all");
+    useState<GraphEntityType | "all">("all");
   const [selectedNode, setSelectedNode] =
     useState<KnowledgeGraphNode>();
 
@@ -261,7 +261,7 @@ export default function KnowledgeGraphPage() {
               onChange={(event) =>
                 setEntityType(
                   event.target.value as
-                    | EntityType
+                    | GraphEntityType
                     | "all"
                 )
               }

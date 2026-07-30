@@ -116,9 +116,13 @@ readiness declaration)
 |---|---|
 | Canonical Domain (ontology) | Mature — implemented, tested, versioned by git |
 | Project Platform (lifecycle, scope) | Mature — implemented, tested |
+| Public API (Projects, Documents) | Hardened — every public endpoint exposes a governed application schema (Milestone 30.1.3): typed document summary/detail/list/upload responses, a document detail endpoint, a governed streaming download, server-side pagination (`page`/`page_size`, max 100, refused not clamped), server-side filtering and search over documented closed vocabularies, and governed sorting with an `id` tie-breaker. **Storage location is private backend state** - no public value object has a field for it, and a test walking the whole OpenAPI document found and removed the one that had leaked (`DocumentContentIdentityRead.storage_reference`). Routers construct no queries and the projects router imports no ORM module at all, both asserted on the AST |
+| Document Registry | Implemented — the first Document bounded context (Milestone 30.1.3): `DocumentSummary` / `DocumentDetail` value objects with no storage field, a closed governed query vocabulary (`DocumentQuery`, `DocumentSortField`, `DocumentSearchTerm`), a `DocumentRegistryRepository` port whose list returns one page plus a total, and a `DocumentDownload` value object that sanitises the filename by allow-list. Content is reached only through Milestone 25.2's two ports, so the download's only input is an integer id and traversal is unrepresentable rather than blocked |
 | Document Repository | Functional — upload/storage/scope work, and since Milestone 25.2 the upload endpoint classifies `file_format` from the file's own leading bytes rather than defaulting every document to `other`. `DXF` and `IMAGE` joined the vocabulary in the same milestone. Documents uploaded earlier remain readable as `other` (*unclassified*) until the deterministic backfill command is run against them |
 | Document Identity | Implemented — deterministic content identity and format classification (Milestone 25.2): SHA-256 streamed in chunks with the algorithm recorded beside it, size and accessibility, and a format decided from evidence ranked content signature > declared MIME type > filename extension. **One rule source** (`format_signatures.py`, asserted by architecture test) used by upload, ingestion and the backfill alike, so they cannot disagree about what a document is. Unknown and contradictory evidence produce explicit typed outcomes, never an arbitrary classification. Bytes reach the domain only through the read-only `DocumentContentPort` (`describe`/`read_prefix`/`iter_chunks`, abstract-method set asserted). Identity is **not** deduplication - identical checksums are recorded and nothing is concluded from them |
 | PDF consumption | Consolidated — since Milestone 26.2 there is exactly **one** supported PDF path (`upload → ingestion → identity → canonical representation → canonical text → downstream consumer`) and exactly **one** module permitted to import a PDF library. The four pre-canonical decoders (`pdf_text_extractor`, `pdf_renderer`, `document_analyzer`, `services/intelligence/`) are deleted; the upload endpoint's Knowledge Graph path consumes text assembled from the segmentation. Enforced by architecture tests asserting the single decoder, the shrinking closed list of raw-content consumers, and the absence of the retired files |
+| Engineering Semantic Interpretation | Implemented — deterministic assignment of engineering meaning to constructed facts (Milestone 30.1): `EngineeringSemanticSet → EngineeringSemanticStatement`, from a versioned rule catalogue that is the **only** place an executable engineering rule may live (asserted by architecture test). One statement type, `HAS_RATED_POWER`, from one rule (`rated_power_from_associated_power_quantity` 1.0): a designation associated with **exactly one** power quantity has that quantity as its rated power. Voltage, current and cable section are deliberately left uninterpreted — an associated voltage may be rated, test, insulation or busbar voltage, and the association does not say which. Two candidate powers produce **no statement** and a diagnostic in a separate table, because a fact carries entity keys rather than values. Statements own no provenance, carry no value, unit or confidence, and cite supporting facts by key; status (`interpreted` / `ambiguous`) is inherited from the fact, never invented. Idempotent on the whole upstream source identity `(document_id, content_checksum, resolution_policy_version, fact_policy_version, semantic_policy_version)`. **Meaning only** — no LLM, no embeddings, no machine learning, no probabilistic inference, no reasoning, no Knowledge Graph or Engineering Index write, all enforced by architecture test |
+| Engineering Fact Construction | Implemented — deterministic structured associations between resolved entities (Milestone 29.2): `EngineeringFactSet → EngineeringFact`, under one construction rule (`same_line_association`) and one closed predicate (`HAS_ASSOCIATED_QUANTITY`) that deliberately asserts no property role. Declared cardinality policy: one designation may associate with many quantities on a line; two or more designations produce **no fact** and a diagnostic stored in a separate table. Facts aggregate support from subject entity, object entity and contributing evidence, and reference entities by deterministic key so fact history survives a newer entity set. **Associations only** — no classification, no topology, no LLM, no proximity scoring, no fuzzy matching, no Knowledge Graph or Engineering Index write, all enforced by architecture test |
 | Engineering Entity Resolution | Implemented — deterministic grouping of evidence into entities (Milestone 29.1): `EngineeringEntitySet → EngineeringEntity`, covering `EQUIPMENT_DESIGNATION` and `ENGINEERING_QUANTITY` under a versioned rule catalogue with no fuzzy matching of any kind. Identity is a SHA-256 over document, evidence source, rule and version, so the same evidence always resolves the same way and a rule bump creates a new set rather than a rewrite. Entities **aggregate** their evidence's provenance and can enumerate the observations that created them; none exists without at least one. Idempotent on `(document_id, content_checksum, resolution_policy_version)`. **Groupings only** — no relationship, no topology, no equipment classification, no LLM, no Knowledge Graph or Engineering Index write, and no column in which any of them could be recorded, all enforced by architecture test |
 | Engineering Evidence Evaluation | Implemented — the permanent framework that measures extraction quality (Milestone 28.2): a version-controlled `ReferenceCorpus` in `app/domain/evidence_evaluation/corpora/*.yaml`, exact-match classification into `TRUE_POSITIVE` / `FALSE_POSITIVE` / `FALSE_NEGATIVE` with **provenance as part of the match**, exact `Decimal` precision/recall/F1 per corpus, document, evidence type and rule, and regression detection naming the exact items that changed. Reports are insert-only and corpora immutable at runtime; evaluation writes no engineering evidence and reaches no document. Measured baseline against `substation_reference` 1.0: precision 1.000000, recall 0.944444, F1 0.971429 (17 TP / 0 FP / 1 FN) |
 | Engineering Evidence Extraction | Implemented — deterministic engineering observation over canonical text (Milestone 28.1): `EngineeringEvidenceSet → EngineeringEvidence` for designations, voltages, currents, powers and cable sections, under a versioned rule catalogue with **one** pattern source and **one** unit catalogue. Quantities held as exact `Decimal` (`Numeric` in the schema, never `Float`); every item carries provenance to the characters, tokens, line, paragraph and page that produced it, plus rule id and version. Idempotent on `(document_id, content_checksum, extraction_policy_version)`. **Observations only** — no entity, no relationship, no equipment type, no LLM, no Engineering Index or Knowledge Graph write, and no column in which any of them could be recorded, all enforced by architecture test |
@@ -143,7 +147,8 @@ readiness declaration)
 | Classification-to-Retrieval Bridge | Implemented — deterministic mapping from a classified request to the typed retrieval criteria the engine requires (Milestone 23B.3): designation extraction by fixed token shape, resolution against Canonicalization's existing public vocabulary, an immutable versioned intent→retrieval policy table, and typed unresolved outcomes (insufficient / conflicting / unsupported / invalid) instead of silently broadened retrieval; never invents an identifier; no LLM, no embeddings, no fuzzy matching; executes nothing and depends on the Engineering Engine not at all. Closes the raw-request→engine gap: `POST /engineering-requests/prepare` returns exactly the body `/engineering-engine/execute` accepts |
 | Engineering Engine | Implemented (foundation) — registry-driven workflow selection, explicit deterministic `WorkflowPlan`s, step-handler execution with first-failure stop, 14 typed failure codes, an append-only execution timeline, and explicit never-applied aggregate update proposals (Milestone 23A, ADR-0020); **five workflows** - `KNOWLEDGE_QUERY` (23A), `DOCUMENT_LOOKUP` (23B.1, the first workflow that invokes no LLM at all), `ENGINEERING_EXPLANATION` (23B.2), `ENGINEERING_VERIFICATION` (24.1, the first reasoning workflow) and `ENGINEERING_COMPARISON` (24.2, the first with two subjects and two independent retrievals whose identity is preserved end to end), each added by declaration and registration alone with no change to engine decision logic; the engine evaluates and compares nothing itself; every other intent returns `UNSUPPORTED` and runs nothing; reuses Structured Retrieval, Document Retrieval, Context Builder, Prompt Builder, the provider-neutral runtime and Engineering Response rather than reimplementing them; no persistence, no transaction, no retries, no agents |
 | AI Assistant | Does not exist |
-| Web frontend | Early — project listing/detail pages exist (`apps/frontend`), no auth, no review UI |
+| Web frontend | Integrated — one centralised API client (the only caller of `fetch`), one transcription of the API contract in `lib/contracts` asserted against the backend's own OpenAPI document, a typed error model with no generic "an error occurred", and two state primitives replacing five hand-rolled hooks. Two document surfaces answering two questions: the **Pipeline UI** (did each stage run) and, since EPIC 30.2, the **Engineering Workspace** (what does the platform claim, and what supports it). **No mock data, no placeholder counters** — `lib/demo-*.ts` and the commissioning/timeline panels are deleted. 205 frontend tests, including architecture tests asserting no fuzzy matching, no engineering rule, no direct `fetch` and no write exists in Workspace code. Still absent: authentication and any human review UI |
+| Engineering Workspace | Implemented — `/documents/{id}/workspace` (EPIC 30.2): a document-centric, **inspection-only** projection over governed artefacts. Three regions (source, engineering explorer, inspector); the full support chain `statement → fact → entity → evidence → canonical source location` navigable in both directions, composed client-side from four whole-set reads with **no support-chain endpoint added** — every join is a key the backend declared, never a text or value comparison. Highlights are drawn on an SVG map of the canonical representation at the parser's own bounding boxes, so an observation's provenance and its highlight are the same artefact and cannot drift (ADR-0021); no PDF rendering library was added. Diagnostics are first-class content, and `unrun`/`empty`/`ambiguous`/`declined`/`failed`/`reused` stay distinct, each carried by colour, glyph and word. `interpreted` is stated everywhere to mean *produced by a versioned rule*, never *approved by an engineer*. One read-only endpoint added: `GET /documents/{id}/canonical-representation/pages/{n}` |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
 
 ---
@@ -459,9 +464,13 @@ Dashboard.
   `apps/frontend/app/projects/**` pages); a document viewer; a Review
   UI backed by EPIC 3's review-state fields; a project dashboard
   building on `app/services/project_intelligence.py`.
-- **Implementation maturity:** Early. `apps/frontend` already has
-  project listing/creation/detail pages with no authentication and no
-  review capability — a real starting point, not a greenfield build.
+- **Implementation maturity:** Partial. EPIC 30.1.2 made the existing
+  frontend a faithful client of the backend — project CRUD, document
+  upload and the full deterministic Pipeline UI now work end to end
+  against real endpoints, with no mock data anywhere. What EPIC 6 still
+  has to build is authentication, the Review UI, and a document viewer
+  (which needs a backend download endpoint that does not exist). See
+  `docs/architecture/frontend_architecture.md`.
 
 ### EPIC 7 — Enterprise
 
@@ -2200,6 +2209,398 @@ interruptions, and are ranges, not commitments.
   new external dependency. New as-built reference:
   `docs/architecture/engineering_entities.md`.
 - Dependencies: Milestone 28.1 (its only input).
+
+**Milestone 29.2 — Engineering Fact Construction Foundation** -
+*Completed*
+- Objective: build deterministic, provenance-rich structured statements
+  between resolved entities, so that a later milestone can populate the
+  Knowledge Graph from governed facts rather than reconstructing
+  relationships from text.
+- Delivered: a new `engineering_facts` bounded context (a closed
+  predicate vocabulary, fact and diagnostic value objects, a versioned
+  construction rule catalogue, a pure constructor, set validation, typed
+  failures and `EngineeringFactRepository`); a SQLAlchemy repository over
+  four typed tables (additive migration `86c866388a33`);
+  `engineering_fact_service.py`; and four endpoints.
+- **A fact is a structured association, not a classified property.** The
+  predicate vocabulary has exactly one member and
+  `HAS_ASSOCIATED_QUANTITY` **does not mean rated power, voltage or
+  current**: a data sheet listing a *test* voltage beside a designation
+  produces the same predicate as one listing a rated voltage, because the
+  line does not say which it is. `HAS_RATED_POWER` and the other property
+  and topology predicates are deliberately absent. The quantity's
+  evidence type stays reachable through the fact's support so the
+  semantic milestone has what it needs - reading it as a predicate here
+  would be that promotion happening by accident.
+- **One rule: `same_line_association`.** A designation entity and a
+  quantity entity associate only when contributing observations of both
+  occur on the same document line. **Paragraph association was
+  deliberately not implemented**, and the repository evidence is the
+  reason: the canonical parser makes each separately-placed run of text
+  its own block, so a paragraph is sometimes exactly one line and
+  sometimes several unrelated ones. A rule whose strictness depends on
+  how the parser happened to block a page is not deterministic.
+- **The cardinality policy is declared, not implied.** One designation
+  with several quantities on a line produces one fact each (a data-sheet
+  line listing ratings is a real shape). Two or more designations produce
+  **no fact** and a diagnostic: `TR1 TR2 630 kVA` does not say which
+  transformer the rating belongs to, and a guess would put a rating on
+  the wrong equipment - invisible in a graph, expensive in a substation.
+- **Ambiguity is not a fact and not a failure.** Declined lines are
+  recorded as diagnostics in their **own table**, with no subject, object
+  or predicate column, so an ambiguous pairing is structurally invisible
+  to anyone querying `engineering_facts`. The construction still
+  succeeds; the API distinguishes constructed, constructed-with-
+  ambiguities, nothing-associable, reused and failed.
+- **No proximity of any kind.** No token distance, no nearest-neighbour,
+  no geometry, no same-page rule, no punctuation inference, no
+  thresholds, no fuzzy matching, no embeddings. An architecture test
+  asserts no similarity library is imported and that no distance, score
+  or threshold is computed anywhere in the construction path.
+- **Facts invent no provenance; they aggregate support.** Every fact
+  names its subject entity, object entity, the observations that put them
+  on one line (by evidence key and role), the rule and version, and where
+  those observations occur. The character-level chain is not duplicated -
+  it stays on the evidence and is reachable by key, never reconstructed
+  by text search. The matched line is stored because a same-line rule is
+  only credible if it can be re-checked.
+- **Entities are referenced by key, not by foreign key.** A later
+  re-resolution produces a new entity set, and a foreign key would either
+  block it or cascade a historical fact set into nothing; a test proves
+  fact history survives a newer entity set.
+- **A defect this milestone found and fixed.** The first constructor
+  counted evidence *observations* rather than distinct entities, so
+  `Trasformatore TR1, sigla TR1, 630 kVA` - one transformer named twice -
+  would have been reported as an ambiguous two-subject line and declined.
+  It now counts distinct subjects, and both observations become support
+  for the one fact.
+- Ten typed failures, and ambiguous pairing is deliberately **not** among
+  them: a line the rules decline is the rules working.
+- What it deliberately does **not** import, enforced by architecture
+  test: canonical text, the canonical PDF context, any PDF library, the
+  content ports, the ontology, the LLM runtime, Prompt Builder, the
+  Engineering Engine, the Engineering Index or the Knowledge Graph. Entity
+  resolution cannot import facts, and evidence extraction cannot import
+  either layer above it.
+- Architecture impact: **no new ADR.** No new persistence strategy and no
+  new external dependency. New as-built reference:
+  `docs/architecture/engineering_facts.md`.
+- Dependencies: Milestone 29.1 (the entities it associates) and 28.1 (the
+  evidence whose support it checks).
+
+**Milestone 30.1 — Engineering Semantic Interpretation Foundation** -
+*Completed*
+- Objective: assign explicit, versioned engineering meaning to
+  constructed facts, so that a later milestone populates the Knowledge
+  Graph from interpreted knowledge rather than deciding what a document
+  means for a second time.
+- **The three responsibilities, stated once and kept apart: Semantic
+  Interpretation assigns engineering meaning. The Knowledge Graph stores
+  interpreted knowledge. Reasoning consumes interpreted knowledge.** This
+  milestone delivers the first and stops there.
+- Delivered: a new `engineering_semantics` bounded context (a closed
+  statement vocabulary, the semantic rule catalogue, statement and
+  diagnostic value objects, a pure interpreter, set validation, typed
+  failures and `EngineeringSemanticRepository`); a SQLAlchemy repository
+  over four typed tables (additive migration `7300ff6a7531`);
+  `engineering_semantic_service.py`; and four endpoints.
+- **One statement type, one rule.** `HAS_RATED_POWER`, produced by
+  `rated_power_from_associated_power_quantity` 1.0: a designation
+  associated with **exactly one** power quantity has that quantity as its
+  rated power. `HAS_NOMINAL_VOLTAGE`, `HAS_NOMINAL_CURRENT`,
+  `HAS_CABLE_SECTION`, the topology predicates and every classification
+  statement are deliberately absent.
+- **Why power and only power.** A voltage beside a designation may be a
+  rated voltage, a test voltage, an insulation level or the voltage of
+  the busbar the equipment connects to, and the association does not
+  distinguish them. A `kVA` figure beside a designation is a rating far
+  more reliably - which is still a judgement, and is why it is declared
+  in a catalogue with a version rather than assumed. `TR1 20 kV` and
+  `TR1 240 mm²` produce **no statement**; `TR1 20 kV 630 kVA` produces
+  one, for the power. The catalogue was **not** widened to give every
+  association a meaning.
+- **No executable engineering rule exists outside the catalogue**, and an
+  architecture test asserts nothing else in the context constructs a
+  `SemanticRule`. Every stored statement cites a rule id and version; a
+  judgement made elsewhere would be one nobody could find, version or
+  review.
+- **Ambiguity produces no statement.** Two associated power quantities
+  yield a diagnostic in its own table - with no object and no
+  statement-type column - and nothing else. The reason is structural: a
+  fact carries entity **keys**, not values, so this layer cannot see
+  whether the figures agree, and reaching for them would mean depending
+  on entities. A boundary that forces the conservative answer is a
+  boundary in the right place.
+- **Status is inherited, never invented.** A statement is `interpreted`
+  or `ambiguous` according to the supporting fact - a rated power read
+  from `1.250 kVA` is still a rated power statement and still says the
+  figure is unsettled. No confidence score, no probabilistic inference: a
+  rule applied or it did not.
+- **Statements own no provenance and carry no value or unit.** They cite
+  supporting facts by key; the chain statement → fact → entity →
+  evidence → characters is walkable endpoint by endpoint. The figure
+  lives on the quantity entity, where a rated value has exactly one
+  source of truth.
+- **The evidence type the rule requires is a declared string, not an
+  import.** Only Engineering Facts cross the boundary, so the catalogue
+  names `power_value` as a literal and a test asserts it equals
+  `EvidenceType.POWER_VALUE` - the same discipline as `ClassifiedFormat`
+  against `DocumentFormat`.
+- Identity binds the **whole upstream source identity**
+  `(document_id, content_checksum, resolution_policy_version,
+  fact_policy_version, semantic_policy_version)`: a re-resolution or
+  re-construction is a different source even when the document has not
+  changed, and a rule version bump produces a new set rather than a
+  silent rewrite.
+- Eight typed failures, and ambiguity within a subject is deliberately
+  **not** among them: a subject the rules decline is the rules working.
+- What it deliberately does **not** import, enforced by architecture
+  test: engineering evidence, engineering entities, canonical text, the
+  canonical PDF context, any PDF library, document identity, the content
+  or storage ports, the ontology, the LLM runtime, Prompt Builder, the
+  Engineering Engine, the Engineering Index or the Knowledge Graph — nor
+  any numerical, statistical or similarity library. Only Engineering
+  Facts cross the boundary.
+- Architecture impact: **no new ADR.** No new persistence strategy and no
+  new external dependency. New as-built reference:
+  `docs/architecture/engineering_semantics.md`.
+- Known debt: interpretation is **unmeasured**. Milestone 28.2's
+  evaluation framework measures extraction only; entity, fact and now
+  semantic quality are all asserted by unit test rather than measured
+  against annotated documents. This is the third layer built on unmeasured
+  rules, and the one where being wrong is most expensive — a wrong rated
+  power is an engineering claim, not a parsing slip.
+- Dependencies: Milestone 29.2 (its only input).
+
+**EPIC 30.1.2 — Frontend–Backend Integration** - *Completed*
+- Objective: make the frontend a faithful client of the backend. Not a UI
+  redesign — an alignment, with the backend as the sole authority on the
+  API contract. **No backend behaviour was changed to accommodate the
+  frontend**; the backend suite stayed at 2777 passing throughout.
+- **The frontend did not compile.** `npx tsc --noEmit` reported 22 errors
+  before this EPIC: two type modules were referenced by names that did not
+  exist on disk (`@/types/knowledge-graph` against `types/knowledge_graph.ts`,
+  `@/types/project-intelligence` against a file literally named
+  `project-intelligence-ts`), and `DocumentTable` read a `project` field no
+  API returns. The repository also carried an `aoo/` directory (a typo of
+  `app/`) and a file named `touch .env.local`.
+- **Project creation could not succeed.** The form offered statuses
+  `active`, `on_hold`, `completed` and `cancelled` — none of which the
+  backend's `ProjectStatus` has ever contained — and treated `customer`
+  as optional where the schema requires it (`min_length=2`). Any
+  submission produced a 422 rendered as "Errore durante la creazione del
+  progetto". Both are now transcribed from the backend and asserted by
+  test.
+- **One API client.** `lib/api/client.ts` is the only module that calls
+  `fetch` — base URL, JSON and multipart, query building, 30 s/120 s
+  timeouts, composed cancellation, and a retry policy that replays GETs on
+  transport faults and **never** replays a POST. It replaced a 25-line
+  `apiRequest` that threw `new Error("API request failed: 422")` for every
+  failure.
+- **A typed error model.** `ValidationError` / `NotFoundError` /
+  `ConflictError` / `RequestError` / `ServerError` / `NetworkError` /
+  `TimeoutError` / `RequestCancelledError`. FastAPI's two 422 shapes both
+  survive: Pydantic's per-field array is bound onto form inputs, a domain
+  rule's plain string is shown as the sentence it is. The rule is **never
+  invent a cause** — the backend's own words are what the user reads. The
+  string "an error occurred" appears nowhere.
+- **One transcription of the contract.** `lib/contracts` declares every
+  enum, request and response, each file naming its backend source module.
+  `tests/contracts.test.ts` compares all of them against the backend's own
+  OpenAPI document, exported by the new `scripts/export_openapi.py` to a
+  committed `apps/backend/openapi.json` snapshot. That test is what found
+  the `ProjectStatus` drift, and the missing `busbar`/`line` graph entity
+  types.
+- **Two state primitives replaced five hand-rolled hooks.**
+  `useResource` and `useMutation` own loading vs refreshing, typed
+  failures, cancellation on unmount and on input change, and cache
+  correction from the server's own copy of a created resource. The
+  previous `useHealth` fabricated an "everything offline" payload when the
+  health check failed — inventing a backend answer to a request the
+  backend never answered.
+- **The Pipeline UI is the new centrepiece.**
+  `/documents/{id}/pipeline` renders all seven stages with status, count,
+  reuse state, ambiguities, errors, the version triad each ran under, and
+  an inspector for every artefact down to the page, paragraph and line.
+  It preserves four properties a careless UI would destroy: an unrun
+  stage is *ready* not failed; an empty result is *completed* not an
+  error; a re-used artefact says so; and a declined ambiguity is shown
+  with its reason, because a stage that constructed nothing has the most
+  to explain.
+- **Timestamps are reported as absent where they are absent.** Pipeline
+  artefacts carry none by design — that is what makes two runs compare
+  equal — so the UI says "Non esposto (artefatto deterministico)" rather
+  than showing a plausible date the API never sent.
+- **Quantities stay strings.** `Decimal` is serialised as a JSON string so
+  a rated voltage cannot pick up a rounding error; the UI never parses one
+  into a JS number, asserted by a test that `20.500 kV` survives intact.
+- **Every mock deleted:** `lib/demo-commissioning.ts` (905 lines),
+  `lib/demo-timeline.ts`, the commissioning/timeline/focus components, the
+  dashboard's hardcoded `0` counters and `+12% questo mese` trend, and the
+  sidebar links to `/commissioning`, `/relay-testing`, `/ai`, `/reports`
+  and `/settings` — five routes that do not exist. The backend's own
+  constant-zero `commissioning`, `relay_testing` and `issues` figures are
+  typed but deliberately **not rendered**: a fabricated 0% beside a real
+  documentation figure reads as a measurement.
+- 91 frontend tests (vitest + Testing Library, no network), covering
+  create/edit/list, upload, every pipeline page, 422/404/409/500, network
+  failure, timeout and cancellation. `typecheck`, `lint`, `test` and
+  `build` are all green.
+- Architecture impact: **no new ADR** — no new persistence strategy and no
+  new backend dependency. New as-built references:
+  `docs/architecture/frontend_architecture.md` (replacing the empty,
+  misspelled `frontend_arcgitecture.md`) and `docs/developer_setup.md`.
+- Known debt: `GET /documents/` still declares no `response_model` and
+  leaks `file_path`; there is no `GET /documents/{id}` and no download
+  endpoint; and neither list endpoint supports pagination, search or sort,
+  so filtering is client-side over the whole list. All four are backend
+  gaps, recorded rather than worked around.
+- Dependencies: Milestone 30.1 (the last pipeline stage the UI exposes).
+
+**Milestone 30.1.3 — Public API Hardening** - *Completed*
+- Objective: make the Project and Document APIs explicit, typed, secure,
+  scalable and fully represented in OpenAPI, before the Knowledge Graph
+  adds more endpoints. Driven by the weaknesses EPIC 30.1.2's frontend
+  audit exposed.
+- **A Document bounded context exists for the first time.** Until this
+  milestone documents lived only as ORM rows, which routers serialised
+  straight onto the wire - which is *why* `file_path` was a public API
+  field and *why* every list read the whole table.
+  `app/domain/document_registry` now owns the registry read model:
+  what documents exist, what an engineer may know about one, and the
+  governed queries by which a caller reaches them.
+- **Storage location is private backend state, structurally.** No value
+  object in the context has a field for it, so no schema built from one
+  can leak it. `DocumentDownload` is the single exception - the transport
+  must hand the reference back to the content port - and an architecture
+  test asserts it is the only carrier. A second test walks **every**
+  schema in the OpenAPI document for a property named after a path, and
+  it found a real leak: `DocumentContentIdentityRead.storage_reference`,
+  on the ingestion API. Removed.
+- **The download cannot traverse because it cannot express a path.** The
+  chain is `id → registry → opaque reference → content port`; the only
+  input is an integer and the reference is whatever the registry
+  recorded. Streamed in 64 KiB chunks, every failure resolved before the
+  first byte is written, `Content-Disposition: attachment` with an
+  allow-listed filename, and a closed media-type table that serves an
+  unclassified document as `application/octet-stream` rather than
+  guessing. Route named `/content` rather than `/download`: every other
+  per-document route in this API is a noun naming the artefact it serves.
+- **The upload's own path-traversal hole is closed.** `save_file` joined
+  the uploaded filename to the storage directory directly, so
+  `../../app/main.py` was written wherever it resolved and two uploads of
+  the same name silently overwrote each other. The stored name is now
+  sanitised and made unique, and the computed path is resolved and checked
+  to be inside the storage root before anything is written. The
+  **original** filename is still what an engineer sees.
+- **One pagination contract**, page-based, in the Shared Kernel -
+  `app/domain/shared_kernel/pagination.py`, the first member of a
+  deliberately hard-to-join kernel. Default 25, **maximum 100**, and a
+  larger request is **refused with 422, never clamped**: a caller who
+  asked for 10 000 and silently received 100 would believe it had read
+  the whole registry. `total` is counted by the database over the filtered
+  set, never by measuring a list loaded first.
+- **Filtering, search and sorting are closed vocabularies.** Every filter
+  is an enum member or a typed value object; no column name ever travels
+  from a caller into a query, and the `_SORT_COLUMNS` tables are keyed by
+  enum member with no `getattr` anywhere. Search behaviour is defined once
+  and documented: case-insensitive, partial, trimmed, internal whitespace
+  significant, `%` and `_` escaped. Every sort breaks ties by `id`, without
+  which paging over a non-unique key shows one row twice and skips
+  another.
+- **`ProjectStatus` and `voltage_level` joined the domain aggregate.**
+  They were persisted from the beginning but had no domain home, so the
+  projects router re-read the ORM row to build every response - the one
+  place a router still touched persistence directly. `ProjectStatus` now
+  lives in `app/domain/project/project_status.py`, the public schema
+  imports it from there rather than from `app.models`, and the router
+  imports no ORM module at all. Delivery status and lifecycle state stay
+  rigorously distinct: a project can be `energized` **and** `archived`,
+  and both filters accept that.
+- **Two smells this milestone's own architecture tests caught in its own
+  code**: a sequence slice in the documents router (a fragile filename
+  comparison, rewritten to ask the sanitiser) and a `getattr` on the
+  stored project status (removed by storing the ORM enum). Both were
+  found by tests written in the same milestone, before review.
+- Backend: **2941 tests** (164 new), including path traversal, header
+  injection, missing-versus-unreadable content, page-size enforcement,
+  wildcard and SQL injection through search, and unsupported sort fields.
+  Frontend: **119 tests** (28 new) covering paged envelopes, filters
+  reaching the server, the absence of local filtering, document detail and
+  the download.
+- Frontend compatibility: `PagedResponse<T>` contracts, `useDocument`,
+  server-side query state with page-1 reset on filter change, a debounced
+  search, one `Pagination` control reporting the total, and a download
+  action. **Client-side filtering of the whole registry is gone** - it
+  would now filter one page.
+- Architecture impact: **no new ADR** and **no migration** - the existing
+  schema supports every query. New as-built reference:
+  `docs/architecture/public_api.md`.
+- Known debt: upload still answers **200** rather than 201 (a breaking
+  change this milestone was not asked to make); other routers still hold
+  sessions and build queries, and the architecture tests scope themselves
+  to `documents.py` and `projects.py` rather than claiming otherwise; and
+  search is `ILIKE '%term%'`, which no index can serve - deliberately not
+  addressed, because adding one now would be guessing at a workload
+  nobody has measured.
+- Dependencies: EPIC 30.1.2 (whose audit produced the list).
+
+**EPIC 30.2 — Engineering Workspace** - *Completed*
+- Objective: give an engineer a way to *validate* the platform's
+  engineering claims, not merely observe that the pipeline ran. The
+  deterministic pipeline could produce a `HAS_RATED_POWER` statement;
+  nothing let anyone check one against the drawing it came from.
+- Delivered: `/documents/{id}/workspace`, a document-centric workspace
+  with three regions - source viewer, engineering explorer, inspector -
+  in which the whole support chain
+  `Semantic Statement → Fact → Entity → Evidence → Canonical Source
+  Location → Original Document` is navigable in both directions. Every
+  transition follows a reference an artefact declares
+  (`entity.evidence[].evidence_key`, `fact.subject_entity_key`,
+  `statement.supporting_fact_keys`); no relationship is inferred, and an
+  architecture test fails on any fuzzy-matching import, any comparison of
+  two artefacts by observed text or quantity value, any rule identifier
+  declared in frontend code, any direct `fetch`, and any write.
+- Two decisions recorded in
+  [ADR-0021](../architecture/adr/0021-engineering-workspace-document-viewer.md):
+  - **No support-chain endpoint.** The four artefact endpoints already
+    return their document's whole set with support references inline, so
+    the chain costs four requests once and every traversal afterwards is
+    a map lookup. A projection endpoint would only have created a second
+    place where a support relationship is described.
+  - **No PDF rendering library.** Highlights are drawn on an SVG map of
+    the canonical representation, at the bounding boxes the parser
+    recorded, joined by `(page_number, block_reading_order,
+    span_reading_order)`. PDF.js would have introduced a second source of
+    page geometry, and no test could detect the day the two disagreed.
+    The original bytes remain one tab away and un-annotated.
+- One backend addition:
+  `GET /documents/{id}/canonical-representation/pages/{page_number}`, a
+  strict read-only projection of the stored representation - an API test
+  asserts it is identical to that page of the full read - so the page map
+  reads the page it displays rather than every page of a drawing set.
+- Distinctions the UI is built to preserve, each with a test:
+  **unrun ≠ empty**, **empty ≠ failed**, **ambiguous ≠ rejected**,
+  **diagnostic ≠ semantic statement**. A declined subject appears in
+  Diagnostiche and never in the statements list. `interpreted` is not
+  green anywhere, and the copy says in as many words that it means
+  *produced by a rule*, not *approved by an engineer*.
+- Partial availability: the five reads settle independently, so a semantic
+  endpoint returning 500 leaves Evidence, Entities and Facts fully
+  inspectable.
+- **Inspection-only, deliberately.** No approve, reject, correct, edit,
+  merge, override or annotate, and no control implying one. An approval
+  needs an actor, a timestamp, a scope, a reason, an audit trail and a
+  rule for what a pipeline re-run does to it - a governed Human Review
+  bounded context, which is the recommended next milestone.
+- Known limits, stated rather than deferred quietly: there is still no
+  authentication or authorisation of any kind; the canonical page map
+  renders extracted text only, so a purely graphical drawing looks sparse
+  there; and the *Originale* tab delegates to the browser's own PDF
+  viewer, where any JavaScript embedded in a document is handled inside
+  the browser's sandbox and is not additionally disabled by SubstationOS.
+- Dependencies: Milestone 30.1 (the last pipeline stage it inspects) and
+  Milestone 30.1.3 (the governed document endpoints it reads).
 
 **Milestone 17 — AI Assistant**
 - Objective: build the conversational, user-facing surface over the

@@ -1,6 +1,6 @@
 "use client";
 
-import type { KnowledgeGraphNode } from "@/types/knowledge-graph";
+import type { KnowledgeGraphNode } from "@/lib/contracts";
 
 interface Props {
   entity?: KnowledgeGraphNode;
@@ -12,7 +12,7 @@ export default function EntityDetailsPanel({
   if (!entity) {
     return (
       <div className="rounded-2xl border p-8 text-muted-foreground">
-        Seleziona un'entità.
+        Seleziona un&apos;entità.
       </div>
     );
   }

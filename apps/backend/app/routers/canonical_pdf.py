@@ -4,7 +4,13 @@ The Canonical PDF Representation API (Milestone 26.1).
 ```
 POST /documents/{document_id}/canonical-representation   build or re-use
 GET  /documents/{document_id}/canonical-representation   read the current one
+GET  .../canonical-representation/pages/{page_number}    read one page of it
 ```
+
+The page-scoped read was added for the Engineering Workspace (EPIC
+30.2), which renders one page at a time and needs that page's spans and
+bounding boxes without transferring every other page to get them. It is
+a projection of the stored representation and derives nothing.
 
 This router is the composition root for canonicalisation: it constructs
 the parser, the representation repository, and the content and
@@ -55,6 +61,7 @@ from app.infrastructure.engineering_index.sqlalchemy_document_metadata import (
 )
 from app.schemas.canonical_pdf import (
     CanonicalizationResultRead,
+    CanonicalPdfPageRead,
     CanonicalRepresentationRead,
 )
 from app.services import canonical_pdf_service
@@ -148,3 +155,45 @@ def read_canonical_representation(
         )
 
     return CanonicalRepresentationRead.model_validate(representation)
+
+
+@router.get(
+    "/documents/{document_id}/canonical-representation/pages/"
+    "{page_number}",
+    response_model=CanonicalPdfPageRead,
+    summary="Read one page of a document's canonical representation - "
+    "the spans, and where on the page the parser saw them",
+)
+def read_canonical_representation_page(
+    document_id: int,
+    page_number: int,
+    db: Session = Depends(get_db),
+) -> CanonicalPdfPageRead:
+    """
+    The page-scoped read of an artefact that already exists in full.
+
+    A reader displaying page 7 of a 200-page drawing set needs the spans
+    and bounding boxes of page 7, and this endpoint is the difference
+    between transferring those and transferring all two hundred pages to
+    use one. It **adds nothing**: every field comes from the stored
+    representation, no coordinate is computed here, and no page that the
+    parser did not record can be requested into existence.
+
+    ``page_number`` is 1-based, as the representation records it.
+    """
+
+    page = canonical_pdf_service.get_page(
+        SqlAlchemyCanonicalRepresentationRepository(db),
+        document_id,
+        page_number,
+    )
+
+    if page is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document '{document_id}' has no canonical page "
+            f"'{page_number}'; either it has not been canonicalised, or "
+            "its representation does not record that page.",
+        )
+
+    return CanonicalPdfPageRead.model_validate(page)

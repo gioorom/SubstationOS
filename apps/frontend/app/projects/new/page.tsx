@@ -2,85 +2,80 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  Building2,
-  FolderPlus,
-  MapPin,
-  Network,
-  Save,
-  Zap,
-} from "lucide-react";
+import { ArrowLeft, Building2, FolderPlus, Save } from "lucide-react";
 
+import {
+  SelectField,
+  TextAreaField,
+  TextField,
+} from "@/components/projects/ProjectFormFields";
 import { Button } from "@/components/ui/button";
 import { useProjects } from "@/hooks/useProjects";
+import { fieldMessages } from "@/lib/api";
 import {
-  CreateProjectPayload,
-  ProjectStatus,
-} from "@/types/project";
-
-const initialForm: CreateProjectPayload = {
-  name: "",
-  code: "",
-  customer: "",
-  epc: "",
-  location: "",
-  voltage_level: "",
-  status: "planning",
-  description: "",
-};
+  PROJECT_FIELD_LIMITS,
+  PROJECT_STATUSES,
+  PROJECT_STATUS_LABELS,
+} from "@/lib/contracts";
+import {
+  EMPTY_PROJECT_FORM,
+  type FormErrors,
+  type ProjectFormValues,
+  toCreateRequest,
+  validateProjectForm,
+} from "@/lib/validation/project";
 
 export default function NewProjectPage() {
   const router = useRouter();
 
-  const {
-    addProject,
-    creating,
-    error,
-  } = useProjects();
+  const { create, creating, createError, createFailure, resetCreateError } =
+    useProjects();
 
-  const [form, setForm] =
-    useState<CreateProjectPayload>(initialForm);
+  const [form, setForm] = useState<ProjectFormValues>(EMPTY_PROJECT_FORM);
+  const [localErrors, setLocalErrors] = useState<FormErrors>({});
 
-  function updateField<
-    K extends keyof CreateProjectPayload
-  >(
+  // The backend's own 422, bound field by field. Client rules restate the
+  // backend's; when they nonetheless disagree, the backend wins visibly.
+  const serverErrors = fieldMessages(createFailure) as FormErrors;
+
+  const errors: FormErrors = { ...serverErrors, ...localErrors };
+
+  function update<K extends keyof ProjectFormValues>(
     field: K,
-    value: CreateProjectPayload[K]
+    value: ProjectFormValues[K],
   ) {
-    setForm((currentForm) => ({
-      ...currentForm,
-      [field]: value,
-    }));
+    setForm((current) => ({ ...current, [field]: value }));
+
+    setLocalErrors((current) => {
+      if (current[field] === undefined) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
   }
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
-  ) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    resetCreateError();
 
-    const payload: CreateProjectPayload = {
-      name: form.name.trim(),
-      code: form.code.trim(),
-      customer: form.customer?.trim() || undefined,
-      epc: form.epc?.trim() || undefined,
-      location: form.location?.trim() || undefined,
-      voltage_level:
-        form.voltage_level?.trim() || undefined,
-      status: form.status,
-      description:
-        form.description?.trim() || undefined,
-    };
+    const validation = validateProjectForm(form);
 
-    if (!payload.name || !payload.code) {
+    if (Object.keys(validation).length > 0) {
+      setLocalErrors(validation);
       return;
     }
 
+    setLocalErrors({});
+
     try {
-      const project = await addProject(payload);
+      const project = await create(toCreateRequest(form));
       router.push(`/projects/${project.id}`);
     } catch {
-      // L'errore viene già gestito da useProjects.
+      // Rendered by `createError` and `serverErrors`; the form stays
+      // open with the user's input intact.
     }
   }
 
@@ -101,20 +96,18 @@ export default function NewProjectPage() {
             Project Workspace
           </p>
 
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
             Nuovo progetto
-          </h2>
+          </h1>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Crea una nuova commessa tecnica e configura le
-            informazioni principali della cabina o sottostazione.
+            I campi contrassegnati sono richiesti dal backend. Il codice
+            progetto è un contratto: una volta creato non viene più
+            rinominato.
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="mt-8 space-y-6"
-        >
+        <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-6">
           <section className="rounded-[2rem] border border-white/70 bg-white/72 p-6 shadow-[0_18px_45px_rgba(15,23,42,0.06)] backdrop-blur-2xl lg:p-8">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -122,122 +115,58 @@ export default function NewProjectPage() {
               </div>
 
               <div>
-                <h3 className="text-lg font-semibold text-foreground">
+                <h2 className="text-lg font-semibold text-foreground">
                   Informazioni principali
-                </h3>
+                </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Identificazione e stato della commessa
+                  Identificazione e fase di realizzazione della commessa
                 </p>
               </div>
             </div>
 
             <div className="mt-6 grid gap-5 md:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="project-code"
-                  className="mb-2 block text-sm font-medium text-foreground"
-                >
-                  Codice progetto
-                </label>
+              <TextField
+                id="code"
+                label="Codice progetto"
+                required
+                maxLength={PROJECT_FIELD_LIMITS.code.max}
+                value={form.code}
+                error={errors.code}
+                onChange={(value) => update("code", value)}
+                placeholder="es. CP-GAMMA-2026"
+              />
 
-                <input
-                  id="project-code"
-                  type="text"
-                  required
-                  value={form.code}
-                  onChange={(event) =>
-                    updateField("code", event.target.value)
-                  }
-                  placeholder="es. CP-GAMMA-2026"
-                  className="w-full rounded-2xl border border-input bg-white/80 px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10"
-                />
-              </div>
+              <TextField
+                id="name"
+                label="Nome progetto"
+                required
+                maxLength={PROJECT_FIELD_LIMITS.name.max}
+                value={form.name}
+                error={errors.name}
+                onChange={(value) => update("name", value)}
+                placeholder="es. Cabina Primaria Gamma"
+              />
 
-              <div>
-                <label
-                  htmlFor="project-name"
-                  className="mb-2 block text-sm font-medium text-foreground"
-                >
-                  Nome progetto
-                </label>
+              <SelectField
+                id="status"
+                label="Fase"
+                value={form.status}
+                options={PROJECT_STATUSES}
+                labels={PROJECT_STATUS_LABELS}
+                error={errors.status}
+                onChange={(value) => update("status", value)}
+              />
 
-                <input
-                  id="project-name"
-                  type="text"
-                  required
-                  value={form.name}
-                  onChange={(event) =>
-                    updateField("name", event.target.value)
-                  }
-                  placeholder="es. Cabina Primaria Gamma"
-                  className="w-full rounded-2xl border border-input bg-white/80 px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="project-status"
-                  className="mb-2 block text-sm font-medium text-foreground"
-                >
-                  Stato
-                </label>
-
-                <select
-                  id="project-status"
-                  value={form.status}
-                  onChange={(event) =>
-                    updateField(
-                      "status",
-                      event.target.value as ProjectStatus
-                    )
-                  }
-                  className="w-full rounded-2xl border border-input bg-white/80 px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
-                >
-                  <option value="planning">
-                    Pianificazione
-                  </option>
-                  <option value="active">
-                    Attivo
-                  </option>
-                  <option value="on_hold">
-                    In sospeso
-                  </option>
-                  <option value="completed">
-                    Completato
-                  </option>
-                  <option value="cancelled">
-                    Annullato
-                  </option>
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="voltage-level"
-                  className="mb-2 block text-sm font-medium text-foreground"
-                >
-                  Livello di tensione
-                </label>
-
-                <div className="relative">
-                  <Zap className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-                  <input
-                    id="voltage-level"
-                    type="text"
-                    value={form.voltage_level}
-                    onChange={(event) =>
-                      updateField(
-                        "voltage_level",
-                        event.target.value
-                      )
-                    }
-                    placeholder="es. 150/20 kV"
-                    className="w-full rounded-2xl border border-input bg-white/80 py-3 pr-4 pl-11 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10"
-                  />
-                </div>
-              </div>
+              <TextField
+                id="voltage_level"
+                label="Livello di tensione"
+                maxLength={PROJECT_FIELD_LIMITS.voltage_level.max}
+                value={form.voltage_level}
+                error={errors.voltage_level}
+                onChange={(value) => update("voltage_level", value)}
+                placeholder="es. 150/20 kV"
+              />
             </div>
           </section>
 
@@ -248,123 +177,78 @@ export default function NewProjectPage() {
               </div>
 
               <div>
-                <h3 className="text-lg font-semibold text-foreground">
+                <h2 className="text-lg font-semibold text-foreground">
                   Soggetti e localizzazione
-                </h3>
+                </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Committente, EPC e sede dell’impianto
+                  Committente, EPC e sede dell&apos;impianto
                 </p>
               </div>
             </div>
 
             <div className="mt-6 grid gap-5 md:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="customer"
-                  className="mb-2 block text-sm font-medium text-foreground"
-                >
-                  Committente
-                </label>
+              <TextField
+                id="customer"
+                label="Committente"
+                required
+                maxLength={PROJECT_FIELD_LIMITS.customer.max}
+                value={form.customer}
+                error={errors.customer}
+                onChange={(value) => update("customer", value)}
+                placeholder="es. Distributore Nazionale"
+              />
 
-                <input
-                  id="customer"
-                  type="text"
-                  value={form.customer}
-                  onChange={(event) =>
-                    updateField(
-                      "customer",
-                      event.target.value
-                    )
-                  }
-                  placeholder="es. Distributore Nazionale"
-                  className="w-full rounded-2xl border border-input bg-white/80 px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10"
-                />
-              </div>
+              <TextField
+                id="epc"
+                label="EPC"
+                maxLength={PROJECT_FIELD_LIMITS.epc.max}
+                value={form.epc}
+                error={errors.epc}
+                onChange={(value) => update("epc", value)}
+                placeholder="Società EPC"
+              />
 
-              <div>
-                <label
-                  htmlFor="epc"
-                  className="mb-2 block text-sm font-medium text-foreground"
-                >
-                  EPC
-                </label>
+              <TextField
+                id="location"
+                label="Località"
+                maxLength={PROJECT_FIELD_LIMITS.location.max}
+                value={form.location}
+                error={errors.location}
+                onChange={(value) => update("location", value)}
+                placeholder="Comune, provincia o area impianto"
+              />
 
-                <div className="relative">
-                  <Network className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-                  <input
-                    id="epc"
-                    type="text"
-                    value={form.epc}
-                    onChange={(event) =>
-                      updateField(
-                        "epc",
-                        event.target.value
-                      )
-                    }
-                    placeholder="Società EPC"
-                    className="w-full rounded-2xl border border-input bg-white/80 py-3 pr-4 pl-11 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10"
-                  />
-                </div>
-              </div>
-
-              <div className="md:col-span-2">
-                <label
-                  htmlFor="location"
-                  className="mb-2 block text-sm font-medium text-foreground"
-                >
-                  Località
-                </label>
-
-                <div className="relative">
-                  <MapPin className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-                  <input
-                    id="location"
-                    type="text"
-                    value={form.location}
-                    onChange={(event) =>
-                      updateField(
-                        "location",
-                        event.target.value
-                      )
-                    }
-                    placeholder="Comune, provincia o area impianto"
-                    className="w-full rounded-2xl border border-input bg-white/80 py-3 pr-4 pl-11 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10"
-                  />
-                </div>
-              </div>
+              <TextField
+                id="country"
+                label="Paese"
+                maxLength={PROJECT_FIELD_LIMITS.country.max}
+                value={form.country}
+                error={errors.country}
+                onChange={(value) => update("country", value)}
+                placeholder="es. Italia"
+              />
             </div>
           </section>
 
           <section className="rounded-[2rem] border border-white/70 bg-white/72 p-6 shadow-[0_18px_45px_rgba(15,23,42,0.06)] backdrop-blur-2xl lg:p-8">
-            <label
-              htmlFor="description"
-              className="block text-sm font-medium text-foreground"
-            >
-              Descrizione
-            </label>
-
-            <textarea
+            <TextAreaField
               id="description"
-              rows={6}
+              label="Descrizione"
               value={form.description}
-              onChange={(event) =>
-                updateField(
-                  "description",
-                  event.target.value
-                )
-              }
-              placeholder="Descrivi lo scopo della commessa, le principali attività previste e le informazioni tecniche rilevanti."
-              className="mt-2 w-full resize-y rounded-2xl border border-input bg-white/80 px-4 py-3 text-sm leading-6 text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10"
+              error={errors.description}
+              onChange={(value) => update("description", value)}
+              placeholder="Scopo della commessa, attività previste e informazioni tecniche rilevanti."
             />
           </section>
 
-          {error && (
-            <section className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
-              {error}
-            </section>
+          {createError && (
+            <p
+              role="alert"
+              className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700"
+            >
+              {createError}
+            </p>
           )}
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -377,18 +261,9 @@ export default function NewProjectPage() {
               Annulla
             </Button>
 
-            <Button
-              type="submit"
-              disabled={
-                creating ||
-                !form.name.trim() ||
-                !form.code.trim()
-              }
-            >
+            <Button type="submit" disabled={creating}>
               <Save className="h-4 w-4" />
-              {creating
-                ? "Creazione in corso..."
-                : "Crea progetto"}
+              {creating ? "Creazione in corso..." : "Crea progetto"}
             </Button>
           </div>
         </form>

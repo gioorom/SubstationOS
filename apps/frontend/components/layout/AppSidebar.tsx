@@ -4,16 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import {
-  BarChart3,
-  Bot,
   Boxes,
   FileText,
   FolderKanban,
   Gauge,
-  Settings,
   SlidersHorizontal,
-  TestTube2,
-  Zap,
 } from "lucide-react";
 
 interface NavigationItem {
@@ -32,34 +27,14 @@ const navigationItems: NavigationItem[] = [
     icon: Gauge,
   },
   {
-    label: "Documents",
-    href: "/documents",
-    icon: FileText,
-  },
-  {
     label: "Projects",
     href: "/projects",
     icon: FolderKanban,
   },
   {
-    label: "Commissioning",
-    href: "/commissioning",
-    icon: Zap,
-  },
-  {
-    label: "Relay Testing",
-    href: "/relay-testing",
-    icon: TestTube2,
-  },
-  {
-    label: "AI Assistant",
-    href: "/ai",
-    icon: Bot,
-  },
-  {
-    label: "Reports",
-    href: "/reports",
-    icon: BarChart3,
+    label: "Documents",
+    href: "/documents",
+    icon: FileText,
   },
 ];
 
@@ -139,13 +114,6 @@ export default function AppSidebar() {
             </div>
           </div>
 
-          <Link
-            href="/settings"
-            className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-border bg-white/70 px-3 py-2 text-xs font-medium text-muted-foreground transition hover:bg-white hover:text-foreground"
-          >
-            <Settings className="h-4 w-4" strokeWidth={1.8} />
-            Impostazioni
-          </Link>
         </div>
       </div>
 
