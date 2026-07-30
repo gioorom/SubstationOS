@@ -79,6 +79,8 @@ export const AUDIT_ACTIONS = [
   "workspace_accessed",
   "engineering_review_recorded",
   "engineering_review_superseded",
+  "knowledge_promoted",
+  "knowledge_graph_rebuilt",
   "access_denied",
 ] as const;
 
@@ -97,6 +99,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   workspace_accessed: "Workspace consultato",
   engineering_review_recorded: "Revisione registrata",
   engineering_review_superseded: "Revisione superata",
+  knowledge_promoted: "Conoscenza promossa nel grafo",
+  knowledge_graph_rebuilt: "Grafo ricostruito",
   access_denied: "Accesso negato",
 };
 

@@ -12,6 +12,8 @@ import { vi } from "vitest";
 import type {
   CanonicalPdfPage,
   CurrentReview,
+  GraphEdge,
+  StatementPromotion,
   Review,
   ReviewHistoryEntry,
   ReviewHistoryResponse,
@@ -679,5 +681,76 @@ export function aReviewVocabulary(): ReviewVocabulary {
       ],
     },
     decisions_requiring_comment: ["needs_investigation", "rejected"],
+  };
+}
+
+
+// --- Governed Knowledge Graph (EPIC 31) --------------------------------
+
+/**
+ * One governed relationship, as the backend serialises it.
+ *
+ * Provenance is not optional here and could not be: an edge that could
+ * not say where it came from would not have been storable.
+ */
+export function aGraphEdge(overrides: Partial<GraphEdge> = {}): GraphEdge {
+  return {
+    edge_id: "e".repeat(64),
+    kind: "has_rated_power",
+    statement_key: "statement-tr1-power",
+    subject_node_id: "a".repeat(64),
+    object_node_id: "b".repeat(64),
+    state: "active",
+    created_at: "2026-07-30T09:00:00",
+    retirement: null,
+    provenance: {
+      statement_key: "statement-tr1-power",
+      document_id: 10,
+      project_id: 1,
+      content_checksum: "c".repeat(64),
+      review_id: 1,
+      reviewer_user_id: 1,
+      reviewer_display_name: "Ada Lovelace",
+      reviewed_at: "2026-07-30T09:00:00",
+      semantic_rule_id: "rated_power_from_associated_power_quantity",
+      semantic_rule_version: "1.0",
+      semantic_contract_version: "1.0",
+      resolution_policy_version: "1.0",
+      fact_policy_version: "1.0",
+      semantic_policy_version: "1.0",
+      support_fingerprint: "f".repeat(64),
+    },
+    ...overrides,
+  };
+}
+
+/** A statement that reached the graph. */
+export function aPromotedStatement(
+  overrides: Partial<StatementPromotion> = {},
+): StatementPromotion {
+  return {
+    statement_key: "statement-tr1-power",
+    promoted: true,
+    refusal: null,
+    edge: aGraphEdge(),
+    ...overrides,
+  };
+}
+
+/**
+ * A statement that did not, **with a reason**.
+ *
+ * The reason is the content of this state, not the absence: a panel that
+ * only said "not in the graph" would leave the engineer to guess.
+ */
+export function anUnpromotedStatement(
+  overrides: Partial<StatementPromotion> = {},
+): StatementPromotion {
+  return {
+    statement_key: "statement-tr1-power",
+    promoted: false,
+    refusal: "not_reviewed",
+    edge: null,
+    ...overrides,
   };
 }

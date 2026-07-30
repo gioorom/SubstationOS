@@ -906,6 +906,48 @@ graph is implemented yet.
 See [human_review.md](human_review.md) and
 [ADR-0023](adr/0023-human-review-append-only-judgement.md).
 
+## Governed knowledge: the query model
+
+Since EPIC 31 approved engineering judgement reaches a queryable model:
+
+```
+Document → Pipeline → Semantic Statement → Human Review → Governed Knowledge Graph
+```
+
+**The graph is a projection, and never the source of truth.** It consumes
+exactly one thing - a semantic statement whose current review is
+`APPROVED` and whose applicability is `APPLIES` - and it may always be
+dropped and rebuilt from the pipeline and the reviews. Rejected
+statements, inconclusive ones, judgements awaiting revalidation and
+orphaned reviews never become graph knowledge.
+
+This is the first implementation that satisfies
+[ADR-0004](adr/0004-reviewed-facts-only-in-queryable-graph.md), which has
+recorded since Architecture Freeze v1.0 that only reviewed facts may
+enter a queryable graph and that the legacy path did not comply.
+
+Three properties keep the separation honest:
+
+- **Derived.** Nothing originates in the graph, and the pipeline never
+  learns it is projected - an architecture test fails if any engineering
+  domain module imports the graph context.
+- **Rebuildable.** Identities are hashes of governed keys and
+  `created_at` comes from the authorising review, so the projection is a
+  pure function of the statements and the reviews. Tests assert that a
+  rebuild reproduces identical content.
+- **Explainable.** Every node and edge carries the statement, the review,
+  the reviewer, the rule and policy versions and the support fingerprint,
+  and cannot be constructed without them. There is no confidence score
+  anywhere.
+
+**Three graph implementations now coexist**, fed from two different
+lineages. `knowledge_graph.md` §2 states the relationship and recommends
+how the older two retire; this milestone touched neither.
+
+See [knowledge_graph.md](knowledge_graph.md),
+[promotion_rules.md](promotion_rules.md) and
+[ADR-0024](adr/0024-governed-knowledge-graph-as-projection.md).
+
 ## Where to look for more detail
 
 - **Vision and roadmap:** `project_intelligence_architecture.md`.
@@ -915,6 +957,7 @@ See [human_review.md](human_review.md) and
 - **Legacy isolation:** [ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md).
 - **Engineering Workspace:** [engineering_workspace.md](engineering_workspace.md), [ADR-0021](adr/0021-engineering-workspace-document-viewer.md).
 - **Human Review:** [human_review.md](human_review.md), [ADR-0023](adr/0023-human-review-append-only-judgement.md).
+- **Governed Knowledge Graph:** [knowledge_graph.md](knowledge_graph.md), [promotion_rules.md](promotion_rules.md), [ADR-0024](adr/0024-governed-knowledge-graph-as-projection.md).
 - **Performance baseline:** [performance_baseline.md](performance_baseline.md).
 - **Startup/health/config:** [operational_reliability.md](operational_reliability.md).
 - **Structured Retrieval:** [structured_retrieval.md](structured_retrieval.md), [ADR-0010](adr/0010-structured-retrieval-foundation.md).

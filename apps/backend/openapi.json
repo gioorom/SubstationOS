@@ -130,6 +130,8 @@
      "workspace_accessed",
      "engineering_review_recorded",
      "engineering_review_superseded",
+     "knowledge_promoted",
+     "knowledge_graph_rebuilt",
      "access_denied"
     ],
     "title": "AuditAction",
@@ -6642,6 +6644,92 @@
     "title": "FactSupportRead",
     "type": "object"
    },
+   "GraphEdgeKind": {
+    "description": "The governed engineering relationships.\n\nOne member, from the one semantic statement type that exists. An edge\nkind is added here only when a semantic rule produces the statement\nit would come from - never in anticipation.",
+    "enum": [
+     "has_rated_power"
+    ],
+    "title": "GraphEdgeKind",
+    "type": "string"
+   },
+   "GraphEdgeListResponse": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/GraphEdgeRead"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "pagination": {
+      "$ref": "#/components/schemas/PageMetadata"
+     }
+    },
+    "required": [
+     "items",
+     "pagination"
+    ],
+    "title": "GraphEdgeListResponse",
+    "type": "object"
+   },
+   "GraphEdgeRead": {
+    "description": "One governed engineering relationship. Never anonymous.",
+    "properties": {
+     "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+     },
+     "edge_id": {
+      "title": "Edge Id",
+      "type": "string"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/GraphEdgeKind"
+     },
+     "object_node_id": {
+      "title": "Object Node Id",
+      "type": "string"
+     },
+     "provenance": {
+      "$ref": "#/components/schemas/GraphProvenanceRead"
+     },
+     "retirement": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GraphRetirementRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "state": {
+      "$ref": "#/components/schemas/GraphObjectState"
+     },
+     "statement_key": {
+      "title": "Statement Key",
+      "type": "string"
+     },
+     "subject_node_id": {
+      "title": "Subject Node Id",
+      "type": "string"
+     }
+    },
+    "required": [
+     "edge_id",
+     "kind",
+     "statement_key",
+     "subject_node_id",
+     "object_node_id",
+     "state",
+     "created_at",
+     "retirement",
+     "provenance"
+    ],
+    "title": "GraphEdgeRead",
+    "type": "object"
+   },
    "GraphEntityIdRead": {
     "properties": {
      "canonical_id": {
@@ -6785,6 +6873,66 @@
     "title": "GraphExecutionStatus",
     "type": "string"
    },
+   "GraphGenerationRead": {
+    "description": "One recomputation of the whole projection.\n\nCarries the versions that are **global**. The semantic rule and\npolicy versions are deliberately absent: they differ per object and\nlive on each edge's provenance, because one graph can legitimately\nspan several rule versions and a single field here would be a lie.",
+    "properties": {
+     "actor_user_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Actor User Id"
+     },
+     "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+     },
+     "edge_count": {
+      "title": "Edge Count",
+      "type": "integer"
+     },
+     "generation_number": {
+      "title": "Generation Number",
+      "type": "integer"
+     },
+     "node_count": {
+      "title": "Node Count",
+      "type": "integer"
+     },
+     "promotion_contract_version": {
+      "title": "Promotion Contract Version",
+      "type": "string"
+     },
+     "trigger": {
+      "$ref": "#/components/schemas/GraphGenerationTrigger"
+     }
+    },
+    "required": [
+     "generation_number",
+     "trigger",
+     "promotion_contract_version",
+     "created_at",
+     "node_count",
+     "edge_count",
+     "actor_user_id"
+    ],
+    "title": "GraphGenerationRead",
+    "type": "object"
+   },
+   "GraphGenerationTrigger": {
+    "description": "Why this generation exists.",
+    "enum": [
+     "rebuild",
+     "initial"
+    ],
+    "title": "GraphGenerationTrigger",
+    "type": "string"
+   },
    "GraphNeighborhoodRead": {
     "properties": {
      "center": {
@@ -6819,6 +6967,126 @@
      "neighbors"
     ],
     "title": "GraphNeighborhoodRead",
+    "type": "object"
+   },
+   "GraphNodeDetailResponse": {
+    "description": "One node, everything asserted about it, and why.\n\nThe answer to \"find the rated power of TR1\" and to \"explain this\nanswer\" is the same response: the relationships are here, and each\ncarries its own provenance.",
+    "properties": {
+     "node": {
+      "$ref": "#/components/schemas/GraphNodeRead"
+     },
+     "relationships": {
+      "items": {
+       "$ref": "#/components/schemas/RelatedNodeRead"
+      },
+      "title": "Relationships",
+      "type": "array"
+     }
+    },
+    "required": [
+     "node",
+     "relationships"
+    ],
+    "title": "GraphNodeDetailResponse",
+    "type": "object"
+   },
+   "GraphNodeKind": {
+    "description": "The kinds of thing the governed graph holds.\n\nDeliberately **not** `Transformer`, `Breaker` or `Cable`. Deciding\nthat ``TR1`` names a transformer is a classification, and the entity\ncontext refuses to make it for exactly the reason this context\ninherits: a classification needs a rule somebody reviewed and a\nvocabulary somebody governs.",
+    "enum": [
+     "engineering_asset",
+     "engineering_quantity"
+    ],
+    "title": "GraphNodeKind",
+    "type": "string"
+   },
+   "GraphNodeListResponse": {
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/GraphNodeRead"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "pagination": {
+      "$ref": "#/components/schemas/PageMetadata"
+     }
+    },
+    "required": [
+     "items",
+     "pagination"
+    ],
+    "title": "GraphNodeListResponse",
+    "type": "object"
+   },
+   "GraphNodeRead": {
+    "description": "One governed engineering concept.\n\n``label`` is readable and is **never identity**: `node_id` derives\nfrom the governed entity key. Two nodes may legitimately share a\nlabel - see `knowledge_graph.md` on cross-document entity resolution.",
+    "properties": {
+     "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+     },
+     "entity_key": {
+      "title": "Entity Key",
+      "type": "string"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/GraphNodeKind"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "node_id": {
+      "title": "Node Id",
+      "type": "string"
+     },
+     "normalized_value": {
+      "title": "Normalized Value",
+      "type": "string"
+     },
+     "provenance": {
+      "$ref": "#/components/schemas/GraphProvenanceRead"
+     },
+     "retirement": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GraphRetirementRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "state": {
+      "$ref": "#/components/schemas/GraphObjectState"
+     },
+     "unit": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Unit"
+     }
+    },
+    "required": [
+     "node_id",
+     "kind",
+     "entity_key",
+     "label",
+     "normalized_value",
+     "unit",
+     "state",
+     "created_at",
+     "retirement",
+     "provenance"
+    ],
+    "title": "GraphNodeRead",
     "type": "object"
    },
    "GraphNodeViewRead": {
@@ -6889,6 +7157,16 @@
     ],
     "title": "GraphNodeViewRead",
     "type": "object"
+   },
+   "GraphObjectState": {
+    "description": "Where a node or an edge stands.\n\n``created`` is deliberately **not** a member: it is an event, not a\nstate. An object that has been created is `ACTIVE`, and modelling\ncreation as a state would leave a value that nothing transitions out\nof and no query excludes.",
+    "enum": [
+     "active",
+     "historical",
+     "removed"
+    ],
+    "title": "GraphObjectState",
+    "type": "string"
    },
    "GraphOperationBatchRead": {
     "properties": {
@@ -7087,6 +7365,98 @@
     "title": "GraphOperationRead",
     "type": "object"
    },
+   "GraphProvenanceRead": {
+    "description": "Where one piece of governed knowledge came from.\n\nMandatory on every node and every edge. Identity only - which\nstatement, which review, which rules, which bytes - never the\nartefacts themselves.",
+    "properties": {
+     "content_checksum": {
+      "title": "Content Checksum",
+      "type": "string"
+     },
+     "document_id": {
+      "title": "Document Id",
+      "type": "integer"
+     },
+     "fact_policy_version": {
+      "title": "Fact Policy Version",
+      "type": "string"
+     },
+     "project_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Project Id"
+     },
+     "resolution_policy_version": {
+      "title": "Resolution Policy Version",
+      "type": "string"
+     },
+     "review_id": {
+      "title": "Review Id",
+      "type": "integer"
+     },
+     "reviewed_at": {
+      "format": "date-time",
+      "title": "Reviewed At",
+      "type": "string"
+     },
+     "reviewer_display_name": {
+      "title": "Reviewer Display Name",
+      "type": "string"
+     },
+     "reviewer_user_id": {
+      "title": "Reviewer User Id",
+      "type": "integer"
+     },
+     "semantic_contract_version": {
+      "title": "Semantic Contract Version",
+      "type": "string"
+     },
+     "semantic_policy_version": {
+      "title": "Semantic Policy Version",
+      "type": "string"
+     },
+     "semantic_rule_id": {
+      "title": "Semantic Rule Id",
+      "type": "string"
+     },
+     "semantic_rule_version": {
+      "title": "Semantic Rule Version",
+      "type": "string"
+     },
+     "statement_key": {
+      "title": "Statement Key",
+      "type": "string"
+     },
+     "support_fingerprint": {
+      "title": "Support Fingerprint",
+      "type": "string"
+     }
+    },
+    "required": [
+     "statement_key",
+     "document_id",
+     "project_id",
+     "content_checksum",
+     "review_id",
+     "reviewer_user_id",
+     "reviewer_display_name",
+     "reviewed_at",
+     "semantic_rule_id",
+     "semantic_rule_version",
+     "semantic_contract_version",
+     "resolution_policy_version",
+     "fact_policy_version",
+     "semantic_policy_version",
+     "support_fingerprint"
+    ],
+    "title": "GraphProvenanceRead",
+    "type": "object"
+   },
    "GraphRelationshipTypeRead": {
     "properties": {
      "value": {
@@ -7167,6 +7537,37 @@
     "title": "GraphRelationshipViewRead",
     "type": "object"
    },
+   "GraphRetirementRead": {
+    "description": "Why knowledge stopped being current.",
+    "properties": {
+     "reason": {
+      "$ref": "#/components/schemas/GraphRetirementReason"
+     },
+     "retired_at": {
+      "format": "date-time",
+      "title": "Retired At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "reason",
+     "retired_at"
+    ],
+    "title": "GraphRetirementRead",
+    "type": "object"
+   },
+   "GraphRetirementReason": {
+    "description": "Why knowledge stopped being current.\n\nA closed catalogue, so the question is aggregatable: \"what did the\nrule change cost us?\" has an answer that can be counted rather than\nread.",
+    "enum": [
+     "review_reversed",
+     "requires_revalidation",
+     "orphaned",
+     "rebuild_reconciliation",
+     "no_remaining_relationships"
+    ],
+    "title": "GraphRetirementReason",
+    "type": "string"
+   },
    "GraphStatisticsRead": {
     "properties": {
      "entities_by_type": {
@@ -7204,6 +7605,87 @@
      "orphan_count"
     ],
     "title": "GraphStatisticsRead",
+    "type": "object"
+   },
+   "GraphStatusResponse": {
+    "description": "What the graph currently holds.",
+    "properties": {
+     "active_edges": {
+      "title": "Active Edges",
+      "type": "integer"
+     },
+     "active_nodes": {
+      "title": "Active Nodes",
+      "type": "integer"
+     },
+     "latest_generation": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GraphGenerationRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "promotion_contract_version": {
+      "title": "Promotion Contract Version",
+      "type": "string"
+     }
+    },
+    "required": [
+     "active_nodes",
+     "active_edges",
+     "latest_generation",
+     "promotion_contract_version"
+    ],
+    "title": "GraphStatusResponse",
+    "type": "object"
+   },
+   "GraphVocabularyResponse": {
+    "description": "What the graph is allowed to contain.\n\nServed rather than duplicated in clients, and deliberately small: two\nnode kinds and one edge kind, because that is what governed semantics\nproduces today. `knowledge_graph.md` lists what each further concept\nwould need upstream first.",
+    "properties": {
+     "edge_kind_for_statement_type": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/GraphEdgeKind"
+      },
+      "title": "Edge Kind For Statement Type",
+      "type": "object"
+     },
+     "edge_kinds": {
+      "items": {
+       "$ref": "#/components/schemas/GraphEdgeKind"
+      },
+      "title": "Edge Kinds",
+      "type": "array"
+     },
+     "node_kind_for_entity_type": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/GraphNodeKind"
+      },
+      "title": "Node Kind For Entity Type",
+      "type": "object"
+     },
+     "node_kinds": {
+      "items": {
+       "$ref": "#/components/schemas/GraphNodeKind"
+      },
+      "title": "Node Kinds",
+      "type": "array"
+     },
+     "promotion_contract_version": {
+      "title": "Promotion Contract Version",
+      "type": "string"
+     }
+    },
+    "required": [
+     "node_kinds",
+     "edge_kinds",
+     "node_kind_for_entity_type",
+     "edge_kind_for_statement_type",
+     "promotion_contract_version"
+    ],
+    "title": "GraphVocabularyResponse",
     "type": "object"
    },
    "HTTPValidationError": {
@@ -10000,6 +10482,119 @@
     "title": "ProjectUpdateMetadata",
     "type": "object"
    },
+   "PromotionEventRead": {
+    "description": "One thing a promotion run did.",
+    "properties": {
+     "edge_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Edge Id"
+     },
+     "event_type": {
+      "title": "Event Type",
+      "type": "string"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "refusal": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PromotionRefusal"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "statement_key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Statement Key"
+     }
+    },
+    "required": [
+     "event_type",
+     "statement_key",
+     "edge_id",
+     "reason",
+     "refusal"
+    ],
+    "title": "PromotionEventRead",
+    "type": "object"
+   },
+   "PromotionRefusal": {
+    "description": "Why a candidate did not become graph knowledge.",
+    "enum": [
+     "not_reviewed",
+     "review_rejected",
+     "review_inconclusive",
+     "review_stale",
+     "review_orphaned",
+     "ungoverned_statement_type",
+     "ungoverned_entity_type",
+     "invalid_endpoints"
+    ],
+    "title": "PromotionRefusal",
+    "type": "string"
+   },
+   "PromotionResultResponse": {
+    "description": "What a promotion run did.\n\nThe counts and the events describe the same run; the events are the\naccount, the counts are a summary of them rather than a separate\ntally that could drift.",
+    "properties": {
+     "events": {
+      "items": {
+       "$ref": "#/components/schemas/PromotionEventRead"
+      },
+      "title": "Events",
+      "type": "array"
+     },
+     "failed": {
+      "title": "Failed",
+      "type": "integer"
+     },
+     "promoted": {
+      "title": "Promoted",
+      "type": "integer"
+     },
+     "retired": {
+      "title": "Retired",
+      "type": "integer"
+     },
+     "revalidated": {
+      "title": "Revalidated",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "promoted",
+     "retired",
+     "revalidated",
+     "failed",
+     "events"
+    ],
+    "title": "PromotionResultResponse",
+    "type": "object"
+   },
    "PromptBuildRequestBody": {
     "description": "A Prompt Builder build request. ``project_id`` is deliberately\nabsent - the path's own ``{project_id}`` is authoritative, matching\nevery other governed router's convention. ``context_package`` is\nthe ``ContextPackage`` a prior call to\n``/context-builder/build`` returned (its ``package`` field) -\nPrompt Builder never calls Context Builder itself, so the caller\nsupplies the package directly.\n\n``objective`` selects between Prompt Builder's own fixed, versioned\ninstruction and expected-output sets - it is never a caller-supplied\nprompt, template or instruction string. Omitting it produces exactly\nthe package this endpoint produced before Milestone 23B.2.",
     "properties": {
@@ -10559,6 +11154,22 @@
     "title": "ProvenanceMatchPolicy",
     "type": "string"
    },
+   "RebuildResultResponse": {
+    "properties": {
+     "generation": {
+      "$ref": "#/components/schemas/GraphGenerationRead"
+     },
+     "result": {
+      "$ref": "#/components/schemas/PromotionResultResponse"
+     }
+    },
+    "required": [
+     "result",
+     "generation"
+    ],
+    "title": "RebuildResultResponse",
+    "type": "object"
+   },
    "RecordReviewRequest": {
     "description": "One judgement, as a client submits it.\n\nThere is deliberately **no reviewer field**. The actor is the\nauthenticated identity, resolved by the security layer; a body that\ncould name a reviewer would be a body in which a caller could claim\nto be somebody else, which is the exact failure EPIC 30.3 removed\nfrom project creation.\n\nThere is likewise no target field: the statement is named by the URL,\nso a review cannot be submitted against one artefact while claiming\nto be about another.",
     "properties": {
@@ -10703,6 +11314,36 @@
      "resolved_false_negatives"
     ],
     "title": "RegressionReportRead",
+    "type": "object"
+   },
+   "RelatedNodeRead": {
+    "description": "One relationship, from the point of view of a node.\n\n``direction`` says which end this node is on, so a caller reading\n\"TR1's relationships\" can tell \"TR1 has rated power X\" from a\nrelationship pointing the other way - without re-deriving it from the\ntwo node ids.",
+    "properties": {
+     "direction": {
+      "description": "`outgoing` when this node is the subject, `incoming` when it is the object.",
+      "title": "Direction",
+      "type": "string"
+     },
+     "edge": {
+      "$ref": "#/components/schemas/GraphEdgeRead"
+     },
+     "other_node": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GraphNodeRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "edge",
+     "direction",
+     "other_node"
+    ],
+    "title": "RelatedNodeRead",
     "type": "object"
    },
    "RelationType": {
@@ -12305,6 +12946,47 @@
      "character_end"
     ],
     "title": "SpanReferenceRead",
+    "type": "object"
+   },
+   "StatementPromotionRead": {
+    "description": "Whether one semantic statement is in the graph, and why or why not.\n\nWhat the Workspace asks per statement. ``refusal`` is populated when\nthe statement is not promoted, so the panel can say *why* rather than\nonly that it is absent.",
+    "properties": {
+     "edge": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GraphEdgeRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "promoted": {
+      "title": "Promoted",
+      "type": "boolean"
+     },
+     "refusal": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/PromotionRefusal"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "statement_key": {
+      "title": "Statement Key",
+      "type": "string"
+     }
+    },
+    "required": [
+     "statement_key",
+     "promoted",
+     "refusal",
+     "edge"
+    ],
+    "title": "StatementPromotionRead",
     "type": "object"
    },
    "StructuredRetrievalRequestRead": {
@@ -15670,6 +16352,58 @@
     ]
    }
   },
+  "/documents/{document_id}/engineering-semantics/{statement_key}/promotion": {
+   "get": {
+    "description": "What the Workspace asks per statement.\n\nAnswers with the **reason** when a statement is not promoted, not\nmerely with its absence: \"not promoted\" and \"not promoted because\nnobody has approved it\" are different things to an engineer looking\nat the screen.",
+    "operationId": "read_statement_promotion_documents__document_id__engineering_semantics__statement_key__promotion_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "statement_key",
+      "required": true,
+      "schema": {
+       "title": "Statement Key",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/StatementPromotionRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Whether one statement is in the graph, and why or why not",
+    "tags": [
+     "Governed Knowledge Graph"
+    ]
+   }
+  },
   "/documents/{document_id}/engineering-semantics/{statement_key}/reviews": {
    "get": {
     "description": "The authoritative record. Every judgement ever passed, in order.\n\nPaged because it only grows: a statement an engineering team argues\nover for a year is one whose history no single response should try to\ncarry.",
@@ -16522,6 +17256,507 @@
      }
     },
     "summary": "Health Check"
+   }
+  },
+  "/knowledge-graph/edges": {
+   "get": {
+    "operationId": "list_edges_knowledge_graph_edges_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "kind",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/GraphEdgeKind"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Kind"
+      }
+     },
+     {
+      "in": "query",
+      "name": "project_id",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Project Id"
+      }
+     },
+     {
+      "in": "query",
+      "name": "document_id",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Document Id"
+      }
+     },
+     {
+      "in": "query",
+      "name": "include_historical",
+      "required": false,
+      "schema": {
+       "default": false,
+       "title": "Include Historical",
+       "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page",
+      "required": false,
+      "schema": {
+       "default": 1,
+       "minimum": 1,
+       "title": "Page",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page_size",
+      "required": false,
+      "schema": {
+       "default": 25,
+       "maximum": 100,
+       "minimum": 1,
+       "title": "Page Size",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GraphEdgeListResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Governed engineering relationships",
+    "tags": [
+     "Governed Knowledge Graph"
+    ]
+   }
+  },
+  "/knowledge-graph/edges/{edge_id}": {
+   "get": {
+    "description": "\"Find provenance\" and \"find review\" are this endpoint: both are on\nthe edge, because an edge that could not explain itself would not\nhave been storable in the first place.",
+    "operationId": "read_edge_knowledge_graph_edges__edge_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "edge_id",
+      "required": true,
+      "schema": {
+       "title": "Edge Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GraphEdgeRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "404": {
+      "description": "No such edge."
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "One governed relationship, with its full provenance",
+    "tags": [
+     "Governed Knowledge Graph"
+    ]
+   }
+  },
+  "/knowledge-graph/nodes": {
+   "get": {
+    "description": "\"Find transformer by designation\" is this endpoint with\n`kind=engineering_asset&search=TR1`.\n\nIt finds what the documents *designate* `TR1`. It does not find\ntransformers: no governed rule classifies equipment, and this API\nwill not imply one that does.",
+    "operationId": "list_nodes_knowledge_graph_nodes_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "kind",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/GraphNodeKind"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Kind"
+      }
+     },
+     {
+      "in": "query",
+      "name": "project_id",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Project Id"
+      }
+     },
+     {
+      "in": "query",
+      "name": "document_id",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Document Id"
+      }
+     },
+     {
+      "description": "Matches the governed label or normalized value. A substring match over stored pipeline output - never a similarity search, and it never decides two nodes are the same thing.",
+      "in": "query",
+      "name": "search",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "maxLength": 120,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Matches the governed label or normalized value. A substring match over stored pipeline output - never a similarity search, and it never decides two nodes are the same thing.",
+       "title": "Search"
+      }
+     },
+     {
+      "description": "By default only current governed knowledge is returned. Set to read what the graph used to assert.",
+      "in": "query",
+      "name": "include_historical",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "By default only current governed knowledge is returned. Set to read what the graph used to assert.",
+       "title": "Include Historical",
+       "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page",
+      "required": false,
+      "schema": {
+       "default": 1,
+       "minimum": 1,
+       "title": "Page",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page_size",
+      "required": false,
+      "schema": {
+       "default": 25,
+       "maximum": 100,
+       "minimum": 1,
+       "title": "Page Size",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GraphNodeListResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Find governed assets and quantities",
+    "tags": [
+     "Governed Knowledge Graph"
+    ]
+   }
+  },
+  "/knowledge-graph/nodes/{node_id}": {
+   "get": {
+    "description": "\"Find rated power\", \"find upstream equipment\" and \"find downstream\nequipment\" are all this endpoint.\n\nRather than one endpoint per question, a node answers with the\nrelationships it participates in and which end it is on. `direction`\nis `outgoing` when this node is the subject - which is what\n\"downstream\" means for the relationships that exist today - and\n`incoming` when it is the object.\n\nEvery relationship carries its own provenance, so the explanation of\nan answer arrives with the answer.",
+    "operationId": "read_node_knowledge_graph_nodes__node_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "node_id",
+      "required": true,
+      "schema": {
+       "title": "Node Id",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "include_historical",
+      "required": false,
+      "schema": {
+       "default": false,
+       "title": "Include Historical",
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GraphNodeDetailResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "404": {
+      "description": "No such node."
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "One node, and every governed relationship it participates in",
+    "tags": [
+     "Governed Knowledge Graph"
+    ]
+   }
+  },
+  "/knowledge-graph/promotions": {
+   "post": {
+    "description": "Incremental. Visits one statement, or every statement of one\ndocument, and reconciles what the graph holds with what the reviews\nnow say.\n\n`201`, because a promotion run is a thing that happened and this\ncreated a record of it - even when the run changed nothing, which is\nthe common and correct outcome.\n\nUses the same rule as a full rebuild, so incremental and full can\nnever disagree about what is promotable.",
+    "operationId": "create_promotion_knowledge_graph_promotions_post",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "statement_key",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Statement Key"
+      }
+     }
+    ],
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PromotionResultResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "403": {
+      "description": "The caller may not promote knowledge."
+     },
+     "422": {
+      "description": "Neither a statement nor a document was named."
+     }
+    },
+    "summary": "Reconcile one statement's, or one document's, knowledge",
+    "tags": [
+     "Governed Knowledge Graph"
+    ]
+   }
+  },
+  "/knowledge-graph/rebuilds": {
+   "post": {
+    "description": "Drops the graph and rebuilds it.\n\nSafe **only** because the graph is derived: everything discarded is\nreproducible from the semantic statements and the reviews. Nothing\nelse in this system has an operation like it.\n\nA rebuild over unchanged sources produces identical content - the\nresult's `unchanged` event reports whether it did, which is the\ncheapest possible drift detector.",
+    "operationId": "create_rebuild_knowledge_graph_rebuilds_post",
+    "parameters": [
+     {
+      "description": "Documents to rebuild from. Empty rebuilds from every document that has an interpretation.",
+      "in": "query",
+      "name": "document_id",
+      "required": false,
+      "schema": {
+       "default": [],
+       "description": "Documents to rebuild from. Empty rebuilds from every document that has an interpretation.",
+       "items": {
+        "type": "integer"
+       },
+       "title": "Document Id",
+       "type": "array"
+      }
+     }
+    ],
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/RebuildResultResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "403": {
+      "description": "The caller may not promote knowledge."
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Recompute the whole projection from the pipeline and reviews",
+    "tags": [
+     "Governed Knowledge Graph"
+    ]
+   }
+  },
+  "/knowledge-graph/status": {
+   "get": {
+    "operationId": "read_status_knowledge_graph_status_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GraphStatusResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "What the graph currently holds",
+    "tags": [
+     "Governed Knowledge Graph"
+    ]
+   }
+  },
+  "/knowledge-graph/vocabulary": {
+   "get": {
+    "operationId": "read_vocabulary_knowledge_graph_vocabulary_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GraphVocabularyResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "The node and edge kinds the graph may contain",
+    "tags": [
+     "Governed Knowledge Graph"
+    ]
    }
   },
   "/projects/": {

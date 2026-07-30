@@ -352,8 +352,27 @@ statement, which is neither an approval nor a rejection — and
 `interpreted` still means *produced by a versioned rule*, never
 *approved*. Both are asserted by tests.
 
-See [human_review.md](human_review.md) and
-[ADR-0023](adr/0023-human-review-append-only-judgement.md).
+### The graph, as an additional projection (EPIC 31)
+
+A selected statement also shows a **graph panel**: whether the statement
+reached the Governed Knowledge Graph, its graph identity, the promotion
+metadata, and the provenance the graph recorded - which is the same
+provenance the panels above show. An answer in the graph and the artefact
+it came from are traceable to each other in both directions.
+
+When a statement is *not* in the graph, the panel says **why**: "not
+promoted" and "not promoted because nobody has approved it" are different
+things to an engineer. Retired knowledge is marked with the reason it was
+retired rather than hidden.
+
+The Workspace remains the inspection interface. The graph is a projection
+of the same knowledge, reported here so an engineer checking a claim can
+see whether it reached the query model without leaving the artefact.
+
+See [human_review.md](human_review.md),
+[knowledge_graph.md](knowledge_graph.md),
+[ADR-0023](adr/0023-human-review-append-only-judgement.md) and
+[ADR-0024](adr/0024-governed-knowledge-graph-as-projection.md).
 
 ---
 
@@ -370,4 +389,5 @@ See [human_review.md](human_review.md) and
 | Hooks | `apps/frontend/hooks/useWorkspace*.ts`, `useCanonicalPage.ts` |
 | Page endpoint | `apps/backend/app/routers/canonical_pdf.py` |
 | Review panel | `apps/frontend/components/workspace/Review*.tsx` |
+| Graph panel | `apps/frontend/components/workspace/GraphPanel.tsx` |
 | Tests | `apps/frontend/tests/workspace*.test.ts(x)`, `apps/frontend/tests/review.test.tsx`, `apps/backend/tests/api/test_canonical_pdf_api.py` |

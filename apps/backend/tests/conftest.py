@@ -35,6 +35,7 @@ from app.routers import engineering_response as engineering_response_router_modu
 from app.routers import engineering_session as engineering_session_router_module
 from app.routers import graph_builder as graph_builder_router_module
 from app.routers import graph_query as graph_query_router_module
+from app.routers import governed_knowledge_graph as governed_graph_router_module
 from app.routers import human_review as human_review_router_module
 from app.routers import (
     project_knowledge_graph as project_knowledge_graph_router_module,
@@ -237,6 +238,7 @@ def secured_app(db_session: Session, session_factory: sessionmaker):
     test_app.include_router(users_router_module.router)
     test_app.include_router(audit_router_module.router)
     test_app.include_router(human_review_router_module.router)
+    test_app.include_router(governed_graph_router_module.router)
     test_app.include_router(projects_router_module.router)
     test_app.include_router(documents_router_module.router)
     test_app.include_router(document_ingestion_router_module.router)
@@ -339,6 +341,9 @@ def secured_app(db_session: Session, session_factory: sessionmaker):
     ] = _override_get_db
     test_app.dependency_overrides[
         human_review_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        governed_graph_router_module.get_db
     ] = _override_get_db
 
     # The middleware runs outside every route's dependency graph, so it

@@ -66,6 +66,13 @@ class Capability(str, Enum):
     #: admits, without any route changing.
     RECORD_ENGINEERING_REVIEW = "record_engineering_review"
 
+    #: Promote approved engineering knowledge into the governed
+    #: Knowledge Graph, and rebuild it (EPIC 31). Separate from
+    #: recording a review: passing a judgement and publishing its
+    #: consequence into the query model are different acts, and an
+    #: installation may well want the second to be narrower.
+    PROMOTE_ENGINEERING_KNOWLEDGE = "promote_engineering_knowledge"
+
 
 _CAPABILITIES_BY_ROLE: dict[Role, frozenset[Capability]] = {
     Role.ENGINEER: frozenset(
@@ -76,6 +83,7 @@ _CAPABILITIES_BY_ROLE: dict[Role, frozenset[Capability]] = {
             # is for. A separate "reviewer" role would be a second role
             # every engineer would have to be granted on day one.
             Capability.RECORD_ENGINEERING_REVIEW,
+            Capability.PROMOTE_ENGINEERING_KNOWLEDGE,
         }
     ),
     Role.ADMINISTRATOR: frozenset(Capability),

@@ -31,6 +31,7 @@ import {
 } from "@/lib/workspace";
 
 import ChainStep from "./ChainStep";
+import GraphPanel from "./GraphPanel";
 import InspectorField from "./InspectorField";
 import ReviewPanel from "./ReviewPanel";
 import StateBadge from "./StateBadge";
@@ -808,6 +809,17 @@ function SemanticDetail({
         judgement *about* the statement above; it modifies nothing in it.
       */}
       <ReviewPanel
+        documentId={index.documentId}
+        statementKey={statement.statement_key}
+      />
+
+      {/*
+        The graph is an *additional projection* of the same knowledge,
+        reported here rather than given a screen of its own: an engineer
+        checking a claim should see whether it reached the query model
+        without leaving the artefact.
+      */}
+      <GraphPanel
         documentId={index.documentId}
         statementKey={statement.statement_key}
       />

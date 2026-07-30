@@ -150,6 +150,7 @@ readiness declaration)
 | Web frontend | Integrated — one centralised API client (the only caller of `fetch`), one transcription of the API contract in `lib/contracts` asserted against the backend's own OpenAPI document, a typed error model with no generic "an error occurred", and two state primitives replacing five hand-rolled hooks. Two document surfaces answering two questions: the **Pipeline UI** (did each stage run) and, since EPIC 30.2, the **Engineering Workspace** (what does the platform claim, and what supports it). **No mock data, no placeholder counters** — `lib/demo-*.ts` and the commissioning/timeline panels are deleted. 205 frontend tests, including architecture tests asserting no fuzzy matching, no engineering rule, no direct `fetch` and no write exists in Workspace code. Still absent: authentication and any human review UI |
 | Identity and access | Implemented — an `identity` bounded context (EPIC 30.3): users, scrypt password credentials in a self-describing upgradable form, server-side authentication sessions with independent idle (2h) and absolute (12h) clocks, three roles (anonymous / engineer / administrator) and capability-declaring routes. Authentication is **deny-by-default middleware**: every route requires a session unless it is on a short, deliberate public list, and a test walks every path in the live OpenAPI document to prove it. The session token leaves the server only as an `HttpOnly` cookie and is stored as a SHA-256 fingerprint, so a copy of the database is neither a set of passwords nor a set of live logins. CSRF is a session-bound token, not plain double-submit |
 | Human Review | Implemented — a dedicated bounded context (EPIC 30.4) recording governed engineering judgement over deterministic pipeline artefacts. **Append-only**: reviews are immutable, the port declares no update or delete, the API exposes no `PATCH` or `DELETE`, and the current decision is a projection over the ordered history rather than a stored column. A review references a semantic statement by key and never contains one; recording it changes no engineering artefact, asserted by comparing the semantic set before and after. Survives pipeline re-runs by **artefact identity**: `statement_key` already hashes the document, the fact source and the rule versions, so a judgement is `applies`, `requires_revalidation` or `orphaned` by lookup - never discarded, and never carried onto a differently-derived statement. Three decisions, nine reasons paired to them, snapshots recording identity rather than payload |
+| Governed Knowledge Graph | Implemented — the query model over approved engineering knowledge (EPIC 31), and the **first implementation to satisfy ADR-0004**. A projection and never a source of truth: it consumes only semantic statements whose current review is `APPROVED` and whose applicability is `APPLIES`, and it may always be dropped and rebuilt from the pipeline and the reviews. Rebuildability is asserted rather than promised - identities are hashes of governed keys and `created_at` comes from the authorising review, so the projection is a pure function of its sources. Every node and edge carries mandatory provenance (statement, review, reviewer, rule and policy versions, support fingerprint) and there is no confidence score anywhere. Knowledge whose authorisation stops holding becomes `historical` with a recorded reason, never silently retained and never deleted. Two node kinds and one edge kind, because that is what governed semantics produces. Resource-oriented REST; no Cypher, GraphQL or SPARQL |
 | Audit trail | Implemented — an append-only `audit` bounded context (EPIC 30.3) whose port declares no update and no delete. Records login, failed login, logout, password change, user lifecycle, project creation, document upload, pipeline execution and access denials, each with actor, timestamp, action, resource and outcome. **Audit identity attaches to actions, never to artefacts** - no engineering domain module may import identity (asserted), no engineering table may carry a user column (asserted), and running the pipeline under two different logins produces byte-identical artefacts (asserted) |
 | Engineering Workspace | Implemented — `/documents/{id}/workspace` (EPIC 30.2): a document-centric, **inspection-only** projection over governed artefacts. Three regions (source, engineering explorer, inspector); the full support chain `statement → fact → entity → evidence → canonical source location` navigable in both directions, composed client-side from four whole-set reads with **no support-chain endpoint added** — every join is a key the backend declared, never a text or value comparison. Highlights are drawn on an SVG map of the canonical representation at the parser's own bounding boxes, so an observation's provenance and its highlight are the same artefact and cannot drift (ADR-0021); no PDF rendering library was added. Diagnostics are first-class content, and `unrun`/`empty`/`ambiguous`/`declined`/`failed`/`reused` stay distinct, each carried by colour, glyph and word. `interpreted` is stated everywhere to mean *produced by a versioned rule*, never *approved by an engineer*. One read-only endpoint added: `GET /documents/{id}/canonical-representation/pages/{n}` |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
@@ -2547,6 +2548,84 @@ interruptions, and are ranges, not commitments.
   addressed, because adding one now would be guessing at a workload
   nobody has measured.
 - Dependencies: EPIC 30.1.2 (whose audit produced the list).
+
+**EPIC 31 — Governed Knowledge Graph** - *Completed*
+- Objective: make approved engineering knowledge queryable. The platform
+  could interpret documents and record judgement about the
+  interpretations; nothing could answer "what is TR1's rated power, and
+  why do we believe it?".
+- **The core principle: the graph is a projection, never a source of
+  truth.** Pipeline artefacts stay immutable, reviews stay immutable, and
+  the graph is derived from both - droppable and rebuildable at any time.
+  Three tests assert rebuildability, and `clear()` exists on this
+  repository and on no other in the system.
+- Delivered: a `governed_knowledge_graph` bounded context (vocabulary,
+  identity, provenance, lifecycle, promotion rules, generations, events,
+  a port), three tables, a promotion service with incremental and full
+  modes, a resource-oriented query API, and a graph panel in the
+  Engineering Workspace.
+- **This is the first implementation that satisfies
+  [ADR-0004](../architecture/adr/0004-reviewed-facts-only-in-queryable-graph.md)**,
+  which has recorded since Architecture Freeze v1.0 that only reviewed
+  facts may enter a queryable graph and that the legacy path did not
+  comply. The graph consumes exactly one thing: a semantic statement
+  whose current review is `APPROVED` and whose applicability is
+  `APPLIES`. Rejected, inconclusive, awaiting-revalidation and orphaned
+  are each refused, each with a named reason, each tested separately.
+- Four decisions recorded in
+  [ADR-0024](../architecture/adr/0024-governed-knowledge-graph-as-projection.md):
+  - **The projection is a pure function of the statements and the
+    reviews.** Identities are hashes of governed keys, and `created_at`
+    comes from the authorising review rather than from the clock - so
+    nothing stored depends on when promotion ran, and a rebuild
+    reproduces byte-identical content rather than merely re-populating.
+  - **Incremental promotion and full rebuild call the same rule
+    function.** Neither re-implements it, so they cannot disagree about
+    what is promotable - the usual failure mode of an incremental
+    projection.
+  - **Provenance is mandatory and structural.** Construction raises
+    without it and the columns are `nullable=False`. There is no
+    confidence, score or weight anywhere: a number expressing how much to
+    trust governed knowledge would reintroduce exactly what ADR-0004
+    rejected.
+  - **Identity derives from governed keys, never from labels.** Both ids
+    are `UNIQUE`, so duplicate prevention is a constraint rather than a
+    convention.
+- Lifecycle: knowledge whose authorisation stops holding becomes
+  `HISTORICAL` **with a recorded reason** - not removed, not disabled,
+  not superseded. Re-approval reactivates the same edge, so its identity
+  survives the round trip. Reconciliation runs in both directions, so a
+  statement a re-run dropped cannot leave knowledge sitting current and
+  unvisited.
+- **The vocabulary is two node kinds and one edge kind**, and that is a
+  finding rather than a shortcut: governed semantics produces two entity
+  types and one statement type. Voltage, Protection, Connection, Function
+  and Location are deliberately absent - for voltage specifically, the
+  semantics context *refuses* to interpret it, since an associated
+  voltage may be rated, test, insulation or busbar voltage.
+  `knowledge_graph.md` §3 lists what each further concept needs upstream
+  first.
+- No graph query language. No Cypher, GraphQL or SPARQL: a governed graph
+  whose value is that every answer is explainable should not first ship a
+  way to ask questions nobody planned. A test asserts no such path exists.
+- Security: a new `promote_engineering_knowledge` capability, separate
+  from `record_engineering_review` - passing a judgement and publishing
+  its consequence are different acts. Two audit actions; a promotion that
+  reconciled nothing is deliberately not audited.
+- **Known limit, stated prominently: three graph implementations now
+  coexist.** The legacy path (ADR-0009) and the Canonical Facts lineage
+  (Milestones 11.1/11.2) were not touched, because extending the latter
+  would have meant admitting a second ungoverned source into governed
+  tables. `knowledge_graph.md` §2 states the relationship and recommends
+  the retirement path; it is one milestone per graph and belongs in
+  neither this one.
+- Other limits: no cross-document entity resolution (`TR1` in two
+  drawings is two nodes, deliberately); project visibility is filtering
+  rather than enforcement, inherited from EPIC 30.3; a rebuild is
+  synchronous and unbounded.
+- Dependencies: Milestone 30.1 (the statements), EPIC 30.3 (the identity
+  that authorises promotion) and EPIC 30.4 (the judgements it promotes
+  on).
 
 **EPIC 30.4 — Human Review** - *Completed*
 - Objective: let authenticated engineers record governed decisions about

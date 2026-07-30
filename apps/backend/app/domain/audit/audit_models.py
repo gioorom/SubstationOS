@@ -58,6 +58,10 @@ class AuditAction(str, Enum):
     ENGINEERING_REVIEW_RECORDED = "engineering_review_recorded"
     ENGINEERING_REVIEW_SUPERSEDED = "engineering_review_superseded"
 
+    #: Governed Knowledge Graph (EPIC 31).
+    KNOWLEDGE_PROMOTED = "knowledge_promoted"
+    KNOWLEDGE_GRAPH_REBUILT = "knowledge_graph_rebuilt"
+
     #: Refusals worth seeing in aggregate.
     ACCESS_DENIED = "access_denied"
 

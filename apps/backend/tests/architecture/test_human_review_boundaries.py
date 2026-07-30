@@ -147,11 +147,19 @@ def test_the_human_review_domain_imports_no_infrastructure() -> None:
     assert offenders == []
 
 
-def test_only_the_application_service_joins_the_two_contexts() -> None:
+def test_only_named_modules_join_the_two_contexts() -> None:
     """
-    One place, and it is named. A second module reading the semantic
-    repository to answer a review question would be a second, quietly
-    diverging account of what "still applies" means.
+    Every module that reads both semantics and reviews, named explicitly.
+
+    The rule this protects is that there is **one** account of what
+    "still applies" means. `human_review_service` computes it; everything
+    else that needs it asks that service rather than re-deriving it from
+    a semantic set - and `knowledge_promotion_service` does exactly that
+    (EPIC 31), which is why it is on the list rather than an exception to
+    it.
+
+    A module appearing here without a deliberate edit to this test is a
+    second, quietly diverging definition.
     """
 
     joiners: list[str] = []
@@ -173,7 +181,17 @@ def test_only_the_application_service_joins_the_two_contexts() -> None:
         if touches_review and touches_semantics:
             joiners.append(module.name)
 
-    assert sorted(joiners) == ["human_review.py", "human_review_service.py"]
+    assert sorted(joiners) == [
+        # The review API.
+        "governed_knowledge_graph.py",
+        "human_review.py",
+        "human_review_service.py",
+        # Promotion reads a statement's current review through
+        # `human_review_service.current_review`; it does not re-implement
+        # applicability, and an architecture test in the graph suite
+        # asserts the graph domain imports neither context.
+        "knowledge_promotion_service.py",
+    ]
 
 
 # --- No review mutates an engineering artefact ---------------------------

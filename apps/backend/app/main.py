@@ -24,6 +24,7 @@ from app.models import (  # noqa: F401
     engineering_index,
     evidence_evaluation,
     identity,
+    governed_knowledge_graph,
     graph_builder,
     human_review,
     knowledge_graph,
@@ -54,6 +55,7 @@ from app.routers import (
     engineering_response as engineering_response_router,
     engineering_session as engineering_session_router,
     graph_builder as graph_builder_router,
+    governed_knowledge_graph as governed_knowledge_graph_router,
     graph_query as graph_query_router,
     human_review as human_review_router,
     knowledge_graph,
@@ -121,6 +123,7 @@ app.include_router(engineering_entities_router.router)
 app.include_router(engineering_facts_router.router)
 app.include_router(engineering_semantics_router.router)
 app.include_router(human_review_router.router)
+app.include_router(governed_knowledge_graph_router.router)
 app.include_router(evidence_evaluation_router.router)
 app.include_router(projects.router)
 app.include_router(knowledge_graph.router)
