@@ -98,3 +98,4 @@ one.
 | [0020](0020-engineering-engine-foundation.md) | Engineering Engine Foundation | Accepted |
 | [0021](0021-engineering-workspace-document-viewer.md) | Engineering Workspace Document Viewer and Support-Chain Strategy | Accepted |
 | [0022](0022-session-authentication-and-password-hashing.md) | Session Authentication and Password Hashing | Accepted |
+| [0023](0023-human-review-append-only-judgement.md) | Human Review as Append-Only Judgement, with Identity-Based Revalidation | Accepted |

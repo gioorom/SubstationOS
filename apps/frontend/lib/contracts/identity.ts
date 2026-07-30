@@ -77,6 +77,8 @@ export const AUDIT_ACTIONS = [
   "document_uploaded",
   "pipeline_executed",
   "workspace_accessed",
+  "engineering_review_recorded",
+  "engineering_review_superseded",
   "access_denied",
 ] as const;
 
@@ -93,6 +95,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   document_uploaded: "Documento caricato",
   pipeline_executed: "Pipeline eseguita",
   workspace_accessed: "Workspace consultato",
+  engineering_review_recorded: "Revisione registrata",
+  engineering_review_superseded: "Revisione superata",
   access_denied: "Accesso negato",
 };
 

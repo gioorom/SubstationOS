@@ -52,6 +52,12 @@ class AuditAction(str, Enum):
     PIPELINE_EXECUTED = "pipeline_executed"
     WORKSPACE_ACCESSED = "workspace_accessed"
 
+    #: Human Review (EPIC 30.4). A governed engineering judgement is an
+    #: action, and "what did this person decide on Tuesday?" is asked of
+    #: the audit trail like any other.
+    ENGINEERING_REVIEW_RECORDED = "engineering_review_recorded"
+    ENGINEERING_REVIEW_SUPERSEDED = "engineering_review_superseded"
+
     #: Refusals worth seeing in aggregate.
     ACCESS_DENIED = "access_denied"
 

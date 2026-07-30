@@ -1,8 +1,10 @@
 # Engineering Workspace (EPIC 30.2)
 
 > **Route:** `/documents/{document_id}/workspace`
-> **Status:** inspection only. No engineering knowledge is created, edited
-> or approved here.
+> **Status:** read-first. No engineering knowledge is created or edited
+> here. Since EPIC 30.4 an engineer may record a **judgement** about a
+> semantic statement — appended to the separate Human Review context,
+> which changes no pipeline artefact. See §13.
 
 ---
 
@@ -46,7 +48,7 @@ The two pages are deliberately separate routes with separate questions.
 | Question | Did the pipeline run? | What does the platform claim, and why? |
 | Audience | Operator | Engineer validating output |
 | Content | Stage state, counts, versions, re-use | Artefacts, support chains, source locations, diagnostics |
-| Actions | **Run** a stage | **Inspect** only - no writes at all |
+| Actions | **Run** a stage | **Inspect**, and record a review (EPIC 30.4) - never edit an artefact |
 | Failure meaning | A stage failed | A read failed; other stages stay inspectable |
 
 Neither page is a superset of the other, and the Workspace deliberately
@@ -167,7 +169,7 @@ where the parser saw each span. Highlighting against PDF.js coordinates
 would mean an observation's provenance and its highlight came from two
 different parsers, and no test could tell you when they disagreed.
 
-Recorded as [ADR 0021](decisions/0021-engineering-workspace-document-viewer.md).
+Recorded as [ADR-0021](adr/0021-engineering-workspace-document-viewer.md).
 
 ### Non-PDF formats
 
@@ -308,20 +310,50 @@ authentication and no authorisation: any caller who can reach the API can
 read any document. That is a deliberate deferral, not an oversight, and
 it must be resolved before any deployment outside a trusted network.
 
-## 13. Why the Workspace is inspection-only
+## 13. Review: what the Workspace now writes, and what it still does not
 
-There is no approve, reject, correct, edit, merge, override, annotate or
-label — and no button that implies one.
+EPIC 30.2 shipped this screen as inspection-only, and said why: an
+approval is not a UI control but a governed domain concept, needing an
+actor, a timestamp, a reason, an audit trail and a rule for what a
+pipeline re-run does to it. A button recording a judgement into nothing
+would have been worse than no button.
 
-An approval is not a UI control. It is a governed domain concept: it
-needs an actor, a timestamp, a scope, a reason, an audit trail and a rule
-for what a later re-run of the pipeline does to it. None of that exists
-yet. A button that recorded an engineer's judgement into nothing would be
-worse than no button, because the engineer would believe it had been
-recorded.
+**EPIC 30.4 built that context**, and the Workspace gained exactly one
+action.
 
-That is a **Human Review bounded context**, and it is the recommended
-next milestone.
+Selecting a semantic statement now shows a **review panel** beneath its
+support chain: the current decision, who passed it and when, the reason,
+the rule version it was passed under, the full history, and a control to
+record a judgement. It is a dedicated region — the rest of the screen
+stays read-first.
+
+The statement list carries **two badges per row**, and they say different
+things:
+
+- the pipeline badge (`interpreted` / `ambiguous`) — what the rules
+  produced;
+- the review badge (`Approvato` / `Respinto` / `Da approfondire` / `Mai
+  revisionato`) — what an engineer decided.
+
+Collapsing them into one would be the confusion between engineering truth
+and engineering judgement that both milestones exist to prevent.
+
+### What is still absent, and structurally so
+
+The Workspace **still cannot change what the pipeline said**. There is no
+correct-value, no edit-entity, no merge, no author-a-fact and no
+annotate. A review references an immutable artefact by key and is
+appended to a separate context; the statement, its facts, its entities
+and its evidence are untouched by it, and an API test asserts the
+semantic set compares equal before and after.
+
+`Mai revisionato` is a **state, not a decision** — nobody has judged the
+statement, which is neither an approval nor a rejection — and
+`interpreted` still means *produced by a versioned rule*, never
+*approved*. Both are asserted by tests.
+
+See [human_review.md](human_review.md) and
+[ADR-0023](adr/0023-human-review-append-only-judgement.md).
 
 ---
 
@@ -337,4 +369,5 @@ next milestone.
 | Components | `apps/frontend/components/workspace/` |
 | Hooks | `apps/frontend/hooks/useWorkspace*.ts`, `useCanonicalPage.ts` |
 | Page endpoint | `apps/backend/app/routers/canonical_pdf.py` |
-| Tests | `apps/frontend/tests/workspace*.test.ts(x)`, `apps/backend/tests/api/test_canonical_pdf_api.py` |
+| Review panel | `apps/frontend/components/workspace/Review*.tsx` |
+| Tests | `apps/frontend/tests/workspace*.test.ts(x)`, `apps/frontend/tests/review.test.tsx`, `apps/backend/tests/api/test_canonical_pdf_api.py` |

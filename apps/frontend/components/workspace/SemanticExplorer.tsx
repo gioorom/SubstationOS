@@ -1,6 +1,10 @@
 "use client";
 
-import type { EngineeringEntity, SemanticStatement } from "@/lib/contracts";
+import type {
+  CurrentReview,
+  EngineeringEntity,
+  SemanticStatement,
+} from "@/lib/contracts";
 import { SEMANTIC_STATEMENT_LABELS } from "@/lib/contracts";
 import {
   SEMANTIC_STATUS_TONES,
@@ -10,6 +14,7 @@ import {
 
 import ArtefactButton from "./ArtefactButton";
 import ExplorerList from "./ExplorerList";
+import ReviewBadge from "./ReviewBadge";
 import StateBadge from "./StateBadge";
 
 interface SemanticExplorerProps {
@@ -20,6 +25,13 @@ interface SemanticExplorerProps {
   entityLabels: ReadonlyMap<string, string>;
   /** Resolves a statement's object entity - where the figure lives. */
   quantityOf: (statement: SemanticStatement) => EngineeringEntity | null;
+
+  /**
+   * The current human judgement per statement, from one document-wide
+   * read. An absent key means nobody has reviewed it - which the badge
+   * renders as a state, never as a decision.
+   */
+  reviewByStatement: ReadonlyMap<string, CurrentReview>;
 }
 
 /**
@@ -41,6 +53,7 @@ export default function SemanticExplorer({
   onSelect,
   entityLabels,
   quantityOf,
+  reviewByStatement,
 }: SemanticExplorerProps) {
   return (
     <div className="space-y-4">
@@ -63,6 +76,8 @@ export default function SemanticExplorer({
             statement.subject_entity_key,
           );
           const quantity = quantityOf(statement);
+          const review =
+            reviewByStatement.get(statement.statement_key) ?? null;
 
           return (
             <ArtefactButton
@@ -92,6 +107,23 @@ export default function SemanticExplorer({
                 <StateBadge
                   tone={SEMANTIC_STATUS_TONES[statement.status]}
                   value={statement.status}
+                />
+
+                {/*
+                  Two badges, and they say different things: the first is
+                  what the *pipeline* produced, the second what an
+                  *engineer* decided about it. Collapsing them into one
+                  would be exactly the confusion between engineering truth
+                  and engineering judgement this milestone exists to
+                  prevent.
+                */}
+                <ReviewBadge
+                  decision={review?.current?.decision ?? null}
+                  applicability={
+                    review?.current === null || review === null
+                      ? undefined
+                      : review.applicability
+                  }
                 />
               </span>
 

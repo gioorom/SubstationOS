@@ -128,6 +128,8 @@
      "document_uploaded",
      "pipeline_executed",
      "workspace_accessed",
+     "engineering_review_recorded",
+     "engineering_review_superseded",
      "access_denied"
     ],
     "title": "AuditAction",
@@ -2399,6 +2401,55 @@
     "title": "CreateUserRequest",
     "type": "object"
    },
+   "CurrentReviewRead": {
+    "description": "The effective decision for one statement.\n\n``current`` is ``null`` for a statement nobody has reviewed - a\ndistinct state from every decision, and never to be rendered as one.\n\n``applicability`` says whether that judgement still describes today's\npipeline. It is computed on every read from the review's snapshot and\nthe document's current interpretation; it is not stored, and there is\nno column it could drift from.",
+    "properties": {
+     "applicability": {
+      "$ref": "#/components/schemas/ReviewApplicability"
+     },
+     "current": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ReviewRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "document_id": {
+      "title": "Document Id",
+      "type": "integer"
+     },
+     "review_count": {
+      "title": "Review Count",
+      "type": "integer"
+     },
+     "snapshot_intact": {
+      "description": "False only if a statement kept its key and changed its support, which should be impossible. A false here means an engineering artefact's identity has stopped meaning what it claims, and is worth investigating rather than ignoring.",
+      "title": "Snapshot Intact",
+      "type": "boolean"
+     },
+     "target_key": {
+      "title": "Target Key",
+      "type": "string"
+     },
+     "target_type": {
+      "$ref": "#/components/schemas/ReviewTargetType"
+     }
+    },
+    "required": [
+     "target_type",
+     "target_key",
+     "document_id",
+     "current",
+     "review_count",
+     "applicability",
+     "snapshot_intact"
+    ],
+    "title": "CurrentReviewRead",
+    "type": "object"
+   },
    "DesignationResolution": {
     "description": "How far a designation found in the request text could be resolved\nagainst **existing** vocabularies - never a confidence, never a\nguess.\n\n``CANONICAL_REFERENCE`` means Canonicalization's own\n``normalize_entity_reference`` recognized it and returned a real\n``entity_type``/``canonical_id`` (e.g. \"C-295\" -> ``CABLE:C-295``).\n``LEXICAL_TERM`` means it did not - the designation is real and is\ncarried forward verbatim as a search term, but this system does not\nclaim to know which graph entity it names.",
     "enum": [
@@ -2916,6 +2967,28 @@
      "components"
     ],
     "title": "DocumentRelevanceRead",
+    "type": "object"
+   },
+   "DocumentReviewSummaryResponse": {
+    "description": "The current decision for every reviewed statement in one document.\n\nOne request, so a Workspace listing two hundred statements does not\nmake two hundred more. Statements nobody has reviewed are simply\nabsent - the client treats an absent key as \"never reviewed\", which\nis what it is.",
+    "properties": {
+     "document_id": {
+      "title": "Document Id",
+      "type": "integer"
+     },
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/CurrentReviewRead"
+      },
+      "title": "Items",
+      "type": "array"
+     }
+    },
+    "required": [
+     "document_id",
+     "items"
+    ],
+    "title": "DocumentReviewSummaryResponse",
     "type": "object"
    },
    "DocumentScope": {
@@ -10486,6 +10559,35 @@
     "title": "ProvenanceMatchPolicy",
     "type": "string"
    },
+   "RecordReviewRequest": {
+    "description": "One judgement, as a client submits it.\n\nThere is deliberately **no reviewer field**. The actor is the\nauthenticated identity, resolved by the security layer; a body that\ncould name a reviewer would be a body in which a caller could claim\nto be somebody else, which is the exact failure EPIC 30.3 removed\nfrom project creation.\n\nThere is likewise no target field: the statement is named by the URL,\nso a review cannot be submitted against one artefact while claiming\nto be about another.",
+    "properties": {
+     "comment": {
+      "anyOf": [
+       {
+        "maxLength": 4000,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Comment"
+     },
+     "decision": {
+      "$ref": "#/components/schemas/ReviewDecision"
+     },
+     "reason": {
+      "$ref": "#/components/schemas/ReviewReason"
+     }
+    },
+    "required": [
+     "decision",
+     "reason"
+    ],
+    "title": "RecordReviewRequest",
+    "type": "object"
+   },
    "RegressionKind": {
     "description": "What kind of change was detected.",
     "enum": [
@@ -11151,6 +11253,16 @@
     "title": "RetrievalSummaryRead",
     "type": "object"
    },
+   "ReviewApplicability": {
+    "description": "Whether a recorded judgement still describes today's pipeline.",
+    "enum": [
+     "applies",
+     "requires_revalidation",
+     "orphaned"
+    ],
+    "title": "ReviewApplicability",
+    "type": "string"
+   },
    "ReviewCandidateCreate": {
     "properties": {
      "proposed_claim_id": {
@@ -11240,6 +11352,16 @@
     "title": "ReviewCandidateRead",
     "type": "object"
    },
+   "ReviewDecision": {
+    "description": "What an engineer decided.\n\nThree, and no custom states. ``NEEDS_INVESTIGATION`` is not a\nhalf-approval and not a soft rejection: it is a reviewer recording\nthat they looked and could not yet decide, which is a real\nengineering outcome and the one a workflow engine would have turned\ninto a queue.",
+    "enum": [
+     "approved",
+     "rejected",
+     "needs_investigation"
+    ],
+    "title": "ReviewDecision",
+    "type": "string"
+   },
    "ReviewDecisionCreate": {
     "properties": {
      "comment": {
@@ -11265,6 +11387,28 @@
      "reviewed_by"
     ],
     "title": "ReviewDecisionCreate",
+    "type": "object"
+   },
+   "ReviewHistoryEntryRead": {
+    "description": "One review, plus what it now means.\n\n``superseded`` is derived from position in the newest-first history,\nnever from a stored flag: writing one would mean modifying an\nimmutable record.",
+    "properties": {
+     "applicability": {
+      "$ref": "#/components/schemas/ReviewApplicability"
+     },
+     "review": {
+      "$ref": "#/components/schemas/ReviewRead"
+     },
+     "superseded": {
+      "title": "Superseded",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "review",
+     "superseded",
+     "applicability"
+    ],
+    "title": "ReviewHistoryEntryRead",
     "type": "object"
    },
    "ReviewHistoryEventRead": {
@@ -11316,6 +11460,164 @@
     "title": "ReviewHistoryEventRead",
     "type": "object"
    },
+   "ReviewHistoryResponse": {
+    "description": "One page of a statement's history, newest first.",
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/ReviewHistoryEntryRead"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "pagination": {
+      "$ref": "#/components/schemas/PageMetadata"
+     }
+    },
+    "required": [
+     "items",
+     "pagination"
+    ],
+    "title": "ReviewHistoryResponse",
+    "type": "object"
+   },
+   "ReviewRead": {
+    "description": "One recorded judgement, exactly as it was written.",
+    "properties": {
+     "comment": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Comment"
+     },
+     "decision": {
+      "$ref": "#/components/schemas/ReviewDecision"
+     },
+     "document_id": {
+      "title": "Document Id",
+      "type": "integer"
+     },
+     "reason": {
+      "$ref": "#/components/schemas/ReviewReason"
+     },
+     "record_version": {
+      "title": "Record Version",
+      "type": "string"
+     },
+     "recorded_at": {
+      "format": "date-time",
+      "title": "Recorded At",
+      "type": "string"
+     },
+     "review_id": {
+      "title": "Review Id",
+      "type": "integer"
+     },
+     "reviewer": {
+      "$ref": "#/components/schemas/ReviewerRead"
+     },
+     "snapshot": {
+      "$ref": "#/components/schemas/ReviewSnapshotRead"
+     },
+     "target_key": {
+      "title": "Target Key",
+      "type": "string"
+     },
+     "target_type": {
+      "$ref": "#/components/schemas/ReviewTargetType"
+     }
+    },
+    "required": [
+     "review_id",
+     "target_type",
+     "target_key",
+     "document_id",
+     "decision",
+     "reason",
+     "comment",
+     "reviewer",
+     "snapshot",
+     "recorded_at",
+     "record_version"
+    ],
+    "title": "ReviewRead",
+    "type": "object"
+   },
+   "ReviewReason": {
+    "description": "Why. Catalogued, so the answer is aggregatable.\n\nA reason is **required** on every review. Recording a judgement with\nno stated grounds produces a decision nobody can act on six months\nlater, which is the failure mode this whole context exists to\nprevent.",
+    "enum": [
+     "confirmed_by_source",
+     "consistent_with_design",
+     "incorrect_interpretation",
+     "ambiguous_evidence",
+     "insufficient_evidence",
+     "pipeline_limitation",
+     "engineering_exception",
+     "documentation_issue",
+     "other"
+    ],
+    "title": "ReviewReason",
+    "type": "string"
+   },
+   "ReviewSnapshotRead": {
+    "description": "The identity the reviewed artefact had, at review time.\n\nIdentity only - which bytes, which rules, which policies, and a\nfingerprint over the support chain. Not the artefact: what the\nstatement said is read from the semantic endpoints, which stay its\nsingle account.",
+    "properties": {
+     "content_checksum": {
+      "title": "Content Checksum",
+      "type": "string"
+     },
+     "fact_policy_version": {
+      "title": "Fact Policy Version",
+      "type": "string"
+     },
+     "resolution_policy_version": {
+      "title": "Resolution Policy Version",
+      "type": "string"
+     },
+     "semantic_contract_version": {
+      "title": "Semantic Contract Version",
+      "type": "string"
+     },
+     "semantic_policy_version": {
+      "title": "Semantic Policy Version",
+      "type": "string"
+     },
+     "semantic_rule_id": {
+      "title": "Semantic Rule Id",
+      "type": "string"
+     },
+     "semantic_rule_version": {
+      "title": "Semantic Rule Version",
+      "type": "string"
+     },
+     "support_count": {
+      "title": "Support Count",
+      "type": "integer"
+     },
+     "support_fingerprint": {
+      "title": "Support Fingerprint",
+      "type": "string"
+     }
+    },
+    "required": [
+     "content_checksum",
+     "semantic_rule_id",
+     "semantic_rule_version",
+     "semantic_contract_version",
+     "resolution_policy_version",
+     "fact_policy_version",
+     "semantic_policy_version",
+     "support_fingerprint",
+     "support_count"
+    ],
+    "title": "ReviewSnapshotRead",
+    "type": "object"
+   },
    "ReviewStatus": {
     "description": "The lifecycle state of one Review Candidate (Milestone 10 - Review\nWorkflow). Separate from, and never merged with, the Engineering\nIndex entry it reviews (ADR-0002): the Index stays a flat,\nunreviewed inventory: this enum is where \"reviewed or not, and how\"\nlives instead.",
     "enum": [
@@ -11326,6 +11628,82 @@
     ],
     "title": "ReviewStatus",
     "type": "string"
+   },
+   "ReviewTargetType": {
+    "description": "The kinds of artefact that may be reviewed.\n\nOne member, deliberately. Evidence, entities, facts and documents are\n**not** reviewable in this milestone, and adding their members here\n\"ready for later\" would be four values that no endpoint accepts, no\nprojection understands and no test covers.",
+    "enum": [
+     "semantic_statement"
+    ],
+    "title": "ReviewTargetType",
+    "type": "string"
+   },
+   "ReviewVocabularyResponse": {
+    "description": "Which reasons may accompany which decision.\n\nServed rather than duplicated in the frontend: a client that\nhard-coded the pairing would eventually offer a combination the\nbackend refuses, and the reviewer would discover it on submit.",
+    "properties": {
+     "decisions": {
+      "items": {
+       "$ref": "#/components/schemas/ReviewDecision"
+      },
+      "title": "Decisions",
+      "type": "array"
+     },
+     "decisions_requiring_comment": {
+      "items": {
+       "$ref": "#/components/schemas/ReviewDecision"
+      },
+      "title": "Decisions Requiring Comment",
+      "type": "array"
+     },
+     "reasons_by_decision": {
+      "additionalProperties": {
+       "items": {
+        "$ref": "#/components/schemas/ReviewReason"
+       },
+       "type": "array"
+      },
+      "propertyNames": {
+       "$ref": "#/components/schemas/ReviewDecision"
+      },
+      "title": "Reasons By Decision",
+      "type": "object"
+     }
+    },
+    "required": [
+     "decisions",
+     "reasons_by_decision",
+     "decisions_requiring_comment"
+    ],
+    "title": "ReviewVocabularyResponse",
+    "type": "object"
+   },
+   "ReviewerRead": {
+    "description": "Who reviewed, as they were at the moment of reviewing.\n\nCopied onto the review rather than joined from ``users``, so the\nrecord stays readable after an account is renamed, re-roled or\ndisabled. Carries no credential; there is no field here for one.",
+    "properties": {
+     "display_name": {
+      "title": "Display Name",
+      "type": "string"
+     },
+     "email": {
+      "title": "Email",
+      "type": "string"
+     },
+     "role": {
+      "title": "Role",
+      "type": "string"
+     },
+     "user_id": {
+      "title": "User Id",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "user_id",
+     "display_name",
+     "email",
+     "role"
+    ],
+    "title": "ReviewerRead",
+    "type": "object"
    },
    "Role": {
     "description": "The role carried by an authenticated user.\n\n``ENGINEER`` is the ordinary authenticated user of this platform:\nthey may read and run everything the engineering pipeline exposes.\n``ADMINISTRATOR`` additionally manages identities and reads the\naudit trail.\n\nThere is no ``ANONYMOUS`` member on purpose. Anonymous is the\n*absence* of an identity, not a role an identity can hold, and a\nmember here would be a value that could be stored on a user row.",
@@ -15091,6 +15469,49 @@
     ]
    }
   },
+  "/documents/{document_id}/engineering-semantics/reviews": {
+   "get": {
+    "description": "One request for a whole document's review state.\n\nStatements nobody has reviewed are **absent**, not present with a\nnull decision: \"never reviewed\" is the absence of a judgement, and a\nrow asserting it would be a judgement.",
+    "operationId": "read_document_reviews_documents__document_id__engineering_semantics_reviews_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/DocumentReviewSummaryResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "The current decision for every reviewed statement in a document",
+    "tags": [
+     "Human Review"
+    ]
+   }
+  },
   "/documents/{document_id}/engineering-semantics/{statement_key}": {
    "get": {
     "operationId": "read_semantic_statement_documents__document_id__engineering_semantics__statement_key__get",
@@ -15139,6 +15560,58 @@
     "summary": "Read one semantic statement",
     "tags": [
      "Engineering Semantics"
+    ]
+   }
+  },
+  "/documents/{document_id}/engineering-semantics/{statement_key}/current-review": {
+   "get": {
+    "description": "Answers for a statement that no longer exists, too.\n\nThat is the case the snapshot exists for: the projection reports\n`requires_revalidation` or `orphaned` rather than a `404`, because a\njudgement about something the pipeline has since re-derived is still\na judgement somebody made and must still be readable.",
+    "operationId": "read_current_review_documents__document_id__engineering_semantics__statement_key__current_review_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "statement_key",
+      "required": true,
+      "schema": {
+       "title": "Statement Key",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CurrentReviewRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "The effective decision for one statement, computed from history",
+    "tags": [
+     "Human Review"
     ]
    }
   },
@@ -15194,6 +15667,140 @@
     "summary": "The facts supporting one statement - the next link in the chain from meaning back to the characters on the page",
     "tags": [
      "Engineering Semantics"
+    ]
+   }
+  },
+  "/documents/{document_id}/engineering-semantics/{statement_key}/reviews": {
+   "get": {
+    "description": "The authoritative record. Every judgement ever passed, in order.\n\nPaged because it only grows: a statement an engineering team argues\nover for a year is one whose history no single response should try to\ncarry.",
+    "operationId": "read_review_history_documents__document_id__engineering_semantics__statement_key__reviews_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "statement_key",
+      "required": true,
+      "schema": {
+       "title": "Statement Key",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page",
+      "required": false,
+      "schema": {
+       "default": 1,
+       "minimum": 1,
+       "title": "Page",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page_size",
+      "required": false,
+      "schema": {
+       "default": 25,
+       "maximum": 100,
+       "minimum": 1,
+       "title": "Page Size",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReviewHistoryResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "One statement's review history, newest first",
+    "tags": [
+     "Human Review"
+    ]
+   },
+   "post": {
+    "description": "Appends a judgement. Nothing is updated, here or downstream.\n\n`201` always, even when an earlier review exists: a second judgement\n**creates** a second record rather than replacing the first, and a\n`200` would suggest otherwise. The superseded review is untouched and\nstays readable in the history.\n\nThe reviewer is the authenticated identity. There is no field in the\nrequest body through which a caller could name somebody else.",
+    "operationId": "record_review_documents__document_id__engineering_semantics__statement_key__reviews_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "document_id",
+      "required": true,
+      "schema": {
+       "title": "Document Id",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "path",
+      "name": "statement_key",
+      "required": true,
+      "schema": {
+       "title": "Statement Key",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RecordReviewRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReviewRead"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "403": {
+      "description": "The caller may not record engineering reviews."
+     },
+     "404": {
+      "description": "The statement is not in this document's current interpretation."
+     },
+     "422": {
+      "description": "The review does not satisfy the policy."
+     }
+    },
+    "summary": "Record an engineering judgement about one statement",
+    "tags": [
+     "Human Review"
     ]
    }
   },
@@ -15414,6 +16021,28 @@
     "summary": "Get Index Entry",
     "tags": [
      "Engineering Index"
+    ]
+   }
+  },
+  "/engineering-reviews/vocabulary": {
+   "get": {
+    "description": "Served rather than duplicated in each client.\n\nA frontend that hard-coded which reasons go with which decision would\neventually offer a pairing the backend refuses, and the reviewer would\nfind out on submit.",
+    "operationId": "read_vocabulary_engineering_reviews_vocabulary_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReviewVocabularyResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "The decisions a review may carry, and the reasons each admits",
+    "tags": [
+     "Human Review"
     ]
    }
   },

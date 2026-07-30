@@ -157,8 +157,26 @@ Three levels, and deliberately only three:
 | | |
 |---|---|
 | **anonymous** | The absence of an identity. Not a role — there is no `Role.ANONYMOUS`, because a member there would be a value storable on a user row. |
-| **engineer** | The ordinary authenticated user. May read and run everything the pipeline exposes, and manage projects. |
+| **engineer** | The ordinary authenticated user. May read and run everything the pipeline exposes, manage projects, and record engineering reviews. |
 | **administrator** | Additionally manages identities and reads the audit trail. |
+
+Capabilities, as of EPIC 30.4:
+
+| Capability | engineer | administrator |
+|---|---|---|
+| `use_engineering_platform` | ✓ | ✓ |
+| `manage_projects` | ✓ | ✓ |
+| `record_engineering_review` | ✓ | ✓ |
+| `manage_users` | | ✓ |
+| `read_audit_trail` | | ✓ |
+
+`record_engineering_review` is deliberately separate from
+`use_engineering_platform`, which covers *reading* reviews: an auditor
+role that may read every judgement without passing one is a role the
+separation already admits, with no route changing. No "reviewer" role was
+invented - reviewing the pipeline is what an engineer on this platform is
+for, and a separate role would be a second one every engineer would have
+to be granted on day one.
 
 Routes declare a **capability**, never a role:
 
@@ -211,7 +229,14 @@ action, resource, outcome.**
 
 Recorded today: `login_succeeded`, `login_failed`, `logout`,
 `password_changed`, `user_created`, `user_disabled`, `project_created`,
-`document_uploaded`, `pipeline_executed`, `access_denied`.
+`document_uploaded`, `pipeline_executed`, `engineering_review_recorded`,
+`engineering_review_superseded`, `access_denied`.
+
+The two review actions were added by EPIC 30.4. A review is already an
+attributable, immutable record, so the trail is not its only account - it
+is there because *"what did this person do on Tuesday?"* is asked of the
+audit trail, and a governed engineering decision is exactly that kind of
+action. See [human_review.md](human_review.md).
 
 **Nothing sensitive is representable.** There is no field for a password,
 a token, a fingerprint or a request body — structural, not conventional:
@@ -316,8 +341,9 @@ Two things a deployment **must** do that the code cannot do for itself:
   proxy in this deployment model, and are not yet documented as a
   requirement anywhere but here.
 - **Access control is per-role, not per-project.** Any authenticated
-  engineer can read any project and any document. Project membership is
-  the next milestone.
+  engineer can read any project and any document, and may record a review
+  against any statement in any of them. Project membership remains the
+  next step.
 
 ---
 

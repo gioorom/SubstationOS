@@ -32,6 +32,7 @@ import {
 
 import ChainStep from "./ChainStep";
 import InspectorField from "./InspectorField";
+import ReviewPanel from "./ReviewPanel";
 import StateBadge from "./StateBadge";
 
 interface InspectorPanelProps {
@@ -50,10 +51,15 @@ interface InspectorPanelProps {
  * substitute one, because it is the panel an engineer opens when the
  * readable label is exactly what they have stopped trusting.
  *
- * It offers no action that writes. Inspecting, navigating and copying an
- * identifier are the whole of it - see `docs/architecture/
- * engineering_workspace.md` on why a Human Review bounded context, not a
- * button, is what an approval would require.
+ * It writes **nothing about the artefact**. Inspecting, navigating and
+ * copying an identifier are the whole of what it does to one.
+ *
+ * Since EPIC 30.4 a selected semantic statement additionally carries a
+ * `ReviewPanel` - the one region of this read-first screen where an
+ * engineer acts. What it records is a judgement *about* the statement,
+ * appended to a separate append-only context; the statement, its facts,
+ * its entities and its evidence are untouched by it. See
+ * `docs/architecture/human_review.md`.
  */
 export default function InspectorPanel({
   selection,
@@ -795,6 +801,16 @@ function SemanticDetail({
           </li>
         ))}
       </ol>
+
+      {/*
+        The one place in this read-first screen where an engineer acts,
+        and it occupies its own region for that reason. It records a
+        judgement *about* the statement above; it modifies nothing in it.
+      */}
+      <ReviewPanel
+        documentId={index.documentId}
+        statementKey={statement.statement_key}
+      />
     </div>
   );
 }

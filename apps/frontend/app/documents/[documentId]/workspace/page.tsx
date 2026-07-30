@@ -19,6 +19,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { useCanonicalPage } from "@/hooks/useCanonicalPage";
+import { useDocumentReviews } from "@/hooks/useDocumentReviews";
 import { useDocument } from "@/hooks/useDocuments";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useWorkspaceSelection } from "@/hooks/useWorkspaceSelection";
@@ -87,6 +88,13 @@ function Workspace() {
   } = useDocument(valid ? documentId : undefined);
 
   const workspace = useWorkspace(valid ? documentId : undefined);
+
+  // One request for every statement's current judgement. Settles
+  // independently of the artefact reads, so a review summary that fails
+  // leaves the whole Workspace inspectable - the badges simply do not
+  // appear.
+  const reviews = useDocumentReviews(valid ? documentId : undefined);
+
   const { selection, select } = useWorkspaceSelection();
 
   const [tab, setTab] = useState<ExplorerTab>("semantic");
@@ -337,6 +345,7 @@ function Workspace() {
                   quantityOf={(statement) =>
                     resolveStatementQuantity(workspace.index, statement)
                   }
+                  reviewByStatement={reviews.byStatement}
                 />
               )}
 

@@ -59,12 +59,23 @@ class Capability(str, Enum):
     #: Read the audit trail.
     READ_AUDIT_TRAIL = "read_audit_trail"
 
+    #: Record an engineering judgement over a pipeline artefact
+    #: (EPIC 30.4). Distinct from ``USE_ENGINEERING_PLATFORM``, which
+    #: covers *reading* reviews: an auditor role that may read every
+    #: judgement without passing one is a role this separation already
+    #: admits, without any route changing.
+    RECORD_ENGINEERING_REVIEW = "record_engineering_review"
+
 
 _CAPABILITIES_BY_ROLE: dict[Role, frozenset[Capability]] = {
     Role.ENGINEER: frozenset(
         {
             Capability.USE_ENGINEERING_PLATFORM,
             Capability.MANAGE_PROJECTS,
+            # Reviewing the pipeline is what an engineer on this platform
+            # is for. A separate "reviewer" role would be a second role
+            # every engineer would have to be granted on day one.
+            Capability.RECORD_ENGINEERING_REVIEW,
         }
     ),
     Role.ADMINISTRATOR: frozenset(Capability),

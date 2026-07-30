@@ -871,6 +871,41 @@ artefact, because no Human Review bounded context exists yet.
 See [engineering_workspace.md](engineering_workspace.md) and
 [ADR-0021](adr/0021-engineering-workspace-document-viewer.md).
 
+## Engineering judgement is not pipeline output
+
+Since EPIC 30.4 an engineer can record a governed decision about an
+interpreted statement:
+
+```
+Document → Pipeline → Semantic Statement → Human Review → Engineering Decision
+```
+
+**Human Review never becomes part of the pipeline.** It reads pipeline
+output; the pipeline does not read it, and an architecture test fails if
+any engineering domain module imports the review context. Running a stage
+twice under two different reviewers produces byte-identical artefacts,
+exactly as it did before reviews existed - and an API test asserts the
+semantic set compares equal before and after a review is recorded.
+
+Two properties keep the separation honest:
+
+- **A review references an artefact by key and never contains one.**
+  There is no field in that context into which a statement, fact, entity
+  or piece of evidence could be copied.
+- **A review survives a pipeline re-run without ever being carried onto a
+  differently-derived statement.** `statement_key` is a deterministic
+  hash of the document, the fact source and the rule versions, so an
+  identical re-run reproduces the same key and any change produces a new
+  one. A judgement whose statement is gone is marked
+  `requires_revalidation` - never discarded, and never silently moved.
+
+The future Knowledge Graph will consume **deterministic semantics plus
+governed review decisions**; neither replaces the other. Nothing of the
+graph is implemented yet.
+
+See [human_review.md](human_review.md) and
+[ADR-0023](adr/0023-human-review-append-only-judgement.md).
+
 ## Where to look for more detail
 
 - **Vision and roadmap:** `project_intelligence_architecture.md`.
@@ -879,6 +914,7 @@ See [engineering_workspace.md](engineering_workspace.md) and
 - **Migrations:** [ADR-0008](adr/0008-database-migration-governance.md), [database_migrations.md](database_migrations.md).
 - **Legacy isolation:** [ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md).
 - **Engineering Workspace:** [engineering_workspace.md](engineering_workspace.md), [ADR-0021](adr/0021-engineering-workspace-document-viewer.md).
+- **Human Review:** [human_review.md](human_review.md), [ADR-0023](adr/0023-human-review-append-only-judgement.md).
 - **Performance baseline:** [performance_baseline.md](performance_baseline.md).
 - **Startup/health/config:** [operational_reliability.md](operational_reliability.md).
 - **Structured Retrieval:** [structured_retrieval.md](structured_retrieval.md), [ADR-0010](adr/0010-structured-retrieval-foundation.md).

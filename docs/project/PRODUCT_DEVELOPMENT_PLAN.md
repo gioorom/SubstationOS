@@ -149,6 +149,7 @@ readiness declaration)
 | AI Assistant | Does not exist |
 | Web frontend | Integrated — one centralised API client (the only caller of `fetch`), one transcription of the API contract in `lib/contracts` asserted against the backend's own OpenAPI document, a typed error model with no generic "an error occurred", and two state primitives replacing five hand-rolled hooks. Two document surfaces answering two questions: the **Pipeline UI** (did each stage run) and, since EPIC 30.2, the **Engineering Workspace** (what does the platform claim, and what supports it). **No mock data, no placeholder counters** — `lib/demo-*.ts` and the commissioning/timeline panels are deleted. 205 frontend tests, including architecture tests asserting no fuzzy matching, no engineering rule, no direct `fetch` and no write exists in Workspace code. Still absent: authentication and any human review UI |
 | Identity and access | Implemented — an `identity` bounded context (EPIC 30.3): users, scrypt password credentials in a self-describing upgradable form, server-side authentication sessions with independent idle (2h) and absolute (12h) clocks, three roles (anonymous / engineer / administrator) and capability-declaring routes. Authentication is **deny-by-default middleware**: every route requires a session unless it is on a short, deliberate public list, and a test walks every path in the live OpenAPI document to prove it. The session token leaves the server only as an `HttpOnly` cookie and is stored as a SHA-256 fingerprint, so a copy of the database is neither a set of passwords nor a set of live logins. CSRF is a session-bound token, not plain double-submit |
+| Human Review | Implemented — a dedicated bounded context (EPIC 30.4) recording governed engineering judgement over deterministic pipeline artefacts. **Append-only**: reviews are immutable, the port declares no update or delete, the API exposes no `PATCH` or `DELETE`, and the current decision is a projection over the ordered history rather than a stored column. A review references a semantic statement by key and never contains one; recording it changes no engineering artefact, asserted by comparing the semantic set before and after. Survives pipeline re-runs by **artefact identity**: `statement_key` already hashes the document, the fact source and the rule versions, so a judgement is `applies`, `requires_revalidation` or `orphaned` by lookup - never discarded, and never carried onto a differently-derived statement. Three decisions, nine reasons paired to them, snapshots recording identity rather than payload |
 | Audit trail | Implemented — an append-only `audit` bounded context (EPIC 30.3) whose port declares no update and no delete. Records login, failed login, logout, password change, user lifecycle, project creation, document upload, pipeline execution and access denials, each with actor, timestamp, action, resource and outcome. **Audit identity attaches to actions, never to artefacts** - no engineering domain module may import identity (asserted), no engineering table may carry a user column (asserted), and running the pipeline under two different logins produces byte-identical artefacts (asserted) |
 | Engineering Workspace | Implemented — `/documents/{id}/workspace` (EPIC 30.2): a document-centric, **inspection-only** projection over governed artefacts. Three regions (source, engineering explorer, inspector); the full support chain `statement → fact → entity → evidence → canonical source location` navigable in both directions, composed client-side from four whole-set reads with **no support-chain endpoint added** — every join is a key the backend declared, never a text or value comparison. Highlights are drawn on an SVG map of the canonical representation at the parser's own bounding boxes, so an observation's provenance and its highlight are the same artefact and cannot drift (ADR-0021); no PDF rendering library was added. Diagnostics are first-class content, and `unrun`/`empty`/`ambiguous`/`declined`/`failed`/`reused` stay distinct, each carried by colour, glyph and word. `interpreted` is stated everywhere to mean *produced by a versioned rule*, never *approved by an engineer*. One read-only endpoint added: `GET /documents/{id}/canonical-representation/pages/{n}` |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
@@ -2546,6 +2547,82 @@ interruptions, and are ranges, not commitments.
   addressed, because adding one now would be guessing at a workload
   nobody has measured.
 - Dependencies: EPIC 30.1.2 (whose audit produced the list).
+
+**EPIC 30.4 — Human Review** - *Completed*
+- Objective: let authenticated engineers record governed decisions about
+  what the deterministic pipeline produced, without any of it becoming an
+  input to the pipeline. The platform could interpret a document; nobody
+  could record that they had checked the interpretation.
+- **The core principle, and the whole shape of the milestone: engineering
+  truth and engineering judgement stay separate, forever.** Pipeline
+  output is deterministic and immutable; reviews are attributable and
+  append-only; a review references an artefact by key and never contains
+  one. An API test asserts the semantic set compares equal before and
+  after a review is recorded, and an architecture test fails if any
+  engineering domain module imports the review context.
+- Delivered: a `human_review` bounded context (target, decisions,
+  reasons, review, snapshot, policy, applicability, projection, events,
+  an append-only port), one append-only table, a resource-oriented API,
+  and a review panel in the Engineering Workspace with decision badges, a
+  history timeline, reviewer identity and permission states.
+- Two decisions recorded in
+  [ADR-0023](../architecture/adr/0023-human-review-append-only-judgement.md):
+  - **The current decision is never stored.** It is the newest review for
+    a target, computed on read. There is no `status`, `is_current`,
+    `superseded_at` or `current_decision` column - architecture tests
+    assert their absence in both the ORM model and the migration - because
+    a stored current decision is a second account of a fact the ordered
+    history already states, and the day the two disagreed nobody could
+    say which was true. `superseded` is derived from position.
+  - **Revalidation is decided by artefact identity, not by comparison.**
+    `statement_key` is already a SHA-256 over the document, the fact
+    source, the triple and the rule versions, so an identical re-run
+    reproduces the same key and *any* change produces a different one.
+    "Does this review still apply?" is therefore a lookup, not a
+    heuristic - and correct by construction, because the pipeline already
+    computes the identity it depends on.
+- Three applicability states, every transition tested against real
+  pipeline runs: `applies` (the key is present), `requires_revalidation`
+  (a current interpretation exists and the key is absent - the pipeline
+  moved on), `orphaned` (there is no interpretation to compare against).
+  **A review is never discarded in any of them**, and there is
+  deliberately no state meaning "migrated to the new statement": carrying
+  a judgement onto a differently-derived artefact would attribute to a
+  named engineer an opinion about something they never saw.
+- Three decisions (`approved`, `rejected`, `needs_investigation`), no
+  custom states and no workflow engine. Nine catalogued reasons, **paired
+  to the decisions they may accompany**, so "approved because the
+  interpretation is incorrect" is a sentence the trail cannot contain.
+  The pairing is served from the API rather than duplicated in clients.
+  A comment is required where the reason alone explains nothing.
+- Snapshots record **identity, not the artefact**: checksum, rule id and
+  version, contract version, three policy versions, and a fingerprint
+  over the support chain. No statement type, subject, object, quantity or
+  support payload - and no field into which one could be written.
+- Authorization: a new `record_engineering_review` capability, granted to
+  engineer and administrator, kept separate from the read permission so a
+  future auditor role needs no route change. No "reviewer" role invented.
+  The reviewer is the authenticated identity; a test submits a forged
+  `reviewer` in the body and asserts it is ignored.
+- The Workspace stays read-first: the review action occupies its own
+  panel, and the statement list carries two badges that say different
+  things - what the *pipeline* produced, and what an *engineer* decided.
+  The UI never says `Corretto`/`Errato` or ✓/✗, `approved` is not green,
+  and "mai revisionato" is a state rather than a decision - all asserted.
+- Prepares the Knowledge Graph and implements none of it: a promotion
+  rule can be written as "current decision `approved` and applicability
+  `applies`" against contracts that already exist.
+- Distinct from the pre-existing `review_workflow` context (Milestone
+  10.1), which reviews Proposed Claims on the legacy graph path with a
+  mutable status. The two are not merged, not renamed and not related;
+  `human_review.md` states the difference.
+- Known limits: review targets are semantic statements only
+  (`ReviewTargetType` is generic and has one member, deliberately); no
+  assignment, voting, approval chains or notifications; the document-wide
+  summary is unpaged and costs one count per reviewed target; comments
+  are plain text; authorization stays per-role rather than per-project.
+- Dependencies: Milestone 30.1 (the statements it judges), EPIC 30.2 (the
+  Workspace it extends) and EPIC 30.3 (the identity it attributes to).
 
 **EPIC 30.3 — Identity, Authentication and Audit Foundations** - *Completed*
 - Objective: make every future engineering action attributable to a

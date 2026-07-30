@@ -18,14 +18,19 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import DocumentWorkspacePage from "@/app/documents/[documentId]/workspace/page";
+import { SessionProvider } from "@/hooks/useSession";
 
 import {
   aCanonicalPage,
   aDocumentDetail,
   aFactSet,
+  aReviewHistory,
+  aReviewVocabulary,
   aSemanticSet,
   anEntitySet,
   anEvidenceSet,
+  anUnreviewedStatement,
+  aSession,
   stubBackend,
   type Routes,
 } from "./_backend";
@@ -117,6 +122,21 @@ function workspaceRoutes(overrides: Routes = {}): Routes {
     "GET /documents/10/engineering-entities": { body: anEntitySet() },
     "GET /documents/10/engineering-facts": { body: aFactSet() },
     "GET /documents/10/engineering-semantics": { body: aSemanticSet() },
+    // EPIC 30.4. The Workspace reads every statement's current judgement
+    // in one request, and the review panel reads one statement's.
+    "GET /documents/10/engineering-semantics/reviews": {
+      body: { document_id: 10, items: [] },
+    },
+    "GET /documents/10/engineering-semantics/statement-tr1-power/current-review": {
+      body: anUnreviewedStatement(),
+    },
+    "GET /documents/10/engineering-semantics/statement-tr1-power/reviews": {
+      body: aReviewHistory([]),
+    },
+    "GET /engineering-reviews/vocabulary": { body: aReviewVocabulary() },
+    // The review panel needs to know who is signed in, so the Workspace
+    // is rendered inside the provider the root layout supplies.
+    "GET /auth/session": { body: aSession() },
     ...overrides,
   };
 }
@@ -130,7 +150,11 @@ async function renderWorkspace(
 ) {
   const backend = stubBackend(workspaceRoutes(overrides));
 
-  render(<DocumentWorkspacePage />);
+  render(
+    <SessionProvider>
+      <DocumentWorkspacePage />
+    </SessionProvider>,
+  );
 
   await screen.findByRole("heading", { name: filename });
 
@@ -633,8 +657,15 @@ describe("selection in the URL", () => {
 
 // --- Inspection only -----------------------------------------------------
 
-describe("the human validation boundary", () => {
-  it("offers no control that would imply a judgement", async () => {
+describe("the engineering-editing boundary", () => {
+  it("offers no control that would edit an engineering artefact", async () => {
+    /**
+     * Narrowed - deliberately - by EPIC 30.4. The Workspace now offers
+     * one action: recording a *judgement*, in its own panel, appended to
+     * a separate append-only context. What it still offers no way to do
+     * is change what the pipeline said: correcting a value, editing an
+     * entity, merging two, or authoring a fact.
+     */
     await renderWorkspace();
 
     await userEvent.click(
@@ -642,16 +673,30 @@ describe("the human validation boundary", () => {
     );
 
     for (const forbidden of [
-      /approva/i,
-      /rifiuta/i,
-      /conferma/i,
       /correggi/i,
       /modifica/i,
       /unisci/i,
-      /valida/i,
+      /elimina/i,
+      /rinomina/i,
     ]) {
       expect(screen.queryByRole("button", { name: forbidden })).toBeNull();
     }
+  });
+
+  it("keeps the review action in its own panel", async () => {
+    await renderWorkspace();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: STATEMENT_ROW }),
+    );
+
+    const panel = await screen.findByRole("region", {
+      name: "Revisione ingegneristica",
+    });
+
+    expect(
+      within(panel).getByRole("button", { name: /Registra revisione/ }),
+    ).toBeInTheDocument();
   });
 
   it("states that interpreted does not mean approved", async () => {

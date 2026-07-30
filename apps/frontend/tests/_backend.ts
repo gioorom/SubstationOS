@@ -11,6 +11,11 @@ import { vi } from "vitest";
 
 import type {
   CanonicalPdfPage,
+  CurrentReview,
+  Review,
+  ReviewHistoryEntry,
+  ReviewHistoryResponse,
+  ReviewVocabulary,
   Session,
   DocumentDetail,
   DocumentSummary,
@@ -549,5 +554,130 @@ export function aSession(
       ...overrides,
     },
     expires_at: "2026-07-30T21:00:00",
+  };
+}
+
+// --- Human Review (EPIC 30.4) -------------------------------------------
+
+/**
+ * `GET .../current-review` for a statement nobody has judged.
+ *
+ * `current: null` is a **state**, not a decision, and the fixture makes
+ * that explicit: there is no "unreviewed" member of the decision enum
+ * that a careless test could assert against.
+ */
+export function anUnreviewedStatement(
+  overrides: Partial<CurrentReview> = {},
+): CurrentReview {
+  return {
+    target_type: "semantic_statement",
+    target_key: "statement-tr1-power",
+    document_id: 10,
+    current: null,
+    review_count: 0,
+    applicability: "orphaned",
+    snapshot_intact: true,
+    ...overrides,
+  };
+}
+
+/** One recorded judgement, as the backend serialises it. */
+export function aReview(overrides: Partial<Review> = {}): Review {
+  return {
+    review_id: 1,
+    target_type: "semantic_statement",
+    target_key: "statement-tr1-power",
+    document_id: 10,
+    decision: "approved",
+    reason: "confirmed_by_source",
+    comment: null,
+    reviewer: {
+      user_id: 1,
+      display_name: "Ada Lovelace",
+      email: "ada@substationos.test",
+      role: "engineer",
+    },
+    snapshot: {
+      content_checksum: "a".repeat(64),
+      semantic_rule_id: "rated_power_from_associated_power_quantity",
+      semantic_rule_version: "1.0",
+      semantic_contract_version: "1.0",
+      resolution_policy_version: "1.0",
+      fact_policy_version: "1.0",
+      semantic_policy_version: "1.0",
+      support_fingerprint: "b".repeat(64),
+      support_count: 1,
+    },
+    recorded_at: "2026-07-30T09:00:00",
+    record_version: "1.0",
+    ...overrides,
+  };
+}
+
+/** A statement carrying a current judgement. */
+export function aReviewedStatement(
+  review: Review = aReview(),
+  overrides: Partial<CurrentReview> = {},
+): CurrentReview {
+  return {
+    target_type: "semantic_statement",
+    target_key: review.target_key,
+    document_id: review.document_id,
+    current: review,
+    review_count: 1,
+    applicability: "applies",
+    snapshot_intact: true,
+    ...overrides,
+  };
+}
+
+export function aReviewHistory(
+  entries: ReviewHistoryEntry[],
+): ReviewHistoryResponse {
+  return {
+    items: entries,
+    pagination: {
+      page: 1,
+      page_size: 20,
+      total: entries.length,
+      total_pages: entries.length === 0 ? 0 : 1,
+      has_next: false,
+      has_previous: false,
+    },
+  };
+}
+
+/**
+ * The reason catalogue, as the backend serves it.
+ *
+ * Served rather than hard-coded in the client, so a pairing the API
+ * refuses can never be offered - the fixture mirrors that.
+ */
+export function aReviewVocabulary(): ReviewVocabulary {
+  return {
+    decisions: ["approved", "rejected", "needs_investigation"],
+    reasons_by_decision: {
+      approved: [
+        "confirmed_by_source",
+        "consistent_with_design",
+        "engineering_exception",
+        "other",
+      ],
+      rejected: [
+        "documentation_issue",
+        "incorrect_interpretation",
+        "insufficient_evidence",
+        "pipeline_limitation",
+        "other",
+      ],
+      needs_investigation: [
+        "ambiguous_evidence",
+        "documentation_issue",
+        "insufficient_evidence",
+        "pipeline_limitation",
+        "other",
+      ],
+    },
+    decisions_requiring_comment: ["needs_investigation", "rejected"],
   };
 }
