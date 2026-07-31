@@ -190,6 +190,11 @@ likely via its own ADR, before Milestone 8 is considered complete.
 
 ## 8. AI replaceability — `READY`
 
+**Note (EPIC 31.1):** the modules named in this item were deleted with
+the legacy Knowledge Graph path; the governed equivalent is
+`app/infrastructure/llm/**`. The text below is the freeze-time record and
+is left unedited.
+
 **Implemented:** `app/services/ai/base.py` defines an `AIProvider` ABC
 port; `app/services/ai/claude_provider.py` is a real, working adapter
 against it. This is the actual swappable seam ADR-0006 requires, and it is

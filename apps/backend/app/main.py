@@ -27,7 +27,6 @@ from app.models import (  # noqa: F401
     governed_knowledge_graph,
     graph_builder,
     human_review,
-    knowledge_graph,
     project,
     project_knowledge_graph,
     proposed_claims,
@@ -58,7 +57,6 @@ from app.routers import (
     governed_knowledge_graph as governed_knowledge_graph_router,
     graph_query as graph_query_router,
     human_review as human_review_router,
-    knowledge_graph,
     llm_provider as llm_provider_router,
     project_knowledge_graph as project_knowledge_graph_router,
     projects,
@@ -126,7 +124,6 @@ app.include_router(human_review_router.router)
 app.include_router(governed_knowledge_graph_router.router)
 app.include_router(evidence_evaluation_router.router)
 app.include_router(projects.router)
-app.include_router(knowledge_graph.router)
 app.include_router(engineering_index_router.router)
 app.include_router(proposed_claims_router.router)
 app.include_router(review_workflow_router.router)

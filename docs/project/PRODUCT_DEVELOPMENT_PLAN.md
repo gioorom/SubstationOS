@@ -151,6 +151,7 @@ readiness declaration)
 | Identity and access | Implemented — an `identity` bounded context (EPIC 30.3): users, scrypt password credentials in a self-describing upgradable form, server-side authentication sessions with independent idle (2h) and absolute (12h) clocks, three roles (anonymous / engineer / administrator) and capability-declaring routes. Authentication is **deny-by-default middleware**: every route requires a session unless it is on a short, deliberate public list, and a test walks every path in the live OpenAPI document to prove it. The session token leaves the server only as an `HttpOnly` cookie and is stored as a SHA-256 fingerprint, so a copy of the database is neither a set of passwords nor a set of live logins. CSRF is a session-bound token, not plain double-submit |
 | Human Review | Implemented — a dedicated bounded context (EPIC 30.4) recording governed engineering judgement over deterministic pipeline artefacts. **Append-only**: reviews are immutable, the port declares no update or delete, the API exposes no `PATCH` or `DELETE`, and the current decision is a projection over the ordered history rather than a stored column. A review references a semantic statement by key and never contains one; recording it changes no engineering artefact, asserted by comparing the semantic set before and after. Survives pipeline re-runs by **artefact identity**: `statement_key` already hashes the document, the fact source and the rule versions, so a judgement is `applies`, `requires_revalidation` or `orphaned` by lookup - never discarded, and never carried onto a differently-derived statement. Three decisions, nine reasons paired to them, snapshots recording identity rather than payload |
 | Governed Knowledge Graph | Implemented — the query model over approved engineering knowledge (EPIC 31), and the **first implementation to satisfy ADR-0004**. A projection and never a source of truth: it consumes only semantic statements whose current review is `APPROVED` and whose applicability is `APPLIES`, and it may always be dropped and rebuilt from the pipeline and the reviews. Rebuildability is asserted rather than promised - identities are hashes of governed keys and `created_at` comes from the authorising review, so the projection is a pure function of its sources. Every node and edge carries mandatory provenance (statement, review, reviewer, rule and policy versions, support fingerprint) and there is no confidence score anywhere. Knowledge whose authorisation stops holding becomes `historical` with a recorded reason, never silently retained and never deleted. Two node kinds and one edge kind, because that is what governed semantics produces. Resource-oriented REST; no Cypher, GraphQL or SPARQL |
+| Legacy Knowledge Graph | **Retired (EPIC 31.1).** The AI-extraction path that wrote unreviewed entities into the queryable graph on every upload - the ADR-0004 violation ADR-0009 quarantined from Architecture Freeze v1.0. Service, router, schemas, models, the regex `entity_extractor`, the `topology` builder and the second LLM client in `services/ai/**` are deleted; `project_entities` and `entity_relations` are dropped by migration. Ingestion now runs **no downstream consumer at all**. One graph implementation deliberately remains - the Canonical Facts lineage the Engineering Engine reads - retained because it is proven *used*, and asserted as such by an architecture test |
 | Audit trail | Implemented — an append-only `audit` bounded context (EPIC 30.3) whose port declares no update and no delete. Records login, failed login, logout, password change, user lifecycle, project creation, document upload, pipeline execution and access denials, each with actor, timestamp, action, resource and outcome. **Audit identity attaches to actions, never to artefacts** - no engineering domain module may import identity (asserted), no engineering table may carry a user column (asserted), and running the pipeline under two different logins produces byte-identical artefacts (asserted) |
 | Engineering Workspace | Implemented — `/documents/{id}/workspace` (EPIC 30.2): a document-centric, **inspection-only** projection over governed artefacts. Three regions (source, engineering explorer, inspector); the full support chain `statement → fact → entity → evidence → canonical source location` navigable in both directions, composed client-side from four whole-set reads with **no support-chain endpoint added** — every join is a key the backend declared, never a text or value comparison. Highlights are drawn on an SVG map of the canonical representation at the parser's own bounding boxes, so an observation's provenance and its highlight are the same artefact and cannot drift (ADR-0021); no PDF rendering library was added. Diagnostics are first-class content, and `unrun`/`empty`/`ambiguous`/`declined`/`failed`/`reused` stay distinct, each carried by colour, glyph and word. `interpreted` is stated everywhere to mean *produced by a versioned rule*, never *approved by an engineer*. One read-only endpoint added: `GET /documents/{id}/canonical-representation/pages/{n}` |
 | Enterprise capabilities (RBAC, audit, monitoring, backup) | Do not exist |
@@ -2548,6 +2549,76 @@ interruptions, and are ranges, not commitments.
   addressed, because adding one now would be guessing at a workload
   nobody has measured.
 - Dependencies: EPIC 30.1.2 (whose audit produced the list).
+
+**EPIC 31.1 — Legacy Graph Retirement** - *Completed*
+- Objective: leave exactly one authoritative engineering knowledge model
+  in the repository. A consolidation milestone, with almost no new
+  user-visible functionality by design.
+- **The headline: the ADR-0004 violation is over.** From Architecture
+  Freeze v1.0 until this milestone, `knowledge_graph.ingest_document` ran
+  on every document upload and wrote LLM-extracted entities straight into
+  the queryable graph - no reviewer, no review date, no provenance beyond
+  a filename, a bare `confidence` float as the only trust signal.
+  [ADR-0004](../architecture/adr/0004-reviewed-facts-only-in-queryable-graph.md)
+  recorded that it must not happen and that it was happening;
+  [ADR-0009](../architecture/adr/0009-legacy-knowledge-graph-isolation.md)
+  quarantined it. Both are now discharged, and their status lines say so.
+- Retired, all proven unused first: `services/knowledge_graph.py`,
+  `routers/knowledge_graph.py`, `schemas/knowledge_graph.py`,
+  `models/knowledge_graph.py`, `services/entity_extractor.py`,
+  `services/topology/**` and `services/ai/**` - the last being an entire
+  second LLM client that predated the governed provider abstraction.
+  Migration `e28b91f4c073` drops `project_entities` and
+  `entity_relations`.
+- **Ingestion now writes no graph at all.** The pipeline's downstream
+  consumer is `None`; an upload stores, identifies and canonicalises a
+  document and does nothing else. Knowledge reaches the graph only
+  through an explicit, capability-gated promotion of a statement an
+  engineer approved, and an architecture test asserts the consumer.
+- Recorded in
+  [ADR-0025](../architecture/adr/0025-retire-the-legacy-knowledge-graph.md),
+  which also explains the two decisions that were **not** obvious:
+  - **Deletion, not deprecation.** The routes had been marked deprecated
+    for four milestones and it had changed nothing. A `410 Gone` shim was
+    rejected: it preserves a URL whose only honest answer is that the
+    data should never have been served.
+  - **The rows are dropped, not migrated.** Every governed edge requires
+    an approving review and there is none; manufacturing approvals for
+    unreviewed AI output would be the exact fraud the platform exists to
+    prevent. The migration carries the export SQL for an operator who
+    wants the rows, and `downgrade()` restores the schema **empty**,
+    stated rather than discovered.
+- **One graph implementation deliberately remains**, and the milestone
+  says so rather than claiming a clean sweep: the Canonical Facts lineage
+  (`graph_builder`, `project_knowledge_graph`, `graph_query`) is read at
+  runtime by Structured Retrieval and therefore by the whole Engineering
+  Engine stack. "Only remove code proven unused" was the instruction, and
+  this is proven *used* - an architecture test now asserts that it still
+  is, so the day nothing reads it is the day the repository notices.
+  Retiring it means rewriting Structured Retrieval's matching against
+  typed fields instead of property bags, which is a milestone with a
+  measurable quality impact rather than a cleanup.
+- Frontend: `/projects/{id}/knowledge-graph` **survives and is
+  rewritten** against the governed graph - engineers have it bookmarked,
+  so the address stays and what it shows does not. It now lists governed
+  concepts and their relationships, each carrying the provenance that
+  authorised it and a link back to the statement in the Workspace. The
+  legacy contracts, components and hook are deleted, and a test asserts
+  the page never calls the retired endpoint.
+- Existing tests repointed rather than deleted: six "this stage writes no
+  graph" assertions queried the dropped tables and now query the governed
+  ones, which is a strictly stronger property. Two OpenAPI tests that
+  asserted the legacy router was *marked deprecated* now assert it does
+  not exist.
+- A welcome side effect: with the legacy `EntityType` gone, the OpenAPI
+  name collision disappeared and the frontend contract stops carrying the
+  fully-qualified workaround name.
+- Known limits: existing installations lose the legacy rows on upgrade
+  (documented, with an export); `analysis.entities_found` on upload is
+  now always `0`, kept rather than removed to avoid a breaking response
+  change.
+- Dependencies: EPIC 31 (the governed replacement that made retirement
+  possible).
 
 **EPIC 31 — Governed Knowledge Graph** - *Completed*
 - Objective: make approved engineering knowledge queryable. The platform

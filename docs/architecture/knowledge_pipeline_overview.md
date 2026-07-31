@@ -404,7 +404,7 @@ across the whole pipeline).
 | Canonical PDF Representation | Canonical PDF | The deterministic, reproducible textual representation of a PDF (Milestone 26.1): `CanonicalPdfDocument → Page → Block → Span`, with page number, the parser's own reading order, verbatim text, bounding boxes, font family and size, and bold/italic - bound to one content checksum, one parser version and one representation version. **The single source of truth for every future semantic extraction**, which consumes it through `CanonicalRepresentationRepository` and never re-opens the original PDF. Records what the parser observed and interprets nothing: no merged paragraphs, no inferred tables, lists, headings or sections, no entities, no OCR | `app/domain/canonical_pdf/**` (domain), `app/services/canonical_pdf_service.py` |
 | Canonical Text Segmentation | Canonical Text | The semantic-neutral textual structure over the representation (Milestone 27.1): `CanonicalTextDocument → Section → Paragraph → Line → Token`, where a section **is a page**, a paragraph **is a PDF block** and a line **is a PDF line** - only boundaries the parser observed. Tokens carry the original text, a deterministic NFKC normalisation, their position in the line, and the full provenance chain back to the originating span's characters. **The structure every future extractor consumes**, through `CanonicalTextRepository`, which exposes no PDF structure at all. Assigns no engineering meaning: no entities, no equipment, no cables, no tables, no relationships | `app/domain/canonical_text/**` (domain), `app/services/canonical_text_service.py` |
 | Engineering Evidence Extraction | Engineering Evidence | Deterministic engineering observation over canonical text (Milestone 28.1): `EngineeringEvidenceSet → EngineeringEvidence`, covering designations, voltages, currents, powers and cable sections under a versioned rule catalogue with one pattern source and one unit catalogue. Quantities are held as exact `Decimal`; every item carries provenance to the characters, tokens, line, paragraph and page that produced it, plus its rule id and version. **Observations only** - no entity, no relationship, no equipment type, no LLM, and no column in which any of them could be recorded | `app/domain/engineering_evidence/**` (domain), `app/services/engineering_evidence_service.py` |
-| Knowledge Graph ingestion (legacy consumer) | Knowledge Graph | The pre-existing per-project entity extraction the upload endpoint feeds. Since Milestone 26.2 it receives **text assembled from the canonical segmentation** - never PDF bytes, a filesystem path, the content port or a parser object, all enforced by architecture test. Its own semantic policy is unchanged by that milestone: same extractor, same entities, same topology builder, different source of text | `app/services/knowledge_graph.py`, `app/services/ai/**`, `app/services/topology/**` |
+| ~~Knowledge Graph ingestion (legacy consumer)~~ | — | **Retired by EPIC 31.1.** The per-project LLM entity extraction the upload endpoint fed. It wrote unreviewed extraction into the queryable graph on every upload - the ADR-0004 violation ADR-0009 quarantined. Upload now runs **no downstream consumer at all**; knowledge enters the graph only through governed promotion. Deleted with it: `entity_extractor`, `topology/**` and the second LLM client in `services/ai/**`. See [ADR-0025](adr/0025-retire-the-legacy-knowledge-graph.md) | *(deleted)* |
 | Engineering Evidence Evaluation | Engineering Evidence Evaluation | The permanent framework that measures extraction quality (Milestone 28.2): a version-controlled `ReferenceCorpus` of hand-annotated documents, exact-match classification into `TRUE_POSITIVE` / `FALSE_POSITIVE` / `FALSE_NEGATIVE` **including provenance**, exact `Decimal` precision/recall/F1 per corpus, document, evidence type and rule, and regression detection that names the exact items that changed between two rule versions. Reports are insert-only; corpora are immutable at runtime. It never writes engineering evidence and reaches no document | `app/domain/evidence_evaluation/**` (domain, incl. `corpora/*.yaml`), `app/services/evidence_evaluation_service.py` |
 | Engineering Entity Resolution | Engineering Entities | Deterministic grouping of evidence into entities (Milestone 29.1): `EngineeringEntitySet → EngineeringEntity`, covering `EQUIPMENT_DESIGNATION` and `ENGINEERING_QUANTITY` under a versioned rule catalogue. Identity is a SHA-256 over document, evidence source, rule and version, so the same evidence always resolves the same way and a rule bump creates a new set rather than a rewrite. Entities aggregate their evidence's provenance and can enumerate the observations that created them. **Groupings only** - no relationship, no topology, no equipment classification, no LLM, and no Knowledge Graph or Engineering Index write | `app/domain/engineering_entities/**` (domain), `app/services/engineering_entity_service.py` |
 | Engineering Fact Construction | Engineering Facts | Deterministic structured associations between resolved entities (Milestone 29.2): `EngineeringFactSet → EngineeringFact`, under one rule (`same_line_association`) and one closed predicate (`HAS_ASSOCIATED_QUANTITY`) that deliberately asserts no property role. Declared cardinality policy: one designation may associate with many quantities on a line; two or more designations produce **no fact** and a diagnostic in a separate table. Facts aggregate support from subject entity, object entity and contributing evidence, and reference entities by deterministic key so fact history survives a newer entity set. **Associations only** - no classification, no topology, no LLM, no proximity scoring, no Knowledge Graph or Engineering Index write | `app/domain/engineering_facts/**` (domain), `app/services/engineering_fact_service.py` |
@@ -657,11 +657,11 @@ replaced by a positive-confinement test,
 `test_anthropic_sdk_is_confined_to_the_anthropic_adapter_package`,
 because invocation legitimately requires the `anthropic`/`httpx`
 imports Milestone 16 had forbidden: it scans every file under `app/`
-and asserts that only `app/infrastructure/llm/anthropic/**` (plus the
-already-isolated legacy `app/services/ai/**`, per
-[ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md)) may import
+and asserts that only `app/infrastructure/llm/anthropic/**` may import
 `anthropic` or `httpx` — everything else in the tree, including
-`app/application/**` itself, must not. This is the codified form of
+`app/application/**` itself, must not. The carve-out this test used to
+grant the legacy `app/services/ai/**` is gone with that package, retired
+by EPIC 31.1. This is the codified form of
 ADR-0014's "the SDK is confined to the Anthropic adapter package, and
 the runtime owns retry, not the SDK" decision.
 
@@ -836,14 +836,30 @@ shared public vocabulary contract.** Two options were considered:
 
 ## What still bypasses this pipeline
 
-The legacy Knowledge Graph path
-(`app/services/knowledge_graph.py::ingest_document`, called from every
-document upload) writes directly to `ProjectEntity`/`EntityRelation`
-with no review gate — a known, tracked, unremediated violation of
-[ADR-0004](adr/0004-reviewed-facts-only-in-queryable-graph.md). See
-[ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md) for the full
-inventory, isolation guarantees, and why it was not removed or merged
-into the governed pipeline this milestone.
+**Nothing writes engineering knowledge outside it any more.**
+
+Until EPIC 31.1, `app/services/knowledge_graph.py::ingest_document` ran
+on every document upload and wrote LLM-extracted entities straight into
+the queryable graph with no review gate - the violation
+[ADR-0004](adr/0004-reviewed-facts-only-in-queryable-graph.md) recorded
+at Architecture Freeze v1.0 and
+[ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md) quarantined.
+
+That path is **deleted**: the service, its router, its schemas, its two
+tables and the extractors behind it. Uploading a document now stores,
+identifies and canonicalises it and does nothing else - the pipeline's
+downstream consumer is `None`, and an architecture test asserts it.
+
+Knowledge reaches the graph only by an explicit, capability-gated
+promotion of a statement an engineer approved. See
+[ADR-0025](adr/0025-retire-the-legacy-knowledge-graph.md).
+
+One graph implementation remains alongside the governed one: the
+Canonical Facts lineage (`graph_builder`, `project_knowledge_graph`,
+`graph_query`), which Structured Retrieval and the Engineering Engine
+read. It is retained deliberately and documented in
+[knowledge_graph.md](knowledge_graph.md) §2, which also states what
+retiring it would require.
 
 ## Inspecting the pipeline's output
 
@@ -954,7 +970,7 @@ See [knowledge_graph.md](knowledge_graph.md),
 - **Persistence/execution semantics:** [ADR-0007](adr/0007-project-knowledge-graph-persistence.md).
 - **Transaction ownership:** [repository_transaction_conventions.md](repository_transaction_conventions.md).
 - **Migrations:** [ADR-0008](adr/0008-database-migration-governance.md), [database_migrations.md](database_migrations.md).
-- **Legacy isolation:** [ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md).
+- **Legacy retirement:** [ADR-0025](adr/0025-retire-the-legacy-knowledge-graph.md); the isolation it discharged is [ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md).
 - **Engineering Workspace:** [engineering_workspace.md](engineering_workspace.md), [ADR-0021](adr/0021-engineering-workspace-document-viewer.md).
 - **Human Review:** [human_review.md](human_review.md), [ADR-0023](adr/0023-human-review-append-only-judgement.md).
 - **Governed Knowledge Graph:** [knowledge_graph.md](knowledge_graph.md), [promotion_rules.md](promotion_rules.md), [ADR-0024](adr/0024-governed-knowledge-graph-as-projection.md).

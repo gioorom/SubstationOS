@@ -60,7 +60,6 @@ from app.models import (  # noqa: F401
     document,
     engineering_index,
     graph_builder,
-    knowledge_graph,
     project,
     project_knowledge_graph,
     proposed_claims,

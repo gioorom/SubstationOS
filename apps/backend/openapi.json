@@ -3569,7 +3569,7 @@
       "type": "string"
      },
      "entity_type": {
-      "$ref": "#/components/schemas/app__domain__engineering_entities__entity_models__EntityType"
+      "$ref": "#/components/schemas/EntityType"
      },
      "entity_version": {
       "title": "Entity Version",
@@ -5456,69 +5456,6 @@
     "title": "EngineeringWarningRead",
     "type": "object"
    },
-   "EntityDetailResponse": {
-    "properties": {
-     "created_at": {
-      "format": "date-time",
-      "title": "Created At",
-      "type": "string"
-     },
-     "description": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Description"
-     },
-     "entity_type": {
-      "$ref": "#/components/schemas/app__models__knowledge_graph__EntityType"
-     },
-     "id": {
-      "title": "Id",
-      "type": "integer"
-     },
-     "name": {
-      "title": "Name",
-      "type": "string"
-     },
-     "project_id": {
-      "title": "Project Id",
-      "type": "integer"
-     },
-     "related_entities": {
-      "items": {
-       "$ref": "#/components/schemas/KnowledgeGraphNode"
-      },
-      "title": "Related Entities",
-      "type": "array"
-     },
-     "source_document": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Source Document"
-     }
-    },
-    "required": [
-     "id",
-     "project_id",
-     "entity_type",
-     "name",
-     "created_at",
-     "related_entities"
-    ],
-    "title": "EntityDetailResponse",
-    "type": "object"
-   },
    "EntityResolutionFailureCode": {
     "description": "Why an entity set could not be produced.",
     "enum": [
@@ -5717,24 +5654,11 @@
     "title": "EntityStatus",
     "type": "string"
    },
-   "EntityType-Input": {
+   "EntityType": {
+    "description": "The deliberately minimal catalogue this milestone supports.\n\nThere is **no** transformer, breaker, current transformer, voltage\ntransformer, relay or cable here. Deciding that ``T1`` names a\ntransformer is a classification, and a classification needs a rule\nsomebody reviewed and a vocabulary somebody governs. Naming those\nclasses now would let the shape of the model imply knowledge the\nsystem does not have.",
     "enum": [
-     "substation",
-     "bay",
-     "panel",
-     "circuit_breaker",
-     "disconnector",
-     "transformer",
-     "current_transformer",
-     "voltage_transformer",
-     "protection_relay",
-     "cable",
-     "signal",
-     "document",
-     "test",
-     "other",
-     "busbar",
-     "line"
+     "equipment_designation",
+     "engineering_quantity"
     ],
     "title": "EntityType",
     "type": "string"
@@ -8287,117 +8211,6 @@
      "components"
     ],
     "title": "KnowledgeCandidateScoreRead",
-    "type": "object"
-   },
-   "KnowledgeGraphEdge": {
-    "properties": {
-     "id": {
-      "title": "Id",
-      "type": "integer"
-     },
-     "relation_type": {
-      "$ref": "#/components/schemas/RelationType"
-     },
-     "source": {
-      "title": "Source",
-      "type": "integer"
-     },
-     "target": {
-      "title": "Target",
-      "type": "integer"
-     }
-    },
-    "required": [
-     "id",
-     "source",
-     "target",
-     "relation_type"
-    ],
-    "title": "KnowledgeGraphEdge",
-    "type": "object"
-   },
-   "KnowledgeGraphNode": {
-    "properties": {
-     "created_at": {
-      "format": "date-time",
-      "title": "Created At",
-      "type": "string"
-     },
-     "description": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Description"
-     },
-     "entity_type": {
-      "$ref": "#/components/schemas/app__models__knowledge_graph__EntityType"
-     },
-     "id": {
-      "title": "Id",
-      "type": "integer"
-     },
-     "name": {
-      "title": "Name",
-      "type": "string"
-     },
-     "project_id": {
-      "title": "Project Id",
-      "type": "integer"
-     },
-     "source_document": {
-      "anyOf": [
-       {
-        "type": "string"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Source Document"
-     }
-    },
-    "required": [
-     "id",
-     "project_id",
-     "entity_type",
-     "name",
-     "created_at"
-    ],
-    "title": "KnowledgeGraphNode",
-    "type": "object"
-   },
-   "KnowledgeGraphResponse": {
-    "properties": {
-     "edges": {
-      "items": {
-       "$ref": "#/components/schemas/KnowledgeGraphEdge"
-      },
-      "title": "Edges",
-      "type": "array"
-     },
-     "nodes": {
-      "items": {
-       "$ref": "#/components/schemas/KnowledgeGraphNode"
-      },
-      "title": "Nodes",
-      "type": "array"
-     },
-     "project_id": {
-      "title": "Project Id",
-      "type": "integer"
-     }
-    },
-    "required": [
-     "project_id",
-     "nodes",
-     "edges"
-    ],
-    "title": "KnowledgeGraphResponse",
     "type": "object"
    },
    "LLMCapability": {
@@ -11346,19 +11159,6 @@
     "title": "RelatedNodeRead",
     "type": "object"
    },
-   "RelationType": {
-    "enum": [
-     "belongs_to",
-     "connected_to",
-     "protected_by",
-     "documented_in",
-     "tested_by",
-     "part_of",
-     "other"
-    ],
-    "title": "RelationType",
-    "type": "string"
-   },
    "RequestDesignationRead": {
     "properties": {
      "canonical_id": {
@@ -14261,37 +14061,6 @@
     ],
     "title": "WorkingMemoryVersionRead",
     "type": "object"
-   },
-   "app__domain__engineering_entities__entity_models__EntityType": {
-    "description": "The deliberately minimal catalogue this milestone supports.\n\nThere is **no** transformer, breaker, current transformer, voltage\ntransformer, relay or cable here. Deciding that ``T1`` names a\ntransformer is a classification, and a classification needs a rule\nsomebody reviewed and a vocabulary somebody governs. Naming those\nclasses now would let the shape of the model imply knowledge the\nsystem does not have.",
-    "enum": [
-     "equipment_designation",
-     "engineering_quantity"
-    ],
-    "title": "EntityType",
-    "type": "string"
-   },
-   "app__models__knowledge_graph__EntityType": {
-    "enum": [
-     "substation",
-     "bay",
-     "panel",
-     "circuit_breaker",
-     "disconnector",
-     "transformer",
-     "current_transformer",
-     "voltage_transformer",
-     "protection_relay",
-     "cable",
-     "signal",
-     "document",
-     "test",
-     "other",
-     "busbar",
-     "line"
-    ],
-    "title": "EntityType",
-    "type": "string"
    },
    "app__schemas__canonical_pdf__CanonicalizationResultRead": {
     "description": "One canonicalisation's outcome.\n\n``reused`` is ``true`` when identical bytes already had a\nrepresentation and nothing was re-parsed - the observable proof that\ncanonicalisation is idempotent.",
@@ -19119,121 +18888,6 @@
     ]
    }
   },
-  "/projects/{project_id}/entities": {
-   "get": {
-    "deprecated": true,
-    "operationId": "get_entities_projects__project_id__entities_get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "project_id",
-      "required": true,
-      "schema": {
-       "title": "Project Id",
-       "type": "integer"
-      }
-     },
-     {
-      "in": "query",
-      "name": "entity_type",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "$ref": "#/components/schemas/EntityType-Input"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "title": "Entity Type"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "items": {
-          "$ref": "#/components/schemas/EntityDetailResponse"
-         },
-         "title": "Response Get Entities Projects  Project Id  Entities Get",
-         "type": "array"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "summary": "Get Entities",
-    "tags": [
-     "Knowledge Graph (Legacy)"
-    ]
-   }
-  },
-  "/projects/{project_id}/entities/{entity_id}": {
-   "get": {
-    "deprecated": true,
-    "operationId": "get_entity_projects__project_id__entities__entity_id__get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "project_id",
-      "required": true,
-      "schema": {
-       "title": "Project Id",
-       "type": "integer"
-      }
-     },
-     {
-      "in": "path",
-      "name": "entity_id",
-      "required": true,
-      "schema": {
-       "title": "Entity Id",
-       "type": "integer"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/EntityDetailResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "summary": "Get Entity",
-    "tags": [
-     "Knowledge Graph (Legacy)"
-    ]
-   }
-  },
   "/projects/{project_id}/graph/entities": {
    "get": {
     "operationId": "list_entities_projects__project_id__graph_entities_get",
@@ -19685,86 +19339,6 @@
     "summary": "Get Project Intelligence",
     "tags": [
      "Projects"
-    ]
-   }
-  },
-  "/projects/{project_id}/knowledge-graph": {
-   "get": {
-    "deprecated": true,
-    "operationId": "get_knowledge_graph_projects__project_id__knowledge_graph_get",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "project_id",
-      "required": true,
-      "schema": {
-       "title": "Project Id",
-       "type": "integer"
-      }
-     },
-     {
-      "description": "Search entities by name or description",
-      "in": "query",
-      "name": "search",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "minLength": 1,
-         "type": "string"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "description": "Search entities by name or description",
-       "title": "Search"
-      }
-     },
-     {
-      "description": "Filter entities by type",
-      "in": "query",
-      "name": "entity_type",
-      "required": false,
-      "schema": {
-       "anyOf": [
-        {
-         "$ref": "#/components/schemas/EntityType-Input"
-        },
-        {
-         "type": "null"
-        }
-       ],
-       "description": "Filter entities by type",
-       "title": "Entity Type"
-      }
-     }
-    ],
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/KnowledgeGraphResponse"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "summary": "Get Knowledge Graph",
-    "tags": [
-     "Knowledge Graph (Legacy)"
     ]
    }
   },

@@ -321,12 +321,22 @@ def test_reading_entities_that_were_never_resolved_returns_404(
 def test_resolution_writes_no_graph_node(
     api_client: TestClient, db_session: Session
 ) -> None:
-    from app.models.knowledge_graph import ProjectEntity
+    # Repointed by EPIC 31.1. This used to query `ProjectEntity`, the
+    # ungoverned table that milestone dropped; it now asserts the
+    # stronger property against the graph that replaced it - resolving
+    # entities writes **no** governed knowledge, because knowledge
+    # enters the graph only through an explicit promotion of a statement
+    # an engineer approved.
+    from app.models.governed_knowledge_graph import (
+        GovernedGraphEdgeRecord,
+        GovernedGraphNodeRecord,
+    )
 
     document_id = _prepared(api_client, SUBSTATION_PAGE)
     _resolve(api_client, document_id)
 
-    assert db_session.query(ProjectEntity).count() == 0
+    assert db_session.query(GovernedGraphNodeRecord).count() == 0
+    assert db_session.query(GovernedGraphEdgeRecord).count() == 0
 
 
 def test_no_orm_model_is_exposed(api_client: TestClient) -> None:

@@ -2,8 +2,16 @@
 
 ## Status
 
-Accepted. **The current implementation does not yet comply with this
-decision — see Consequences.**
+Accepted, and **satisfied since EPIC 31.1**.
+
+This ADR carried the note "the current implementation does not yet comply
+with this decision" from Architecture Freeze v1.0 until 2026-07-30. The
+non-compliance is over: EPIC 31 built the governed graph that admits only
+approved, applicable semantics, and
+[ADR-0025](0025-retire-the-legacy-knowledge-graph.md) deleted
+`ingest_document`, its two tables and its read routes. Nothing writes
+engineering knowledge into a queryable graph without a named engineer
+approving it. The historical text below is unchanged.
 
 ## Context
 
@@ -42,12 +50,16 @@ never grounds for skipping Engineering Review.
   requires implementing the Engineering Index (ADR-0002) as the landing
   zone for unreviewed extraction output, so nothing unreviewed has
   anywhere to go except the Index.
-- **This ADR records an accepted decision, not a completed state.** As of
-  Architecture Freeze v1.0, `ingest_document` still writes AI-extracted
+- **This ADR recorded an accepted decision, not a completed state.** As of
+  Architecture Freeze v1.0, `ingest_document` still wrote AI-extracted
   entities directly into the queryable graph, bypassing this decision
-  entirely. This is a known, explicitly tracked gap (see the Architecture
-  Freeze Checklist, "Mandatory review gate") and is not remediated by this
-  ADR — remediating it is future implementation work.
+  entirely — a known, explicitly tracked gap (see the Architecture Freeze
+  Checklist, "Mandatory review gate").
+
+  **That gap was closed by EPIC 31.1.** `ingest_document` and both its
+  tables are gone; the queryable graph is now a projection over statements
+  an engineer approved. See
+  [ADR-0025](0025-retire-the-legacy-knowledge-graph.md).
 
 ## Rejected Alternatives
 

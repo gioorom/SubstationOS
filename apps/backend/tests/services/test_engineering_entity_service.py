@@ -318,13 +318,22 @@ def test_resolution_creates_no_graph_node_and_no_index_entry(
     produces a hypothesis; it does not commit to it."""
 
     from app.models.engineering_index import EngineeringIndexEntry
-    from app.models.knowledge_graph import ProjectEntity
+    # Repointed by EPIC 31.1: `ProjectEntity`/`EntityRelation` were the
+    # ungoverned tables that milestone dropped. The property asserted is
+    # now stronger - the stage writes no *governed* knowledge, because
+    # knowledge enters the graph only through an explicit promotion of a
+    # statement an engineer approved.
+    from app.models.governed_knowledge_graph import (
+        GovernedGraphEdgeRecord,
+        GovernedGraphNodeRecord,
+    )
 
     document = _prepared(db_session)
 
     _resolve(db_session, document.id)
 
-    assert db_session.query(ProjectEntity).count() == 0
+    assert db_session.query(GovernedGraphNodeRecord).count() == 0
+    assert db_session.query(GovernedGraphEdgeRecord).count() == 0
     assert db_session.query(EngineeringIndexEntry).count() == 0
 
 

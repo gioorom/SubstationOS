@@ -39,6 +39,36 @@ that accept a password are unreachable from any response.
 the record of who created a project was whatever the caller typed; it now
 comes from the authenticated identity, along with `owner_user_id`.
 
+## Removed endpoints (EPIC 31.1)
+
+Three routes were **removed**, not deprecated:
+
+```
+GET /projects/{project_id}/knowledge-graph        removed
+GET /projects/{project_id}/entities               removed
+GET /projects/{project_id}/entities/{entity_id}   removed
+```
+
+They served the legacy Knowledge Graph - LLM-extracted entities written
+straight from upload with no review gate. They had carried
+`deprecated: true` since Architecture Freeze v1.0, which changed nothing:
+a deprecated endpoint serving ungoverned data still serves ungoverned
+data. A `410 Gone` shim was considered and rejected, because it preserves
+a URL whose only honest answer is that the data should never have been
+queryable.
+
+**The governed replacements** are `GET /knowledge-graph/nodes`,
+`/knowledge-graph/edges` and `/knowledge-graph/nodes/{node_id}` (EPIC
+31), which return only knowledge an engineer approved and carry the
+provenance to prove it.
+
+One response field survives its cause: `analysis.entities_found` on
+`POST /documents/upload` is now **always `0`**, because an upload no
+longer writes any graph. It is kept at zero rather than removed, which
+would be a breaking response change this milestone did not need to make.
+
+See [ADR-0025](adr/0025-retire-the-legacy-knowledge-graph.md).
+
 ## The rule
 
 **Every public endpoint exposes a governed application schema.** Never an

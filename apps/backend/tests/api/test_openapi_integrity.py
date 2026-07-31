@@ -136,7 +136,6 @@ def test_every_active_router_contributes_at_least_one_route() -> None:
     expected_tags = {
         "Documents",
         "Projects",
-        "Knowledge Graph (Legacy)",
         "Engineering Index",
         "Proposed Claims",
         "Review Workflow",
@@ -148,6 +147,7 @@ def test_every_active_router_contributes_at_least_one_route() -> None:
         "Context Builder",
         "Prompt Builder",
         "LLM Provider",
+        "Governed Knowledge Graph",
     }
 
     missing = expected_tags - tags_seen
@@ -155,15 +155,30 @@ def test_every_active_router_contributes_at_least_one_route() -> None:
     assert missing == set()
 
 
-def test_legacy_router_is_marked_deprecated() -> None:
-    legacy_routes = [
-        route
-        for route in _api_routes()
-        if "Knowledge Graph (Legacy)" in (route.tags or [])
-    ]
+def test_the_legacy_knowledge_graph_router_no_longer_exists() -> None:
+    """
+    Inverted by EPIC 31.1.
 
-    assert legacy_routes
-    assert all(route.deprecated for route in legacy_routes)
+    This test used to assert that the legacy router was *marked
+    deprecated*. The router is now gone, along with the service and the
+    two ungoverned tables it read, so the assertion becomes the stronger
+    one: no route anywhere serves the retired graph.
+
+    Kept rather than deleted, because "the legacy graph is gone" is worth
+    a standing check - a re-introduction would otherwise be invisible.
+    """
+
+    tags = {tag for route in _api_routes() for tag in (route.tags or [])}
+
+    assert "Knowledge Graph (Legacy)" not in tags
+
+    paths = {route.path for route in _api_routes()}
+
+    # The three retired reads. `/projects/{id}/knowledge-graph/nodes` and
+    # its siblings survive: those belong to the Canonical Facts lineage
+    # (Milestone 11.2), which this milestone deliberately retained.
+    assert "/projects/{project_id}/entities" not in paths
+    assert "/projects/{project_id}/knowledge-graph" not in paths
 
 
 def test_governed_graph_routes_are_not_deprecated() -> None:

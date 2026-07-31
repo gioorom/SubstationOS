@@ -13,6 +13,8 @@ import type {
   CanonicalPdfPage,
   CurrentReview,
   GraphEdge,
+  GraphNode,
+  GraphNodeListResponse,
   StatementPromotion,
   Review,
   ReviewHistoryEntry,
@@ -752,5 +754,39 @@ export function anUnpromotedStatement(
     refusal: "not_reviewed",
     edge: null,
     ...overrides,
+  };
+}
+
+
+/** One governed node, as the graph serialises it. */
+export function aGraphNode(overrides: Partial<GraphNode> = {}): GraphNode {
+  return {
+    node_id: "a".repeat(64),
+    kind: "engineering_asset",
+    entity_key: "entity-tr1",
+    label: "TR1",
+    normalized_value: "TR1",
+    unit: null,
+    state: "active",
+    created_at: "2026-07-30T09:00:00",
+    retirement: null,
+    provenance: aGraphEdge().provenance,
+    ...overrides,
+  };
+}
+
+export function aGraphNodeList(
+  nodes: GraphNode[],
+): GraphNodeListResponse {
+  return {
+    items: nodes,
+    pagination: {
+      page: 1,
+      page_size: 50,
+      total: nodes.length,
+      total_pages: nodes.length === 0 ? 0 : 1,
+      has_next: false,
+      has_previous: false,
+    },
   };
 }

@@ -144,8 +144,10 @@ downgrade, never a hard failure.
 ## Configuration
 
 `app/application/config/llm_configuration.py` - plain `os.getenv`, the
-same convention `app/services/ai/claude_provider.py` already
-established (no settings framework introduced):
+convention the repository has always used (no settings framework
+introduced). It was inherited from the legacy
+`app/services/ai/claude_provider.py`, which EPIC 31.1 deleted; this is
+now the only place a provider is configured:
 
 | Variable | Required | Default |
 |---|---|---|

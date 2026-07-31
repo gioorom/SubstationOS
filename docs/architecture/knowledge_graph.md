@@ -29,31 +29,57 @@ The pipeline stays the producer of engineering knowledge. Human Review
 stays the record of engineering judgement. The graph is what those two
 imply, made queryable.
 
-## 2. Where this sits among three prior graph efforts
+## 2. The graph inventory, after EPIC 31.1
 
-**The repository already contained two other graph implementations**, and
-this milestone touched neither. Stating the relationship plainly, because
-three graphs in one codebase is otherwise a trap:
+The repository held **three** graph implementations. EPIC 31.1 retired
+one and documented why the other remains.
 
 | | Source lineage | Status |
 |---|---|---|
-| `knowledge_graph.py` + `project_entities` / `entity_relations` | AI extraction, written straight from upload | **Legacy.** Isolated by [ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md); violates the review gate [ADR-0004](adr/0004-reviewed-facts-only-in-queryable-graph.md) requires. |
-| `graph_builder` + `project_knowledge_graph` (Milestones 11.1/11.2) | Canonical Facts, from Proposed Claims and the legacy review workflow | Implemented, unretired. Fed by a lineage the deterministic pipeline replaced. |
-| **`governed_knowledge_graph` (EPIC 31)** | Semantic statements + Human Review | This one. |
+| ~~`knowledge_graph.py` + `project_entities` / `entity_relations`~~ | AI extraction, written straight from upload | **Retired, EPIC 31.1.** Code deleted, tables dropped by migration `e28b91f4c073`. See [ADR-0025](adr/0025-retire-the-legacy-knowledge-graph.md). |
+| `graph_builder` + `project_knowledge_graph` + `graph_query` | Canonical Facts, from Proposed Claims | **Retained.** Read at runtime by Structured Retrieval and therefore by the whole Engineering Engine stack. Not proven unused, so not removed. |
+| **`governed_knowledge_graph`** | Semantic statements + Human Review | The authoritative engineering knowledge model. |
 
-A third context was created rather than extending the second, for one
-decisive reason: the EPIC requires that **no source other than approved
-semantics may insert engineering knowledge**. `project_knowledge_graph`
-accepts `GraphOperationBatch`es built from Canonical Facts, so extending
-it would have meant either accepting a second, ungoverned source or
-removing a capability two shipped milestones depend on.
+### What the retirement ended
 
-**Recommended retirement path**, not performed here: once nothing reads
-`project_entities` / `entity_relations`, delete the legacy path and the
-`ingest_document` write that ADR-0004 already condemns; then decide
-whether the Canonical Facts lineage still has a consumer, and if not,
-retire `graph_builder` and `project_knowledge_graph` with it. Both are
-one milestone each and neither belongs inside this one.
+`ingest_document` wrote LLM-extracted entities into the queryable graph
+on **every upload** - no reviewer, no review date, no provenance beyond a
+filename, and a bare `confidence` float as the only trust signal.
+[ADR-0004](adr/0004-reviewed-facts-only-in-queryable-graph.md) recorded
+at Architecture Freeze v1.0 that this must not happen and that it was
+happening anyway; [ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md)
+quarantined it. EPIC 31 built the replacement; EPIC 31.1 deleted the
+original.
+
+Also removed with it, all proven unreachable: `services/entity_extractor.py`
+(a regex extractor), `services/topology/**` (a topology builder over the
+dropped tables) and `services/ai/**` - an entire second LLM client that
+predated the governed provider abstraction in
+`infrastructure/llm/anthropic`.
+
+**Ingestion now writes no graph at all.** Uploading a document stores,
+identifies and canonicalises it. Knowledge enters the graph only through
+an explicit, capability-gated promotion, and an architecture test asserts
+the pipeline's downstream consumer is `None`.
+
+### Why the Canonical Facts lineage stays
+
+It is **in use**. `structured_retrieval_service` reads it through
+`GraphQueryRepository`, and the Engineering Engine reads that - six
+milestones of working question-answering sit on top. Removing it to
+achieve a headline count of one would have broken all of them.
+
+`tests/architecture/test_graph_consolidation.py` asserts that it is still
+read, so the day nothing reads it any more is the day this repository
+says so.
+
+**Closing the gap is a real milestone, not a cleanup.** Structured
+Retrieval matches on `graph_query`'s **property bags**; the governed
+graph deliberately has none (ADR-0024), so the matching strategies need
+rewriting against typed fields, and retrieval quality would change in
+ways that need measuring. Forcing property bags into the governed graph
+to ease the migration would undo ADR-0024's central decision and must not
+be the answer.
 
 ## 3. What the graph may contain
 
@@ -346,8 +372,9 @@ retired and why, and the record stays readable.
 - **The graph is unversioned per project.** One generation covers the
   whole installation, so a rebuild triggered by one project's work
   renumbers globally.
-- **Three graph implementations coexist.** The other two are untouched
-  and unretired; §2 recommends the path.
+- **Two graph implementations coexist.** The legacy one is gone; the
+  Canonical Facts lineage remains because the Engineering Engine reads
+  it. §2 states what closing that requires.
 
 ---
 

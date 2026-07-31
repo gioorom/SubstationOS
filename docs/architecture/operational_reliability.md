@@ -74,11 +74,14 @@ already serves both purposes for this application's current size.
   hardcoded and the app has always worked), and changing it touches
   real deployment wiring rather than hardening the already-working
   knowledge pipeline - tracked as remaining technical debt instead.
-- **AI provider configuration** (`app/services/ai/claude_provider.py`):
-  `ANTHROPIC_API_KEY` is required with no default; its absence raises
-  `AIProviderError` immediately at `ClaudeProvider()` construction,
-  not a silent no-op or a downstream `KeyError`. This was already
-  correct before this milestone and required no change.
+- **AI provider configuration**: `ANTHROPIC_API_KEY` is required with no
+  default, and its absence fails immediately at construction rather than
+  as a silent no-op or a downstream `KeyError`. This was described here
+  against `app/services/ai/claude_provider.py`, which **EPIC 31.1
+  deleted** along with the rest of the legacy Knowledge Graph path. The
+  same property now belongs to the governed provider adapter,
+  `app/infrastructure/llm/anthropic/**`, configured through
+  `app/application/config/llm_configuration.py`.
 - **`.env.example`** (new this milestone, `apps/backend/.env.example`):
   documents every environment variable the backend actually reads
   (`ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `SUBSTATIONOS_DATABASE_URL`),

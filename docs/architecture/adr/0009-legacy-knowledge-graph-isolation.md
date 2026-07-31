@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted.
+Accepted, and **discharged by [ADR-0025](0025-retire-the-legacy-knowledge-graph.md)
+(EPIC 31.1)**: the legacy Knowledge Graph this ADR isolated has been
+deleted, together with its two tables. The isolation it mandated held the
+line until a governed replacement existed; there is now nothing left to
+isolate. Retained as the record of why the legacy path was quarantined
+rather than trusted.
 
 ## Context
 

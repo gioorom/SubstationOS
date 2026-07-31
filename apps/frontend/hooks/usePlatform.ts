@@ -4,14 +4,11 @@ import { useCallback } from "react";
 
 import type { ErrorCopy } from "@/lib/api";
 import type {
-  GraphEntityType,
   HealthResponse,
-  KnowledgeGraph,
   ProjectIntelligence,
 } from "@/lib/contracts";
 import {
   getHealth,
-  getKnowledgeGraph,
   getProjectIntelligence,
 } from "@/lib/resources/platform";
 
@@ -63,35 +60,6 @@ export function useProjectIntelligence(projectId: number | undefined) {
   return {
     intelligence: resource.data,
     loading: resource.loading,
-    error: resource.error,
-    reload: resource.reload,
-  };
-}
-
-export function useKnowledgeGraph(
-  projectId: number | undefined,
-  search?: string,
-  entityType?: GraphEntityType,
-) {
-  const read = useCallback(
-    (signal: AbortSignal) =>
-      getKnowledgeGraph(projectId as number, {
-        search,
-        entityType,
-        signal,
-      }),
-    [projectId, search, entityType],
-  );
-
-  const resource = useResource<KnowledgeGraph>(read, {
-    enabled: projectId !== undefined,
-    copy: PROJECT_COPY,
-  });
-
-  return {
-    graph: resource.data,
-    loading: resource.loading,
-    refreshing: resource.refreshing,
     error: resource.error,
     reload: resource.reload,
   };

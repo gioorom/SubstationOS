@@ -43,8 +43,6 @@ import {
   EVIDENCE_TYPE_LABELS,
   FACT_PREDICATES,
   FACT_STATUSES,
-  GRAPH_ENTITY_TYPES,
-  GRAPH_RELATION_TYPES,
   INGESTION_STATES,
   PIPELINE_STAGES,
   PIPELINE_STAGE_DESCRIPTIONS,
@@ -107,10 +105,10 @@ describe.runIf(schema !== null)("enums match the backend", () => {
     ["IngestionState", INGESTION_STATES],
     ["EvidenceType", EVIDENCE_TYPES],
     ["EvidenceStatus", EVIDENCE_STATUSES],
-    [
-      "app__domain__engineering_entities__entity_models__EntityType",
-      ENTITY_TYPES,
-    ],
+    // Plain `EntityType` again since EPIC 31.1. The fully-qualified name
+    // existed only because the retired legacy graph declared a second
+    // enum of the same name; with that gone, the collision is too.
+    ["EntityType", ENTITY_TYPES],
     ["EntityStatus", ENTITY_STATUSES],
     ["FactPredicate", FACT_PREDICATES],
     ["FactStatus", FACT_STATUSES],
@@ -134,7 +132,6 @@ describe.runIf(schema !== null)("enums match the backend", () => {
     ["PromotionRefusal", PROMOTION_REFUSALS],
     ["SemanticStatementType", SEMANTIC_STATEMENT_TYPES],
     ["SemanticStatementStatus", SEMANTIC_STATEMENT_STATUSES],
-    ["RelationType", GRAPH_RELATION_TYPES],
     // Milestone 30.1.3: the governed query vocabularies. A member here
     // that the backend does not declare is a filter the API refuses.
     ["ProjectSortField", PROJECT_SORT_FIELDS],
@@ -144,16 +141,6 @@ describe.runIf(schema !== null)("enums match the backend", () => {
 
   it.each(cases)("%s", (name, declared) => {
     expect([...declared].sort()).toEqual([...backendEnum(name)].sort());
-  });
-
-  it("EntityType (knowledge graph) includes busbar and line", () => {
-    // Both were missing from the previous frontend enum, so a graph node
-    // of either type rendered as an unknown value.
-    const backend = backendEnum("EntityType-Input");
-
-    expect([...GRAPH_ENTITY_TYPES].sort()).toEqual([...backend].sort());
-    expect(GRAPH_ENTITY_TYPES).toContain("busbar");
-    expect(GRAPH_ENTITY_TYPES).toContain("line");
   });
 
   it("DocumentFormat and DocumentCategory match the ORM vocabulary", () => {

@@ -123,7 +123,6 @@ from app.services import (
 )
 from app.services.document_identity_service import resolve_document_identity
 from app.services.document_pipeline_service import PipelineStage
-from app.services.knowledge_graph import ingest_document
 from app.services.storage import safe_storage_name, save_file
 
 
@@ -569,8 +568,9 @@ def _run_document_pipeline(
     """
 
     if project is None:
-        # The Knowledge Graph is per-project. A canonical-library
-        # document has no project to be ingested into.
+        # A canonical-library document belongs to no project. Nothing
+        # downstream of canonicalisation is per-project any more, but the
+        # reported status keeps its long-standing vocabulary.
         return UploadAnalysisRead(
             status="skipped", entities_found=0, failure=None
         )
@@ -587,18 +587,31 @@ def _run_document_pipeline(
         ),
         text_repository=SqlAlchemyCanonicalTextRepository(db),
         now=datetime.utcnow(),
-        consumer=lambda text: ingest_document(
-            db=db,
-            project_id=project.id,
-            text=text,
-            source_document=document.filename,
-        ),
+        # **No downstream consumer, since EPIC 31.1.**
+        #
+        # This callback used to be `knowledge_graph.ingest_document`,
+        # which wrote LLM-extracted entities and relationships straight
+        # into the queryable graph on every upload - with no review gate,
+        # no reviewer and no provenance. ADR-0004 recorded from
+        # Architecture Freeze v1.0 that this must not happen and that it
+        # was happening anyway; this is where it stopped.
+        #
+        # Knowledge now enters the graph only through an explicit,
+        # capability-gated promotion of a statement an engineer approved.
+        # Uploading a document produces canonical artefacts and nothing
+        # else, which is what makes "the graph contains only governed
+        # knowledge" true rather than aspirational.
+        consumer=None,
     )
 
     if result.succeeded:
         return UploadAnalysisRead(
             status="completed",
-            entities_found=len(result.consumer_result or []),
+            # Always zero since EPIC 31.1: an upload no longer writes
+            # any graph. Kept in the response, at zero, rather than
+            # removed - see `public_api.md` on why this field survives
+            # its cause.
+            entities_found=0,
             failure=None,
         )
 

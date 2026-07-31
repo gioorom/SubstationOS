@@ -3,8 +3,6 @@
 import { apiClient } from "@/lib/api";
 import type {
   HealthResponse,
-  KnowledgeGraph,
-  GraphEntityType,
   ProjectIntelligence,
 } from "@/lib/contracts";
 
@@ -24,28 +22,5 @@ export function getProjectIntelligence(
   return apiClient.get<ProjectIntelligence>(
     `/projects/${projectId}/intelligence`,
     { signal, retries: 1 },
-  );
-}
-
-export interface KnowledgeGraphQuery {
-  search?: string;
-  entityType?: GraphEntityType;
-  signal?: AbortSignal;
-}
-
-export function getKnowledgeGraph(
-  projectId: number,
-  query: KnowledgeGraphQuery = {},
-): Promise<KnowledgeGraph> {
-  return apiClient.get<KnowledgeGraph>(
-    `/projects/${projectId}/knowledge-graph`,
-    {
-      query: {
-        search: query.search?.trim() || undefined,
-        entity_type: query.entityType,
-      },
-      signal: query.signal,
-      retries: 1,
-    },
   );
 }
