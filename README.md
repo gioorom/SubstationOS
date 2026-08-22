@@ -1,66 +1,106 @@
 # SubstationOS
 
-Engineering Operating System for HV/MV substations — see
-`PRODUCT_VISION.md` for the product vision and `CLAUDE.md` for how the
-codebase is built.
+**An engineering operating system for HV/MV substations.**
 
-## Documentation map
+Commissioning a high-voltage substation means working across hundreds of
+documents: single-line diagrams, functional and protection schematics, relay
+setting sheets, factory and site test reports, client specifications, standards.
+They arrive in different formats, from different vendors, in different
+revisions. Answering one concrete question — *which CT ratio was specified for
+this bay, and does the relay setting actually match it?* — means opening five
+documents and trusting your memory for the rest.
 
-- `CLAUDE.md` — engineering manual: architecture, conventions, workflow.
-  Start here before writing any code.
-- `PRODUCT_VISION.md` — product vision, mission, and long-range product
-  narrative.
-- `docs/project/PRODUCT_DEVELOPMENT_PLAN.md` — the official long-term
-  roadmap: current status, EPICs, milestones, and success criteria.
-- `docs/developer_setup.md` — how to run the backend and frontend
-  locally, and how to keep the API contract in sync.
-- `docs/architecture/` — Architecture Freeze v1.0: the binding
-  architecture (`project_intelligence_architecture.md`), its
-  Architecture Decision Records (`adr/`), and the implementation
-  readiness checklist (`ARCHITECTURE_FREEZE_V1_CHECKLIST.md`).
-  `knowledge_pipeline_overview.md` documents the knowledge pipeline as
-  actually implemented; `database_migrations.md`,
-  `repository_transaction_conventions.md`,
-  `operational_reliability.md`, and `performance_baseline.md` document
-  its operational hardening (Milestone 12); `structured_retrieval.md`
-  documents the deterministic retrieval layer (Milestone 13);
-  `frontend_architecture.md` documents the web client and
-  `public_api.md` the governed Project and Document API contract.
+SubstationOS ingests that documentation, organises it into per-site project
+workspaces, and turns it into a queryable engineering knowledge base.
 
-## Backend quick start
+The project is built by a field commissioning engineer, against the problem as
+it actually shows up on site.
 
-No dependency manifest exists yet (tracked in the Development Plan's
-Technical Debt) — install the backend's packages into your virtual
-environment by hand (FastAPI, SQLAlchemy, Alembic, python-dotenv,
-anthropic, pytest, httpx, uvicorn), then:
+---
+
+## What it does today
+
+- **Project workspaces** — one project per substation or commissioning job,
+  holding all of its technical documentation.
+- **Knowledge pipeline** — ingestion and extraction of technical documents into
+  a canonical knowledge representation, rather than a pile of raw files.
+- **Structured retrieval** — a deterministic retrieval layer over that knowledge
+  base, so answers are traceable back to the document they came from.
+- **Governed API** — a versioned Project and Document API contract, consumed by
+  a Next.js web client.
+
+## Roadmap
+
+- **Engineering agent** — advanced search and cross-document reasoning:
+  connecting a specification to the scheme that implements it and to the test
+  report that verifies it.
+- **AutoCAD integration** — a copilot for drafting and revising functional and
+  protection schematics from within the drawing environment.
+
+## Architecture
+
+| Layer | Stack |
+|---|---|
+| Backend | Python, FastAPI, SQLAlchemy, Alembic |
+| Frontend | Next.js (119 tests) |
+| LLM layer | Anthropic API |
+| Database | SQL, migration-managed |
+
+The architecture is frozen at **v1.0** and documented as Architecture Decision
+Records. Operational concerns — migrations, transaction conventions,
+reliability, performance baselines — are documented rather than implied.
+
+## Status
+
+Under active development, single author. Working software, not production
+software: expect breaking changes, and don't point it at anything you can't
+afford to lose. Issues and observations are welcome.
+
+## Getting started
+
+**Backend** — no dependency manifest yet (tracked as technical debt). Install
+into a virtualenv: `fastapi`, `sqlalchemy`, `alembic`, `python-dotenv`,
+`anthropic`, `pytest`, `httpx`, `uvicorn`.
 
 ```bash
 cd apps/backend
-alembic upgrade head        # or `alembic stamp head` for an existing dev database
+alembic upgrade head        # or `alembic stamp head` on an existing dev database
 uvicorn app.main:app --reload
-python -m pytest            # full test suite
+python -m pytest
 ```
 
-See `docs/architecture/database_migrations.md` for the full migration
-workflow (fresh vs. existing database) and
-`docs/architecture/performance_baseline.md` for how to run the graph
-performance benchmarks.
-
-## Frontend quick start
+**Frontend**
 
 ```bash
 cd apps/frontend
 npm install
 npm run dev                 # http://localhost:3000
-npm test                    # 119 tests
+npm test
 ```
 
 The frontend reads `NEXT_PUBLIC_API_BASE_URL` (default
-`http://127.0.0.1:8000`). See `docs/developer_setup.md`.
+`http://127.0.0.1:8000`). Full setup notes in `docs/developer_setup.md`.
 
-## Layout
+## Repository layout
 
-- `apps/backend/` — Python/FastAPI backend (primary application).
-- `apps/frontend/` — Next.js web frontend.
-- `knowledge/` — Canonical Knowledge Protocol and extraction
-  infrastructure.
+```
+apps/backend/     Python / FastAPI backend (primary application)
+apps/frontend/    Next.js web frontend
+knowledge/        Canonical Knowledge Protocol and extraction infrastructure
+docs/             Architecture, ADRs, operational and product documentation
+```
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [`PRODUCT_VISION.md`](PRODUCT_VISION.md) | Product vision, mission, long-range narrative |
+| [`CLAUDE.md`](CLAUDE.md) | Engineering manual: architecture, conventions, workflow |
+| [`docs/architecture/`](docs/architecture/) | Architecture Freeze v1.0, ADRs, readiness checklist |
+| [`docs/project/PRODUCT_DEVELOPMENT_PLAN.md`](docs/project/PRODUCT_DEVELOPMENT_PLAN.md) | Roadmap: status, EPICs, milestones |
+| [`docs/developer_setup.md`](docs/developer_setup.md) | Local development setup |
+
+## License
+
+All rights reserved. Readable as a portfolio and reference project; not licensed
+for reuse.
