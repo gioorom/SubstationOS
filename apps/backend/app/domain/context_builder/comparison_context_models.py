@@ -8,8 +8,9 @@ statistics - is a statement about that one body. Adding a second set to it
 would make every existing field ambiguous.
 
 Instead a ``ComparisonContextPackage`` holds two whole
-``ContextPackage``s, each assembled by the existing builder, entirely
-unchanged. That is the smallest honest representation of "two labelled
+``ContextPackage``s, each assembled by the same governed Context
+Assembly, entirely unchanged. That is the smallest honest
+representation of "two labelled
 evidence groups": the sides are separate objects, so nothing downstream
 can flatten them by accident, and each side keeps its own coverage and
 budget story rather than an averaged one that would describe neither.
@@ -44,7 +45,7 @@ class ComparisonOperandContext:
 
     @property
     def evidence_count(self) -> int:
-        return len(self.package.selected_candidates)
+        return len(self.package.selected_items)
 
     @property
     def has_evidence(self) -> bool:
@@ -64,7 +65,7 @@ class ComparisonContextPackage:
     The bounded, two-sided artifact a comparison prompt is built from.
 
     Deliberately holds no merged view of the two sides - no combined
-    candidate list, no union, no diff. Computing a difference is the
+    item list, no union, no diff. Computing a difference is the
     comparison's *answer*, and precomputing one here would either
     duplicate the reasoning or, worse, invent a structural difference
     (two entities are not "the same attribute changed" merely because

@@ -20,14 +20,13 @@ from app.domain.engineering_response.engineering_response_models import (
     EngineeringResponseStatus,
     EngineeringSourceFinishReason,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidateCollection,
-)
 from app.services import (
     context_builder_service,
     engineering_response_service,
     prompt_builder_service,
 )
+
+from tests._governed_context import designation_result
 from app.services.engineering_response_service import (
     _source_envelope_from_llm_envelope,
 )
@@ -37,11 +36,10 @@ NOW = datetime(2026, 1, 1, 13, 0, 0)
 
 
 def _packages(project_id: int = PROJECT_ID):
-    collection = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
     context_result = context_builder_service.build_context_package(
-        project_id=project_id, candidates=collection, now=NOW
+        project_id=project_id,
+        results=(designation_result("TR1", ()),),
+        now=NOW,
     )
     prompt_result = prompt_builder_service.build_prompt_package(
         project_id=project_id, context_package=context_result.package, now=NOW
@@ -85,7 +83,7 @@ def _envelope(prompt_package, **overrides) -> LLMResponseEnvelope:
             adapter_version="1.0",
             request_preparation_policy_version="1.0",
             prompt_package_version=prompt_package.version.package_version,
-            context_builder_version=prompt_package.metadata.context_builder_version,
+            context_assembly_version=prompt_package.metadata.context_assembly_version,
             prompt_builder_version=prompt_package.version.prompt_builder_version,
         ),
     )

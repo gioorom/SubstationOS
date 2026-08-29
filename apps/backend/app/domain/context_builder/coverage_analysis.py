@@ -1,12 +1,17 @@
 """
-Coverage Analysis (Milestone 14's pipeline stage of the same name).
-Explains how much of the retrieved knowledge entered the package -
-selection completeness, never engineering confidence or certainty about
-the underlying facts (Milestone 14's explicit "do not invent confidence
-percentages" rule). Every ratio is ``selected_count / available_count``,
-or ``1.0`` when nothing was available to begin with (vacuously
-complete - there is nothing missing). A single O(1) pass over the four
-already-computed counts; no I/O.
+Coverage Analysis: how much of the retrieved governed knowledge entered
+the package.
+
+Selection completeness, **never engineering confidence** and never
+certainty about the underlying knowledge. Every ratio is
+``selected_count / available_count``, or ``1.0`` when nothing was
+available to begin with (vacuously complete - there is nothing missing).
+A single O(1) pass over already-computed counts; no I/O.
+
+A high ratio means "little was dropped on the way into this context". It
+says nothing about whether the governed knowledge answers the engineer's
+question, and a reader that treated it as a quality signal would be
+reading a budget report as an engineering judgement.
 """
 
 from __future__ import annotations
@@ -38,31 +43,31 @@ def _metric(
 def analyze(
     summary: RetrievalSummary, assembly: ContextAssemblyResult
 ) -> CoverageReport:
-    entity_metric = _metric(
-        CoverageCategory.ENTITY_COVERAGE,
-        len(assembly.selected_entities),
-        summary.retrieved_entity_count,
+    asset_metric = _metric(
+        CoverageCategory.ASSET_COVERAGE,
+        len(assembly.selected_assets),
+        summary.retrieved_asset_count,
+    )
+    quantity_metric = _metric(
+        CoverageCategory.QUANTITY_COVERAGE,
+        len(assembly.selected_quantities),
+        summary.retrieved_quantity_count,
     )
     relationship_metric = _metric(
         CoverageCategory.RELATIONSHIP_COVERAGE,
         len(assembly.selected_relationships),
         summary.retrieved_relationship_count,
     )
-    attribute_metric = _metric(
-        CoverageCategory.ATTRIBUTE_COVERAGE,
-        len(assembly.selected_attributes),
-        summary.retrieved_attribute_count,
-    )
     utilization_metric = _metric(
-        CoverageCategory.CANDIDATE_UTILIZATION,
-        len(assembly.selected_candidates),
-        summary.retrieved_candidate_count,
+        CoverageCategory.ITEM_UTILIZATION,
+        len(assembly.selected_items),
+        summary.retrieved_item_count,
     )
 
     base_metrics = (
-        entity_metric,
+        asset_metric,
+        quantity_metric,
         relationship_metric,
-        attribute_metric,
         utilization_metric,
     )
     overall_completeness = sum(metric.ratio for metric in base_metrics) / len(
@@ -71,8 +76,8 @@ def analyze(
 
     completeness_metric = CoverageMetric(
         category=CoverageCategory.CONTEXT_COMPLETENESS,
-        selected_count=len(assembly.selected_candidates),
-        available_count=summary.retrieved_candidate_count,
+        selected_count=len(assembly.selected_items),
+        available_count=summary.retrieved_item_count,
         ratio=overall_completeness,
     )
 

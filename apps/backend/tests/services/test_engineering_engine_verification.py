@@ -50,8 +50,8 @@ from app.services.engineering_engine.composition import (
 from tests.services._engineering_engine_support import (
     FakeDocumentMetadataPort,
     FakeEngineeringIndexRepository,
-    FakeGraphQueryRepository,
-    PopulatedFakeGraphQueryRepository,
+    FakeGovernedKnowledgeReader,
+    PopulatedFakeGovernedKnowledgeReader,
     build_test_engine,
     execution_request,
     no_op_sleeper,
@@ -87,7 +87,7 @@ def _verification_request(**overrides):
 def _engine_answering(text: str, *, graph=None, **overrides):
     return build_test_engine(
         outcomes=(FakeInvocationOutcome(text=text),),
-        graph_query_repository=graph or PopulatedFakeGraphQueryRepository(),
+        governed_knowledge_reader=graph or PopulatedFakeGovernedKnowledgeReader(),
         **overrides,
     )
 
@@ -143,7 +143,7 @@ def test_the_engine_resolves_the_workflow_through_the_registry() -> None:
 
 def test_the_composed_handler_registry_covers_every_step() -> None:
     registry = build_step_handler_registry(
-        graph_query_repository=FakeGraphQueryRepository(),
+        governed_knowledge_reader=FakeGovernedKnowledgeReader(),
         provider_registry=provider_registry(),
         runtime_configuration=runtime_configuration(),
         credential_present=True,
@@ -312,7 +312,7 @@ def test_an_empty_project_cannot_yield_a_supported_verdict() -> None:
 
     result = _verify(
         "SUPPORTED\nThe relay is present.",
-        graph=FakeGraphQueryRepository(),
+        graph=FakeGovernedKnowledgeReader(),
     )
 
     assessment = result.engineering_response.verification
@@ -324,7 +324,7 @@ def test_an_empty_project_cannot_yield_a_supported_verdict() -> None:
 
 
 def test_an_empty_retrieval_still_warns_about_insufficient_evidence() -> None:
-    result = _verify("SUPPORTED\nc1.", graph=FakeGraphQueryRepository())
+    result = _verify("SUPPORTED\nc1.", graph=FakeGovernedKnowledgeReader())
 
     assert any(
         warning.category.value == "insufficient_evidence"
@@ -338,7 +338,7 @@ def test_an_empty_retrieval_still_warns_about_insufficient_evidence() -> None:
 def test_a_retrieval_failure_stops_execution_at_that_step() -> None:
     engine = _engine_answering(
         "SUPPORTED\nc1.",
-        graph=FakeGraphQueryRepository(raises=RuntimeError("graph exploded")),
+        graph=FakeGovernedKnowledgeReader(raises=RuntimeError("graph exploded")),
     )
 
     result = _execute(engine, _verification_request())
@@ -369,7 +369,7 @@ def test_a_runtime_failure_is_reported_with_the_existing_code() -> None:
                 ),
             ),
         ),
-        graph_query_repository=PopulatedFakeGraphQueryRepository(),
+        governed_knowledge_reader=PopulatedFakeGovernedKnowledgeReader(),
     )
 
     result = _execute(engine, _verification_request())
@@ -428,7 +428,7 @@ def test_a_knowledge_query_carries_no_verification_assessment() -> None:
     prompt - no other workflow gains one."""
 
     engine = build_test_engine(
-        graph_query_repository=PopulatedFakeGraphQueryRepository()
+        governed_knowledge_reader=PopulatedFakeGovernedKnowledgeReader()
     )
 
     result = _execute(
@@ -442,7 +442,7 @@ def test_a_knowledge_query_carries_no_verification_assessment() -> None:
 
 def test_an_explanation_carries_no_verification_assessment() -> None:
     engine = build_test_engine(
-        graph_query_repository=PopulatedFakeGraphQueryRepository()
+        governed_knowledge_reader=PopulatedFakeGovernedKnowledgeReader()
     )
 
     result = _execute(

@@ -134,8 +134,9 @@ readiness declaration)
 | Canonicalization | Implemented — deterministic normalization of `APPROVED` claims into `CanonicalFact`s (Milestone 11) |
 | Project Knowledge Graph | Implemented — Graph Builder translates facts into operations, Graph Persistence executes them atomically and idempotently against a project-scoped SQL-backed store (Milestones 11.1, 11.2, ADR-0007); schema lifecycle is now Alembic-managed rather than `create_all()` (Milestone 12, ADR-0008); the legacy `ingest_document`/`ProjectEntity`/`EntityRelation` path is retained, isolated, and marked deprecated rather than merged or deleted (Milestone 12, ADR-0009) |
 | Graph Query | Implemented — deterministic, read-only queries (by id, by type, by attribute presence, 1-hop adjacency, statistics, orphan detection) over current graph state through its own read port (Milestone 11.3); NL interpretation, semantic ranking, and answer generation are not yet built (see [knowledge_pipeline_overview.md](../architecture/knowledge_pipeline_overview.md)) |
-| Structured Retrieval | Implemented — deterministic, explainable `KnowledgeCandidate` ranking from structured criteria (entity lookup, entity type, attribute, relationship, lexical, combined) over Graph Query's read model, with fixed scoring weights and deterministic candidate identity (Milestone 13, ADR-0010); no embeddings, vector search, or NL interpretation |
-| Context Builder | Implemented — deterministic, bounded, provenance-aware `ContextPackage` assembly (selection, aggregation, coverage, budget enforcement, warnings, statistics, metadata) from a `KnowledgeCandidateCollection` (Milestone 14, ADR-0011); no persistence, no AI, no prompt generation; since Milestone 24.2 also a `ComparisonContextPackage` - two whole `ContextPackage`s built by the same unchanged builder, paired under named left/right fields and never merged |
+| Structured Retrieval (Canonical Facts) | Implemented — deterministic, explainable `KnowledgeCandidate` ranking from structured criteria (entity lookup, entity type, attribute, relationship, lexical, combined) over Graph Query's read model, with fixed scoring weights and deterministic candidate identity (Milestone 13, ADR-0010); no embeddings, vector search, or NL interpretation. **No longer the Engineering Engine's retrieval (EPIC 31.2)** — still served by its own two endpoints, over a different lineage with a different governance story |
+| Governed Structured Retrieval | Implemented — the Engineering Engine's retrieval since EPIC 31.2, and it consumes the Governed Knowledge Graph **exclusively** (ADR-0026). Five typed queries (asset by designation, quantity for an asset, relationships, document knowledge, governed identity) with explicit fields and no free text, no filter object and no query language. Matching is against typed governed fields only — the governed graph has no property bag, and none was carried forward in either direction — through three documented deterministic folds; **ranking is by match strategy, never by a score**, because a weight attached to engineering knowledge is the ungoverned trust signal ADR-0004 rejected. Every result names exactly one match strategy, the governed field that carried it, and mandatory provenance (statement, review, reviewer, rule and policy versions, support fingerprint, document). Ambiguity is preserved rather than resolved: `NO_MATCH`/`UNIQUE_MATCH`/`MULTIPLE_MATCHES` is computed before any limit, and two documents designating the same thing stay two answers. Historical knowledge never answers a current question unless a caller asks for it explicitly. Retrieval implements no governance of its own — it reads `state`, and the promotion contract is the only definition — and it reads through a port with **no write method**. Quality was measured against a nine-scenario baseline and a classified shadow comparison before the substrate moved |
+| Governed Context Assembly | Implemented — deterministic, bounded, provenance-aware `ContextPackage` assembly (selection, aggregation, coverage, budget enforcement, warnings, statistics, metadata) from `GovernedRetrievalResult`s (Milestone 14 / ADR-0011, migrated onto governed knowledge by EPIC 31.3 / ADR-0027). A `ContextItem` **wraps** a governed retrieval item rather than copying it, so provenance (statement, review, reviewer, support fingerprint, document) is structurally impossible to drop, ambiguity survives per query (`NO_MATCH`/`UNIQUE_MATCH`/`MULTIPLE_MATCHES`), and **ordering carries no score** — it is the governed match-strategy precedence and nothing else. Deduplication is by governed identity, never by label, so two documents designating the same thing stay two items. Truncation is always diagnosable: matched-before-limit, retrieved and selected counts are all reported. Performs no I/O and issues no query of its own, which is what keeps retrieval's project/document scope and authorization from being widened downstream; no persistence, no AI, no prompt generation; also a `ComparisonContextPackage` - two whole `ContextPackage`s, each assembled from its own governed results, paired under named left/right fields and never merged |
 | Prompt Builder | Implemented — deterministic, provider-independent `PromptPackage` composition (nine fixed-order sections, versioned constraints/instructions, approximate token estimates, statistics, self-validation) from a `ContextPackage` (Milestone 15, ADR-0012); a `PromptObjective` (Milestones 23B.2, 24.1, 24.2) selects between fixed, versioned instruction and expected-output sets (`DIRECT_ANSWER` / `ENGINEERING_EXPLANATION` / `ENGINEERING_VERIFICATION` / `ENGINEERING_COMPARISON`) - never free-form or caller-supplied prompt text - and truthfulness constraints never vary by objective; owns the closed verdict and comparison-outcome vocabularies an answer must declare, and the `LEFT_KNOWLEDGE`/`RIGHT_KNOWLEDGE` sections that keep a comparison's two evidence groups typed apart; no persistence, no AI, no provider serialization |
 | LLM Provider Abstraction Layer | Implemented — provider-neutral `LLMProviderPort`/`LLMRequest` contract, deterministic `PromptPackage` → `LLMRequest` mapping, an Anthropic adapter (zero SDK dependency) and a fake test adapter, an explicit provider registry, runtime-configured provider/model selection (Milestone 16, ADR-0013); no invocation, no network call, no persistence |
 | LLM Invocation Runtime | Implemented — attempt/retry/deadline/cancellation-governed execution of a real Anthropic call, provider-neutral `LLMResponseEnvelope` normalization, disabled by default (Milestone 17, ADR-0014); no automated test calls a real provider; no persistence, no streaming, no conversation memory |
@@ -2550,6 +2551,172 @@ interruptions, and are ranges, not commitments.
   nobody has measured.
 - Dependencies: EPIC 30.1.2 (whose audit produced the list).
 
+**EPIC 31.3 — Governed Context Assembly** - *Completed*
+- Objective: remove the last compatibility boundary between governed
+  knowledge and the answer an engineer reads. EPIC 31.2 moved retrieval
+  onto the governed graph but deliberately kept one adapter
+  (`governed_context_projection.py`) so that retrieval and its four
+  downstream consumers were not migrated in the same change. That
+  isolation had served its purpose.
+- **The headline: the Engineering Engine speaks one vocabulary end to
+  end.** Context Builder consumes `GovernedRetrievalResult` directly, the
+  adapter is **deleted**, and with it went the last score-shaped ordering
+  value and the last `graph_builder` type in the governed path. Two
+  architecture tests hold the line: the adapter file must not exist, and
+  no module anywhere may project governed results into the candidate
+  vocabulary.
+- A `ContextItem` **wraps** a `GovernedRetrievalItem` rather than copying
+  its fields. That is what makes the three guarantees structural rather
+  than conventional: provenance has no default and no `| None` so it
+  cannot be dropped; the per-query outcome travels with every item so
+  ambiguity cannot be lost; and there is exactly one representation of a
+  governed answer in the system, so no two copies can disagree.
+- **Ambiguity now survives all five stages**: the item's origin, the
+  query summary, an `AMBIGUOUS_RETRIEVAL` context warning, an
+  `AMBIGUOUS:` block in the prompt, and an `AMBIGUOUS_KNOWLEDGE` warning
+  plus a `HIGH` uncertainty on the `EngineeringResponse`. An ordered list
+  reads as a ranked one and the first line of a ranked list reads as the
+  answer, so a chain that preserved ambiguity four times and dropped it
+  once would have preserved nothing.
+- **`MISSING_PROVENANCE` was removed from the warning vocabulary**, and
+  its absence is the point: a governed item cannot be constructed without
+  provenance, so the warning described a state the platform can no longer
+  reach — and a warning that can never fire reads as reassurance.
+- Prompt Builder and Engineering Response migrated with it. A knowledge
+  line now ends in the governed match strategy and the statement key that
+  authorises it, where it used to end in `(score 100.0)`; citations carry
+  `item_id`, `node_ids`, `edge_ids`, `statement_key`, `review_id` and
+  `document_id` — identities only, never statement or evidence text. The
+  system-context section states plainly that *approved* means an engineer
+  accepted that statement, not that the knowledge is complete or that a
+  question has one answer.
+- **One route withdrawn, and it is the milestone's only compatibility
+  break**: `POST /projects/{id}/context-builder/build`. Its only possible
+  input was a legacy `KnowledgeCandidateCollection`, and after this
+  milestone a `ContextPackage` asserts a statement key, a review id and a
+  named reviewer — so accepting one in a request body would let any
+  authenticated caller mint a context that *looks* reviewed, the exact
+  ADR-0004 failure three milestones were spent removing. Provenance a
+  caller asserts is not provenance. `/prompt-builder/build` and
+  `/engineering-response/build` keep their `context_package` bodies: they
+  persist nothing and write no graph, so a fabricated body harms only the
+  caller's own answer.
+- Recorded in
+  [ADR-0027](../architecture/adr/0027-governed-context-assembly.md), with
+  [governed_context_assembly.md](../architecture/governed_context_assembly.md)
+  as the as-built reference.
+- **Canonical Facts retirement readiness:** ADR-0026 recorded two
+  conditions. The second — "`structured_retrieval`'s value objects
+  reference `graph_builder`, so the Context Builder migration is required
+  first" — is now **met**: no module the Engineering Engine reaches
+  imports either. The first is unchanged: four legacy route groups
+  (`/graph-builder`, `/graph-executions`, `/projects/{id}/graph`,
+  `/projects/{id}/structured-retrieval`) still serve the lineage.
+  **The technical work is done; the remaining blocker is entirely a
+  product decision** about whether the platform continues to offer them.
+  The forward migration dropping the seven legacy tables is still not
+  written, because a migration for tables a live route serves is a trap
+  for whoever runs it.
+- Known limits: the wire shape of `ContextPackageRead` changed
+  (`selected_items` replaces `selected_candidates`, governed identities
+  and provenance replace a score and a `GraphEntityId`); no frontend code
+  consumed it. `context_builder_version` is renamed
+  `context_assembly_version` through the prompt, the LLM request metadata
+  and the response — the field always meant "which context assembly
+  produced this", and now says so.
+- Dependencies: EPIC 31.2 (the governed retrieval this assembles).
+
+**EPIC 31.2 — Governed Structured Retrieval** - *Completed*
+- Objective: make the Engineering Engine answer **only** from knowledge a
+  named engineer approved. Until this milestone its retrieval read the
+  Canonical Facts projection - a substrate fed from Proposed Claims
+  approved in the *legacy* review workflow - while the Governed Knowledge
+  Graph answered only the Workspace and its own API.
+- **The headline: engineering retrieval now consumes governed knowledge
+  exclusively.** A new bounded context, `governed_retrieval`, reads the
+  governed graph through `GovernedKnowledgeReader` - a port with **no
+  write method**, so "retrieval never writes" is a type rather than a
+  rule. The engine's two composition roots name that reader and no graph
+  repository at all, and an architecture test asserts it.
+- **Nothing about the engine's shape changed.** The workflow definitions,
+  the step types, the artifact keys, the planner and the executor were
+  untouched: a step still builds a retrieval plan and a step still
+  executes it. Only the substrate moved.
+- Five typed queries with explicit fields and explicit semantics; no free
+  text, no filter object, no expression, no query language. The
+  provenance query *is* the identity query, because every result already
+  carries its full provenance.
+- **No property bag was carried forward, in either direction** - the
+  governed graph did not acquire one to ease the migration (which would
+  have undone
+  [ADR-0024](../architecture/adr/0024-governed-knowledge-graph-as-projection.md)),
+  and neither did the retrieval path. An architecture test fails on
+  `properties`, `attributes` or `payload` anywhere in it.
+- **Ranking is by match strategy, not by score.** The legacy
+  implementation summed documented weights; the weights were
+  deterministic and were still a number attached to engineering
+  knowledge. Every governed result carries exactly one strategy - the
+  strongest that held - the governed field that carried it, and the value
+  compared, so "why did this match?" has one answer.
+- **Ambiguity is preserved rather than resolved.** `TR1` in two drawings
+  is two governed nodes and two answers; the outcome is computed before
+  any limit, so a truncated page cannot present several governed answers
+  as one certain one. Cross-document entity resolution stays upstream,
+  outside this bounded responsibility.
+- **Quality was measured before the substrate moved**, which the EPIC
+  required: nine baseline scenarios and a shadow comparison against
+  legacy retrieval, run through the real API against real documents,
+  real reviews and real promotions. Every difference is classified and
+  each class is named by a test - one expected governance difference,
+  one strict provenance improvement, two deliberate capability removals
+  (attribute-bag search, and lexical matching over entity types and
+  attribute values) - and **zero unexplained differences**, recorded by a
+  test rather than claimed.
+- Governance proven end to end through real review paths: `APPROVED +
+  APPLIES` retrievable; `REJECTED`, `NEEDS_INVESTIGATION`,
+  `REQUIRES_REVALIDATION` and `ORPHANED` not; `HISTORICAL` excluded from
+  the default scope; `REMOVED` excluded from every scope.
+- One endpoint added - `GET /projects/{id}/governed-retrieval/assets` -
+  serving the one requirement product has: reading what the engine
+  retrieved and why. Same capability as the graph API it reads,
+  authorised the same way.
+- **One temporary adapter**, named and dated:
+  `governed_context_projection.py` maps a governed outcome into the
+  `KnowledgeCandidate` vocabulary Context Builder speaks. Migrating
+  retrieval **and** its four downstream consumers at once would have made
+  a quality regression in any of them invisible, which is the one thing
+  this milestone was required not to do. Retirement condition stated in
+  the module and asserted by an architecture test: delete it when Context
+  Builder consumes `GovernedRetrievalResult` directly.
+- **The Canonical Facts projection was NOT retired, and the blocker is
+  stated rather than glossed.** Seven of the ten retirement-gate
+  conditions pass; three fail for one reason - four route groups
+  (`/graph-builder`, `/graph-executions`, `/projects/{id}/graph`,
+  `/projects/{id}/structured-retrieval`) still serve it. Withdrawing
+  served capabilities is a product decision, not something an engine
+  change implies, and "remove only what is proven unused" still holds:
+  these are proven used, by their own API. The objective condition that
+  permits retirement is recorded in
+  [ADR-0026](../architecture/adr/0026-governed-structured-retrieval.md)
+  section 9, and `test_graph_consolidation.py` now asserts the new truth
+  in both directions - the engine no longer reads the lineage, and the
+  lineage is still reachable through its own routes.
+- The full end-to-end integration test now runs the governed lineage:
+  document to pipeline to semantic statement to approval to promotion to
+  governed retrieval to engine answer, and asserts the answer references
+  the governed node by its governed identity.
+- Recorded in
+  [ADR-0026](../architecture/adr/0026-governed-structured-retrieval.md);
+  as-built reference in
+  [governed_structured_retrieval.md](../architecture/governed_structured_retrieval.md).
+- Known limits: two deliberate capability removals (above); one temporary
+  adapter; designation folding is a Python-side scan of the scoped node
+  set (measured, no index added ahead of a need); project visibility
+  remains filtering rather than enforcement, inherited unchanged from
+  EPIC 30.3.
+- Dependencies: EPIC 31 (the governed graph), EPIC 31.1 (the first
+  retirement).
+
 **EPIC 31.1 — Legacy Graph Retirement** - *Completed*
 - Objective: leave exactly one authoritative engineering knowledge model
   in the repository. A consolidation milestone, with almost no new
@@ -3137,6 +3304,44 @@ Transmission, Rail, Renewables, and any future discipline)
   "Public vocabulary boundary" in `knowledge_pipeline_overview.md`) —
   low severity, no shared-vocabulary contract introduced without a
   demonstrated need.
+- **The Canonical Facts graph projection is still here, no longer read
+  by the Engineering Engine.** EPIC 31.2 moved engineering retrieval onto
+  the Governed Knowledge Graph, but `graph_builder`,
+  `project_knowledge_graph` and `graph_query` remain because four route
+  groups still serve them. The retirement gate and the objective
+  condition that opens it are in
+  [ADR-0026](../architecture/adr/0026-governed-structured-retrieval.md)
+  section 9; the debt entries below now describe **that lineage's own
+  API**, not the engine.
+- **One temporary adapter at the Context Builder seam (EPIC 31.2).**
+  `governed_context_projection.py` maps governed retrieval results into
+  the `KnowledgeCandidate` vocabulary Context Builder, Prompt Builder and
+  Engineering Response speak, and carries a score-shaped ordering value
+  derived purely from the documented match-strategy rank. Both go when
+  Context Builder consumes `GovernedRetrievalResult` directly - the
+  stated retirement condition, asserted by an architecture test. Deferred
+  deliberately: migrating retrieval and its four consumers at once would
+  have made a quality regression in any of them invisible.
+- **`structured_retrieval`'s value objects still reference
+  `graph_builder`.** `KnowledgeCandidateReference.graph_entity_id` is a
+  `GraphEntityId` and `KnowledgeCandidateRelationship.relationship_type`
+  a `GraphRelationshipType`, both exposed on the wire by
+  `KnowledgeCandidateRead`. Retiring `graph_builder` therefore also
+  requires the Context Builder migration above, or a deliberate wire
+  contract change. Recorded so the dependency is not discovered halfway
+  through the retirement.
+- **Two legacy retrieval capabilities have no governed counterpart
+  (EPIC 31.2).** Attribute-bag search, and lexical matching over entity
+  types and attribute values. Neither is a gap to be filled: the governed
+  graph has no property bag by decision (ADR-0024), and the engineering
+  question underneath attribute search is a governed relationship
+  traversal. Classified as `LEGACY_BEHAVIOUR_NOT_SUPPORTED` by a test in
+  `tests/api/test_governed_retrieval_baseline.py`.
+- **Governed designation matching is a Python-side scan of the scoped
+  node set.** Deliberate: folding in SQL would make the answer depend on
+  the database's collation, and a retrieval contract promising
+  reproducibility cannot rest on that. No index added ahead of a measured
+  need - see `performance_baseline.md`, "Governed Structured Retrieval".
 - **Structured Retrieval's `source_fact_ids` is always empty.** A
   `GraphOperationBatch`'s per-operation `source_fact_id` is ephemeral
   at execution time and is never persisted onto the node/relationship

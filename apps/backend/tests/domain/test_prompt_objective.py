@@ -20,7 +20,6 @@ from datetime import datetime
 
 import pytest
 
-from app.domain.graph_builder.graph_builder_models import GraphEntityId
 from app.domain.prompt_builder.composition_policy import (
     CONSTRAINTS,
     EXPECTED_OUTPUT_BY_OBJECTIVE,
@@ -38,73 +37,38 @@ from app.domain.prompt_builder.prompt_composition import (
     PROMPT_SECTION_ORDER,
 )
 from app.domain.prompt_builder.prompt_validation import validate_package
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidate,
-    KnowledgeCandidateCollection,
-    KnowledgeCandidateKind,
-    KnowledgeCandidateReference,
-    KnowledgeCandidateScore,
-    KnowledgeCandidateScoreComponent,
-    ScoreComponentCategory,
+from app.services import prompt_builder_service
+
+from tests._governed_context import (
+    asset_item,
+    context_package,
+    designation_result,
 )
-from app.services import context_builder_service, prompt_builder_service
 
 PROJECT_ID = 7
 NOW = datetime(2026, 1, 1, 9, 0, 0)
 
 
-def _candidate(canonical_id: str) -> KnowledgeCandidate:
-    entity_id = GraphEntityId(
-        project_id=PROJECT_ID,
-        entity_type="PROTECTION",
-        canonical_id=canonical_id,
-    )
-    reference = KnowledgeCandidateReference(
-        graph_entity_id=entity_id,
-        entity_type="PROTECTION",
-        canonical_id=canonical_id,
-    )
-
-    return KnowledgeCandidate(
-        candidate_id=f"{PROJECT_ID}:entity:{entity_id.value}",
-        project_id=PROJECT_ID,
-        candidate_kind=KnowledgeCandidateKind.ENTITY,
-        primary_reference=reference,
-        matched_attributes=(),
-        matched_relationships=(),
-        related_entities=(),
-        source_fact_ids=(),
-        graph_node_ids=(entity_id.value,),
-        graph_relationship_ids=(),
-        graph_execution_ids=(1,),
-        score=KnowledgeCandidateScore(
-            total=50.0,
-            components=(
-                KnowledgeCandidateScoreComponent(
-                    category=ScoreComponentCategory.ENTITY_TYPE_MATCH,
-                    weight=50.0,
-                    detail="PROTECTION",
-                ),
-            ),
-        ),
-        reasons=(),
-        matches=(),
-        sort_key=(0.0, 0, "", ""),
-    )
-
-
 def _context_package(count: int = 2):
-    candidates = tuple(_candidate(f"87T-{index}") for index in range(count))
-    collection = KnowledgeCandidateCollection(
-        candidates=candidates,
-        total_before_limit=count,
-        returned_count=count,
-        applied_limit=20,
+    """A governed context holding ``count`` distinct approved assets."""
+
+    items = tuple(
+        asset_item(
+            f"node-87t-{index}",
+            f"87T-{index}",
+            statement_key=f"statement-{index}",
+            project_id=PROJECT_ID,
+        )
+        for index in range(count)
     )
 
-    return context_builder_service.build_context_package(
-        project_id=PROJECT_ID, candidates=collection, now=NOW
-    ).package
+    return context_package(
+        project_id=PROJECT_ID,
+        results=(
+            designation_result("87T", items, project_id=PROJECT_ID),
+        ),
+        now=NOW,
+    )
 
 
 def _package(objective=None, count: int = 2):
@@ -400,7 +364,7 @@ def test_the_verification_prompt_carries_the_four_required_rules() -> None:
         in identifiers
     )
     assert "report_uncertainty_honestly" in identifiers
-    assert "cite_supporting_evidence_by_candidate_id" in identifiers
+    assert "cite_supporting_evidence_by_item_id" in identifiers
 
 
 def test_the_verification_prompt_forbids_general_knowledge() -> None:

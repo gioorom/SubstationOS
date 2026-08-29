@@ -37,7 +37,7 @@ def build_metadata(
         returned_model_identifier=source.returned_model_identifier,
         request_correlation_id=source.request_correlation_id,
         prompt_package_version=prompt_package.version.package_version,
-        context_builder_version=prompt_package.metadata.context_builder_version,
+        context_assembly_version=prompt_package.metadata.context_assembly_version,
         prompt_builder_version=prompt_package.version.prompt_builder_version,
         package_version=RESPONSE_PACKAGE_VERSION,
     )
@@ -55,7 +55,7 @@ def build_version(
         ),
         response_policy_version=request.configuration.response_policy.version,
         prompt_builder_version=prompt_package.version.prompt_builder_version,
-        context_builder_version=prompt_package.metadata.context_builder_version,
+        context_assembly_version=prompt_package.metadata.context_assembly_version,
         request_preparation_policy_version=(
             source.request_preparation_policy_version
         ),

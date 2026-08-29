@@ -40,9 +40,6 @@ from app.domain.prompt_builder.composition_policy import (
     EXPLANATION_INSTRUCTIONS,
     INSTRUCTIONS,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    RetrievalMode,
-)
 from app.infrastructure.llm.base.fake_llm_provider_adapter import (
     FakeInvocationOutcome,
 )
@@ -53,13 +50,16 @@ from app.services.engineering_engine.composition import (
 from app.services.engineering_engine.execution_context import (
     WorkflowExecutionContext,
 )
-from app.services.engineering_engine.step_handlers import (
-    BuildRetrievalRequestStepHandler,
+from app.domain.governed_retrieval.governed_retrieval_vocabulary import (
+    RetrievalScope,
+)
+from app.services.engineering_engine.governed_retrieval_step_handlers import (
+    BuildGovernedRetrievalPlanStepHandler,
 )
 from tests.services._engineering_engine_support import (
     FakeDocumentMetadataPort,
     FakeEngineeringIndexRepository,
-    FakeGraphQueryRepository,
+    FakeGovernedKnowledgeReader,
     build_test_engine,
     execution_request,
     no_op_sleeper,
@@ -134,7 +134,7 @@ def test_the_engine_resolves_the_workflow_through_the_registry() -> None:
 
 def test_the_composed_handler_registry_covers_every_step() -> None:
     registry = build_step_handler_registry(
-        graph_query_repository=FakeGraphQueryRepository(),
+        governed_knowledge_reader=FakeGovernedKnowledgeReader(),
         provider_registry=provider_registry(),
         runtime_configuration=runtime_configuration(),
         credential_present=True,
@@ -298,9 +298,9 @@ def test_the_same_turn_classified_differently_gets_a_different_plan() -> None:
 # --- 4. Retrieval reuse ----------------------------------------------------
 
 
-def test_retrieval_reads_the_graph_through_structured_retrieval() -> None:
-    graph = FakeGraphQueryRepository()
-    engine = build_test_engine(graph_query_repository=graph)
+def test_retrieval_reads_the_governed_graph() -> None:
+    graph = FakeGovernedKnowledgeReader()
+    engine = build_test_engine(governed_knowledge_reader=graph)
 
     _execute(engine, _explanation_request())
 
@@ -314,20 +314,26 @@ def test_the_explanation_workflow_invents_no_retrieval_criteria() -> None:
     context this milestone forbids. Asserted through the shared retrieval
     handler, which is the same one the knowledge-query workflow uses."""
 
-    handler = BuildRetrievalRequestStepHandler()
+    handler = BuildGovernedRetrievalPlanStepHandler()
     request = _explanation_request(
         retrieval_canonical_entity_id="PROTECTION:87T",
         retrieval_entity_type=None,
+        retrieval_lexical_terms=(),
     )
 
     context = asyncio.run(
         handler.execute(None, WorkflowExecutionContext(execution_request=request))
     )
 
-    criteria = context.retrieval_request.criteria
-    assert [criterion.value for criterion in criteria] == ["PROTECTION:87T"]
-    assert context.retrieval_request.mode is RetrievalMode.ENTITY_LOOKUP
-    assert context.retrieval_request.limit == request.retrieval_limit
+    plan = context.retrieval_request
+
+    # One designation, the one the caller named - and the `PROTECTION`
+    # classification is dropped rather than matched, because the
+    # governed graph holds what a document designates and never what
+    # the equipment is.
+    assert [query.designation for query in plan.queries] == ["87T"]
+    assert plan.queries[0].limit == request.retrieval_limit
+    assert plan.queries[0].scope is RetrievalScope.CURRENT_ONLY
 
 
 # --- 5. Failure paths (all existing taxonomy) ------------------------------
@@ -335,7 +341,7 @@ def test_the_explanation_workflow_invents_no_retrieval_criteria() -> None:
 
 def test_a_retrieval_failure_stops_execution_at_that_step() -> None:
     engine = build_test_engine(
-        graph_query_repository=FakeGraphQueryRepository(
+        governed_knowledge_reader=FakeGovernedKnowledgeReader(
             raises=RuntimeError("graph query exploded")
         )
     )

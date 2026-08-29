@@ -17,27 +17,34 @@ from app.domain.engineering_engine.engineering_engine_models import (
 from app.domain.engineering_intent.engineering_intent_models import (
     EngineeringIntentType,
 )
-from app.domain.graph_builder.graph_builder_models import GraphEntityId
-from app.domain.graph_query.graph_query_models import GraphNodeView
 from app.infrastructure.llm.base.fake_llm_provider_adapter import (
     FakeLLMProviderAdapter,
 )
 from app.services.engineering_engine.composition import (
     build_engineering_engine,
 )
+from tests._governed_graph_builder import governed_asset_with_quantity
 
 NOW = datetime(2026, 1, 1, 5, 0, 0)
 
 
-class FakeGraphQueryRepository:
-    """An empty project. Retrieval finds nothing, which is a valid
-    outcome the whole pipeline handles - no candidates simply yields an
-    EngineeringResponse with an INSUFFICIENT_EVIDENCE warning."""
+class FakeGovernedKnowledgeReader:
+    """
+    An installation whose governed graph is empty.
+
+    Retrieval finds nothing, which is a valid outcome the whole pipeline
+    handles - no candidates simply yields an ``EngineeringResponse``
+    with an ``INSUFFICIENT_EVIDENCE`` warning.
+
+    Implements ``GovernedKnowledgeReader`` structurally rather than by
+    inheritance so a missing method is a loud ``AttributeError`` in the
+    test that needs it, not a silently inherited stub.
+    """
 
     def __init__(self, *, raises: Exception | None = None) -> None:
         self._raises = raises
-        self.list_nodes_calls = 0
-        self.list_nodes_by_type_calls = 0
+        self.node_reads = 0
+        self.edge_reads = 0
 
     def _maybe_raise(self) -> None:
         if self._raises is not None:
@@ -45,90 +52,161 @@ class FakeGraphQueryRepository:
 
     @property
     def read_calls(self) -> int:
-        """Every graph read this fake was asked for, whichever shape -
-        so a test can assert "the graph was consulted" without having to
-        know which retrieval mode the request happened to select."""
+        """Every governed read this fake was asked for, whichever shape -
+        so a test can assert "the governed graph was consulted" without
+        having to know which query the request happened to produce."""
 
-        return self.list_nodes_calls + self.list_nodes_by_type_calls
+        return self.node_reads + self.edge_reads
 
-    def list_nodes(self, project_id):
-        self.list_nodes_calls += 1
-        self._maybe_raise()
-        return []
-
-    def list_relationships(self, project_id):
-        self._maybe_raise()
-        return []
-
-    def list_nodes_by_type(self, project_id, entity_type):
-        self.list_nodes_by_type_calls += 1
-        self._maybe_raise()
-        return []
-
-    def list_nodes_with_attribute(self, project_id, attribute):
-        self._maybe_raise()
-        return []
-
-    def get_node(self, project_id, graph_entity_id):
+    def find_node(self, node_id):
+        self.node_reads += 1
         self._maybe_raise()
         return None
 
-    def list_outgoing_relationships(self, project_id, graph_entity_id):
+    def find_edge(self, edge_id):
+        self.edge_reads += 1
         self._maybe_raise()
-        return []
+        return None
 
-    def list_incoming_relationships(self, project_id, graph_entity_id):
+    def nodes(self, *, states, kind=None, project_id=None, document_id=None):
+        self.node_reads += 1
         self._maybe_raise()
-        return []
+        return ()
+
+    def nodes_by_identity(self, node_ids):
+        self._maybe_raise()
+        return ()
+
+    def edges(self, *, states, kind=None, project_id=None, document_id=None):
+        self.edge_reads += 1
+        self._maybe_raise()
+        return ()
+
+    def edges_from_subjects(self, subject_node_ids, *, states, kind=None):
+        self.edge_reads += 1
+        self._maybe_raise()
+        return ()
+
+    def latest_generation(self):
+        return None
 
 
-class PopulatedFakeGraphQueryRepository(FakeGraphQueryRepository):
-    """A project containing real nodes, so retrieval finds candidates and
-    the context package is non-empty.
+class PopulatedFakeGovernedKnowledgeReader(FakeGovernedKnowledgeReader):
+    """
+    An installation holding real governed knowledge: one approved asset
+    per designation, each with a rated-power quantity.
 
-    Needed by the verification tests: with an empty project every
-    verification is structurally bounded to ``INSUFFICIENT_EVIDENCE``
-    (correctly), so proving the other three outcomes requires evidence to
-    actually exist.
+    Needed by the verification and comparison tests: with an empty
+    governed graph every verification is structurally bounded to
+    ``INSUFFICIENT_EVIDENCE`` (correctly), so proving the other outcomes
+    requires knowledge to actually exist.
     """
 
     def __init__(
         self,
-        canonical_ids: tuple[str, ...] = ("87T",),
+        designations: tuple[str, ...] = ("87T",),
         *,
-        entity_type: str = "RELAY",
+        project_id: int = 1,
         raises: Exception | None = None,
     ) -> None:
         super().__init__(raises=raises)
-        self._entity_type = entity_type
-        self._nodes = tuple(
-            GraphNodeView(
-                project_id=1,
-                graph_entity_id=GraphEntityId(
-                    project_id=1,
-                    entity_type=entity_type,
-                    canonical_id=canonical_id,
-                ),
-                entity_type=entity_type,
-                canonical_id=canonical_id,
-                properties={},
+
+        self._nodes = {}
+        self._edges = {}
+
+        for index, designation in enumerate(designations, start=1):
+            asset, quantity, edge = governed_asset_with_quantity(
+                designation=designation,
+                document_id=index,
+                project_id=project_id,
                 created_at=NOW,
-                updated_at=NOW,
             )
-            for canonical_id in canonical_ids
+            self._nodes[asset.node_id.value] = asset
+            self._nodes[quantity.node_id.value] = quantity
+            self._edges[edge.edge_id.value] = edge
+
+    def _in_states(self, items, states):
+        return tuple(
+            item
+            for item in sorted(items, key=lambda item: _identity(item))
+            if item.state in states
         )
 
-    def list_nodes(self, project_id):
-        self.list_nodes_calls += 1
+    def find_node(self, node_id):
+        self.node_reads += 1
         self._maybe_raise()
-        return list(self._nodes)
+        return self._nodes.get(node_id)
 
-    def list_nodes_by_type(self, project_id, entity_type):
-        self.list_nodes_by_type_calls += 1
+    def find_edge(self, edge_id):
+        self.edge_reads += 1
         self._maybe_raise()
-        return [
-            node for node in self._nodes if node.entity_type == entity_type
-        ]
+        return self._edges.get(edge_id)
+
+    def nodes(self, *, states, kind=None, project_id=None, document_id=None):
+        self.node_reads += 1
+        self._maybe_raise()
+
+        return tuple(
+            node
+            for node in self._in_states(self._nodes.values(), states)
+            if (kind is None or node.kind is kind)
+            and (
+                project_id is None
+                or node.provenance.project_id == project_id
+            )
+            and (
+                document_id is None
+                or node.provenance.document_id == document_id
+            )
+        )
+
+    def nodes_by_identity(self, node_ids):
+        self._maybe_raise()
+        wanted = set(node_ids)
+
+        return tuple(
+            node
+            for node in sorted(
+                self._nodes.values(), key=lambda node: node.node_id.value
+            )
+            if node.node_id.value in wanted
+        )
+
+    def edges(self, *, states, kind=None, project_id=None, document_id=None):
+        self.edge_reads += 1
+        self._maybe_raise()
+
+        return tuple(
+            edge
+            for edge in self._in_states(self._edges.values(), states)
+            if (kind is None or edge.kind is kind)
+            and (
+                project_id is None
+                or edge.provenance.project_id == project_id
+            )
+            and (
+                document_id is None
+                or edge.provenance.document_id == document_id
+            )
+        )
+
+    def edges_from_subjects(self, subject_node_ids, *, states, kind=None):
+        self.edge_reads += 1
+        self._maybe_raise()
+        wanted = set(subject_node_ids)
+
+        return tuple(
+            edge
+            for edge in self._in_states(self._edges.values(), states)
+            if edge.subject_node_id in wanted
+            and (kind is None or edge.kind is kind)
+        )
+
+
+def _identity(item) -> str:
+    return getattr(item, "node_id", None) and item.node_id.value or (
+        item.edge_id.value
+    )
 
 
 class FakeEngineeringIndexRepository:
@@ -206,7 +284,7 @@ def provider_registry(outcomes=()) -> LLMProviderRegistry:
 def build_test_engine(
     *,
     outcomes=(),
-    graph_query_repository=None,
+    governed_knowledge_reader=None,
     credential_present: bool = True,
     runtime_config: LLMRuntimeConfiguration | None = None,
     engineering_index_repository=None,
@@ -229,8 +307,8 @@ def build_test_engine(
         document_metadata_port = None
 
     return build_engineering_engine(
-        graph_query_repository=(
-            graph_query_repository or FakeGraphQueryRepository()
+        governed_knowledge_reader=(
+            governed_knowledge_reader or FakeGovernedKnowledgeReader()
         ),
         engineering_index_repository=engineering_index_repository,
         document_metadata_port=document_metadata_port,
@@ -254,7 +332,12 @@ def execution_request(**overrides) -> EngineeringEngineExecutionRequest:
         engineering_intent_id="conv-1:turn-1:1.0",
         intent_type=EngineeringIntentType.KNOWLEDGE_QUERY,
         executed_at=NOW,
-        retrieval_entity_type="CABLE",
+        # A designation the request text actually names. Governed
+        # retrieval resolves designations, so a default of
+        # `retrieval_entity_type` (which the governed graph has no
+        # counterpart for) would make every engine test exercise the
+        # "nothing to ask" path rather than the retrieval path.
+        retrieval_lexical_terms=("T2",),
         provider_id="fake",
         model_identifier="fake-model",
     )

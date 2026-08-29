@@ -1,4 +1,4 @@
-# Structured Retrieval
+# Structured Retrieval (Canonical Facts)
 
 **Status:** As-built reference, Milestone 13 (Structured Retrieval
 Foundation). Describes the `structured_retrieval` bounded context as
@@ -7,6 +7,26 @@ embeddings are deferred), see
 [ADR-0010](adr/0010-structured-retrieval-foundation.md). For where this
 context sits in the wider pipeline, see
 [knowledge_pipeline_overview.md](knowledge_pipeline_overview.md).
+
+> ## ⚠ No longer the Engineering Engine's retrieval (EPIC 31.2)
+>
+> This context reads the **Canonical Facts** graph projection. Since
+> EPIC 31.2 the Engineering Engine does not: engineering retrieval comes
+> from the Governed Knowledge Graph through
+> [governed_structured_retrieval.md](governed_structured_retrieval.md),
+> and the engine wires a `GovernedKnowledgeReader` rather than a
+> `GraphQueryRepository`.
+>
+> What is described below remains **accurate and live** for its own two
+> endpoints, which are still served. It is not deprecated and it is not
+> dead code - it is a different lineage with a different governance
+> story, and [ADR-0026](adr/0026-governed-structured-retrieval.md) §9
+> records the objective condition under which it retires.
+>
+> Two things below no longer describe the Engineering Engine at all:
+> the **scoring policy** (governed retrieval ranks by match strategy,
+> never by a weighted total) and **property-bag matching** (the governed
+> graph has none).
 
 ## Pipeline
 

@@ -119,7 +119,7 @@ class LLMRequestMetadataRead(BaseModel):
     """
 
     project_id: int
-    context_builder_version: str | None
+    context_assembly_version: str | None
     prompt_builder_version: str
     composition_policy_version: str
     prompt_package_version: str
@@ -303,7 +303,7 @@ class LLMResponseMetadataRead(BaseModel):
     adapter_version: str
     request_preparation_policy_version: str
     prompt_package_version: str | None
-    context_builder_version: str | None
+    context_assembly_version: str | None
     prompt_builder_version: str | None
 
     model_config = ConfigDict(from_attributes=True)
@@ -420,7 +420,7 @@ def llm_response_envelope_from_schema(
                 model.metadata.request_preparation_policy_version
             ),
             prompt_package_version=model.metadata.prompt_package_version,
-            context_builder_version=model.metadata.context_builder_version,
+            context_assembly_version=model.metadata.context_assembly_version,
             prompt_builder_version=model.metadata.prompt_builder_version,
         ),
     )

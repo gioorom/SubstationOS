@@ -47,7 +47,7 @@ from tests.domain._document_retrieval_support import entry, metadata
 from tests.services._engineering_engine_support import (
     FakeDocumentMetadataPort,
     FakeEngineeringIndexRepository,
-    FakeGraphQueryRepository,
+    FakeGovernedKnowledgeReader,
     build_test_engine,
     execution_request,
     no_op_sleeper,
@@ -129,7 +129,7 @@ def test_the_engine_resolves_the_workflow_through_the_registry() -> None:
 
 def test_the_composed_handler_registry_covers_every_step() -> None:
     registry = build_step_handler_registry(
-        graph_query_repository=FakeGraphQueryRepository(),
+        governed_knowledge_reader=FakeGovernedKnowledgeReader(),
         provider_registry=provider_registry(),
         runtime_configuration=runtime_configuration(),
         credential_present=True,
@@ -222,9 +222,9 @@ def test_the_response_declares_that_no_provider_was_involved() -> None:
 
 
 def test_the_graph_is_never_read_during_a_document_lookup() -> None:
-    graph = FakeGraphQueryRepository()
+    graph = FakeGovernedKnowledgeReader()
     engine = build_test_engine(
-        graph_query_repository=graph,
+        governed_knowledge_reader=graph,
         engineering_index_repository=FakeEngineeringIndexRepository(
             [entry()]
         ),
@@ -233,7 +233,7 @@ def test_the_graph_is_never_read_during_a_document_lookup() -> None:
 
     _execute(engine, _lookup_request())
 
-    assert graph.list_nodes_calls == 0
+    assert graph.node_reads == 0
 
 
 def test_aggregate_updates_are_prepared_never_applied() -> None:

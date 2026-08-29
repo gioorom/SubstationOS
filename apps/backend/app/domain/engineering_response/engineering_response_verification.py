@@ -109,7 +109,7 @@ def assess_verification(
     """
 
     declared = read_declared_outcome(source)
-    evidence_count = len(context_package.selected_candidates)
+    evidence_count = len(context_package.selected_items)
 
     if evidence_count == 0:
         return VerificationAssessment(

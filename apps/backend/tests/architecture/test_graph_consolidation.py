@@ -286,23 +286,55 @@ def test_there_is_exactly_one_governed_graph_context() -> None:
     ]
 
 
-def test_the_retained_lineage_is_still_read_by_the_engineering_engine() -> (
+def test_the_engineering_engine_no_longer_reads_the_retained_lineage() -> (
     None
 ):
     """
-    The reason `project_knowledge_graph` was retained rather than
-    retired, asserted rather than asserted-to.
+    **EPIC 31.2 changed this test's subject, and that is the headline.**
 
-    If this ever fails because nothing reads it any more, the lineage has
-    become genuinely dead and the follow-up milestone in ADR-0025 can
-    remove it - which is exactly the signal that test is here to give.
+    Until this milestone the Canonical Facts lineage was retained
+    *because the Engineering Engine read it*, and this file asserted
+    exactly that. It no longer does: engineering retrieval comes from the
+    Governed Knowledge Graph, and the engine's two composition roots name
+    the governed reader and no graph-query repository at all.
+
+    What the assertion became is the same signal pointed the other way -
+    if the engine ever reacquires a legacy graph dependency, this fails
+    and says why.
     """
 
-    source = (
-        APP_ROOT / "services" / "structured_retrieval_service.py"
-    ).read_text(encoding="utf-8")
+    for path in (
+        APP_ROOT / "services" / "engineering_engine" / "composition.py",
+        APP_ROOT / "routers" / "engineering_engine.py",
+    ):
+        source = _code(path)
 
-    assert "GraphQueryRepository" in source
+        assert "governed_knowledge_reader" in source, path.name
+        assert "GraphQueryRepository" not in source, path.name
+
+
+def test_the_retained_lineage_is_still_reachable_through_its_own_api() -> (
+    None
+):
+    """
+    Why `project_knowledge_graph` is still here after EPIC 31.2, stated
+    rather than assumed.
+
+    Nothing in the engineering answering stack reads it any more. It
+    remains because it is still a **live API capability** - four route
+    groups (`/graph-builder`, `/graph-executions`, `/projects/{id}/graph`
+    and `/projects/{id}/structured-retrieval`) serve it, and removing a
+    served capability is a product decision rather than a cleanup.
+
+    ADR-0026 records the objective condition that permits retirement:
+    those routes going away. The day they do, this test fails and says
+    the lineage has become genuinely dead.
+    """
+
+    routes = {route.path for route in _api_routes()}
+
+    assert any(path.startswith("/graph-builder") for path in routes)
+    assert any("/structured-retrieval" in path for path in routes)
 
     repository = (
         APP_ROOT

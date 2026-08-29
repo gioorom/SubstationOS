@@ -78,9 +78,12 @@ class EngineeringResponseSectionRead(BaseModel):
 
 
 class EngineeringEvidenceReferenceRead(BaseModel):
-    candidate_id: str
-    graph_node_ids: list[str]
-    graph_relationship_ids: list[str]
+    item_id: str
+    node_ids: list[str]
+    edge_ids: list[str]
+    statement_key: str
+    review_id: int
+    document_id: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -206,7 +209,7 @@ class EngineeringResponseMetadataRead(BaseModel):
     returned_model_identifier: str | None
     request_correlation_id: str
     prompt_package_version: str | None
-    context_builder_version: str | None
+    context_assembly_version: str | None
     prompt_builder_version: str | None
     package_version: str
 
@@ -230,7 +233,7 @@ class EngineeringResponseVersionRead(BaseModel):
     engineering_response_version: str
     response_policy_version: str
     prompt_builder_version: str | None
-    context_builder_version: str | None
+    context_assembly_version: str | None
     request_preparation_policy_version: str | None
     runtime_version: str | None
     package_version: str
@@ -369,9 +372,12 @@ def engineering_response_from_schema(
         direct_answer=_section_from_read(model.direct_answer),
         references=tuple(
             EngineeringEvidenceReference(
-                candidate_id=r.candidate_id,
-                graph_node_ids=tuple(r.graph_node_ids),
-                graph_relationship_ids=tuple(r.graph_relationship_ids),
+                item_id=r.item_id,
+                node_ids=tuple(r.node_ids),
+                edge_ids=tuple(r.edge_ids),
+                statement_key=r.statement_key,
+                review_id=r.review_id,
+                document_id=r.document_id,
             )
             for r in model.references
         ),
@@ -394,7 +400,7 @@ def engineering_response_from_schema(
             returned_model_identifier=model.metadata.returned_model_identifier,
             request_correlation_id=model.metadata.request_correlation_id,
             prompt_package_version=model.metadata.prompt_package_version,
-            context_builder_version=model.metadata.context_builder_version,
+            context_assembly_version=model.metadata.context_assembly_version,
             prompt_builder_version=model.metadata.prompt_builder_version,
             package_version=model.metadata.package_version,
         ),
@@ -414,7 +420,7 @@ def engineering_response_from_schema(
             engineering_response_version=model.version.engineering_response_version,
             response_policy_version=model.version.response_policy_version,
             prompt_builder_version=model.version.prompt_builder_version,
-            context_builder_version=model.version.context_builder_version,
+            context_assembly_version=model.version.context_assembly_version,
             request_preparation_policy_version=(
                 model.version.request_preparation_policy_version
             ),

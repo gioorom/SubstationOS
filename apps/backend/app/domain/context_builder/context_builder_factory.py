@@ -1,34 +1,39 @@
 """
 Builds an immutable ``ContextBuildRequest`` from the raw, optional
-fields an API caller supplies (CLAUDE.md SS4.2 - a factory enforces
+fields a caller supplies (CLAUDE.md SS4.2 - a factory enforces
 invariants at construction time).
+
+The input is a tuple of **governed retrieval results**. There is no
+constructor that accepts anything else, which is what makes "Context
+Assembly reads only governed knowledge" a property of the type rather
+than a rule somebody has to remember.
 """
 
 from __future__ import annotations
 
 from app.domain.context_builder.budget_policy import (
     BUDGET_POLICY_VERSION,
-    CONTEXT_BUILDER_VERSION,
-    DEFAULT_MAX_ATTRIBUTES,
-    DEFAULT_MAX_CANDIDATES,
-    DEFAULT_MAX_ENTITIES,
+    CONTEXT_ASSEMBLY_VERSION,
+    DEFAULT_MAX_ASSETS,
+    DEFAULT_MAX_ITEMS,
     DEFAULT_MAX_METADATA_ENTRIES,
+    DEFAULT_MAX_QUANTITIES,
     DEFAULT_MAX_RELATIONSHIPS,
     DEFAULT_MAX_WARNINGS,
     SELECTION_POLICY_VERSION,
 )
 from app.domain.context_builder.context_builder_models import (
     BudgetPolicy,
+    ContextAssemblyConfiguration,
     ContextBuildRequest,
-    ContextBuilderConfiguration,
     ContextMetadataEntry,
     ContextSelectionPolicy,
 )
 from app.domain.context_builder.context_builder_validator import (
     ContextBuilderValidator,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidateCollection,
+from app.domain.governed_retrieval.governed_retrieval_models import (
+    GovernedRetrievalResult,
 )
 
 
@@ -37,22 +42,21 @@ class ContextBuildRequestFactory:
     def create(
         *,
         project_id: int,
-        candidates: KnowledgeCandidateCollection,
-        max_candidates: int = DEFAULT_MAX_CANDIDATES,
-        max_entities: int = DEFAULT_MAX_ENTITIES,
+        results: tuple[GovernedRetrievalResult, ...],
+        max_items: int = DEFAULT_MAX_ITEMS,
+        max_assets: int = DEFAULT_MAX_ASSETS,
+        max_quantities: int = DEFAULT_MAX_QUANTITIES,
         max_relationships: int = DEFAULT_MAX_RELATIONSHIPS,
-        max_attributes: int = DEFAULT_MAX_ATTRIBUTES,
         max_metadata_entries: int = DEFAULT_MAX_METADATA_ENTRIES,
         max_warnings: int = DEFAULT_MAX_WARNINGS,
         metadata_entries: tuple[tuple[str, str], ...] = (),
-        retrieval_policy_version: str | None = None,
     ) -> ContextBuildRequest:
         ContextBuilderValidator.validate_project_id(project_id)
         ContextBuilderValidator.validate_budget_policy(
-            max_candidates=max_candidates,
-            max_entities=max_entities,
+            max_items=max_items,
+            max_assets=max_assets,
+            max_quantities=max_quantities,
             max_relationships=max_relationships,
-            max_attributes=max_attributes,
             max_metadata_entries=max_metadata_entries,
             max_warnings=max_warnings,
         )
@@ -60,19 +64,19 @@ class ContextBuildRequestFactory:
 
         budget_policy = BudgetPolicy(
             version=BUDGET_POLICY_VERSION,
-            max_candidates=max_candidates,
-            max_entities=max_entities,
+            max_items=max_items,
+            max_assets=max_assets,
+            max_quantities=max_quantities,
             max_relationships=max_relationships,
-            max_attributes=max_attributes,
             max_metadata_entries=max_metadata_entries,
             max_warnings=max_warnings,
         )
-        configuration = ContextBuilderConfiguration(
+        configuration = ContextAssemblyConfiguration(
             budget_policy=budget_policy,
             selection_policy=ContextSelectionPolicy(
                 version=SELECTION_POLICY_VERSION
             ),
-            context_builder_version=CONTEXT_BUILDER_VERSION,
+            context_assembly_version=CONTEXT_ASSEMBLY_VERSION,
         )
 
         entries = tuple(
@@ -82,8 +86,7 @@ class ContextBuildRequestFactory:
 
         return ContextBuildRequest(
             project_id=project_id,
-            candidates=candidates,
+            results=results,
             configuration=configuration,
             metadata_entries=entries,
-            retrieval_policy_version=retrieval_policy_version,
         )

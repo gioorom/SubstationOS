@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime
+
 import io
 
 from fastapi.testclient import TestClient
+
+from app.schemas.context_builder import ContextPackageRead
+from app.services import context_builder_service
+
+from tests._governed_context import asset_item, results_for
 
 
 def _create_project(api_client: TestClient, code: str = "PB-001") -> dict:
@@ -112,28 +120,46 @@ def _build_and_execute_graph(api_client: TestClient, code: str) -> dict:
 
     return project
 
+NOW = datetime(2026, 1, 1, 12, 0, 0)
 
-def _context_package(api_client: TestClient, project_id: int, **retrieval_body) -> dict:
-    retrieval_response = api_client.post(
-        f"/projects/{project_id}/structured-retrieval/search", json=retrieval_body
+
+def _context_package_json(project_id: int, *, count: int = 1) -> dict:
+    """
+    A governed ``ContextPackage``, serialized.
+
+    Built in-process rather than through an endpoint: the
+    ``/context-builder/build`` route was withdrawn by EPIC 31.3, because
+    a governed context cannot honestly be assembled from a request body
+    (provenance a caller asserts is not provenance). These two routes
+    still accept a package because they persist nothing and write no
+    graph - see ``app/schemas/context_builder.py``.
+    """
+
+    package = context_builder_service.build_context_package(
+        project_id=project_id,
+        results=results_for(
+            tuple(
+                asset_item(
+                    f"node-tr{index}",
+                    f"TR{index}",
+                    statement_key=f"statement-{index}",
+                    project_id=project_id,
+                )
+                for index in range(count)
+            ),
+            project_id=project_id,
+        ),
+        now=NOW,
+    ).package
+
+    return json.loads(
+        ContextPackageRead.from_domain(package).model_dump_json()
     )
-    assert retrieval_response.status_code == 200
-    candidates = retrieval_response.json()["candidates"]
-
-    context_response = api_client.post(
-        f"/projects/{project_id}/context-builder/build",
-        json={"candidates": candidates},
-    )
-    assert context_response.status_code == 200
-
-    return context_response.json()["package"]
 
 
 def test_build_endpoint_assembles_a_prompt_package(api_client: TestClient) -> None:
     project = _build_and_execute_graph(api_client, code="PB-BUILD-001")
-    package = _context_package(
-        api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
-    )
+    package = _context_package_json(project["id"])
 
     response = api_client.post(
         f"/projects/{project['id']}/prompt-builder/build",
@@ -156,9 +182,7 @@ def test_build_endpoint_on_an_empty_context_package_is_a_valid_empty_prompt(
     api_client: TestClient,
 ) -> None:
     project = _create_project(api_client, code="PB-EMPTY-001")
-    package = _context_package(
-        api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
-    )
+    package = _context_package_json(project["id"], count=0)
 
     response = api_client.post(
         f"/projects/{project['id']}/prompt-builder/build",
@@ -178,9 +202,7 @@ def test_build_endpoint_rejects_a_mismatched_project_id(
 ) -> None:
     project = _build_and_execute_graph(api_client, code="PB-MISMATCH-001")
     other_project = _create_project(api_client, code="PB-MISMATCH-002")
-    package = _context_package(
-        api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
-    )
+    package = _context_package_json(project["id"])
 
     response = api_client.post(
         f"/projects/{other_project['id']}/prompt-builder/build",
@@ -194,9 +216,7 @@ def test_build_endpoint_rejects_an_invalid_project_id(
     api_client: TestClient,
 ) -> None:
     project = _create_project(api_client, code="PB-INVALID-001")
-    package = _context_package(
-        api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
-    )
+    package = _context_package_json(project["id"])
 
     response = api_client.post(
         "/projects/0/prompt-builder/build",
@@ -210,12 +230,7 @@ def test_build_endpoint_preserves_evidence_references(
     api_client: TestClient,
 ) -> None:
     project = _build_and_execute_graph(api_client, code="PB-EVIDENCE-001")
-    package = _context_package(
-        api_client,
-        project["id"],
-        mode="entity_lookup",
-        canonical_entity_id="CABLE:C-295",
-    )
+    package = _context_package_json(project["id"])
 
     response = api_client.post(
         f"/projects/{project['id']}/prompt-builder/build",
@@ -225,14 +240,12 @@ def test_build_endpoint_preserves_evidence_references(
     assert response.status_code == 200
     references = response.json()["package"]["references"]
     assert len(references) == 1
-    assert references[0]["candidate_id"] == package["selected_candidates"][0]["candidate_id"]
+    assert references[0]["item_id"] == package["selected_items"][0]["item_id"]
 
 
 def test_build_endpoint_response_is_deterministic(api_client: TestClient) -> None:
     project = _build_and_execute_graph(api_client, code="PB-DETERM-001")
-    package = _context_package(
-        api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
-    )
+    package = _context_package_json(project["id"])
     payload = {"context_package": package}
 
     first = api_client.post(

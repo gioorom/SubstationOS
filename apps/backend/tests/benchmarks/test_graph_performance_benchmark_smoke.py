@@ -27,6 +27,7 @@ from scripts.benchmarks.graph_performance_benchmark import (
     run_conversation_benchmarks,
     run_engineering_response_benchmarks,
     run_engineering_session_benchmarks,
+    run_governed_retrieval_benchmarks,
     run_llm_invocation_runtime_benchmarks,
     run_llm_provider_benchmarks,
     run_prompt_builder_benchmarks,
@@ -215,3 +216,36 @@ def test_working_memory_benchmarks_run() -> None:
     operations = {measurement.operation for measurement in measurements}
     assert operations == _EXPECTED_WORKING_MEMORY_OPERATIONS
     assert all(measurement.seconds >= 0 for measurement in measurements)
+
+
+_EXPECTED_GOVERNED_RETRIEVAL_OPERATIONS = {
+    "governed_designation_lookup",
+    "governed_quantity_traversal",
+    "governed_relationship_lookup",
+    "governed_document_knowledge",
+    "governed_provenance_by_identity",
+}
+
+
+def test_the_governed_retrieval_benchmark_runs_and_measures_every_operation() -> (
+    None
+):
+    """
+    EPIC 31.2's five representative governed operations, measured against
+    the same synthetic dataset size the legacy retrieval benchmark uses -
+    so the two are comparable rather than merely both present.
+
+    Asserts nothing about wall-clock time, per the suite's standing rule
+    against flaky timing assertions under CI load.
+    """
+
+    measurements = run_governed_retrieval_benchmarks(SMALL_DATASET)
+
+    assert {
+        measurement.operation for measurement in measurements
+    } == _EXPECTED_GOVERNED_RETRIEVAL_OPERATIONS
+    assert all(
+        measurement.dataset == SMALL_DATASET.name
+        for measurement in measurements
+    )
+    assert all(measurement.unit_count > 0 for measurement in measurements)

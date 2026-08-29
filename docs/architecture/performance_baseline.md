@@ -256,6 +256,48 @@ measured here comfortably meet current product needs. They are the
 natural starting point for a future, dedicated performance milestone
 if real usage ever demands it.
 
+## Governed Structured Retrieval (EPIC 31.2)
+
+`run_governed_retrieval_benchmarks` measures the five representative
+governed operations against a synthetic governed graph of the same size
+as the Canonical Facts dataset the legacy retrieval benchmarks use, so
+the two are comparable rather than merely both present:
+
+| Operation | What it does |
+|---|---|
+| `governed_designation_lookup` | Resolve a designation to governed assets |
+| `governed_quantity_traversal` | Resolve, then follow governed relationships |
+| `governed_relationship_lookup` | Every governed relationship of one kind, in one project |
+| `governed_document_knowledge` | Everything one document produced |
+| `governed_provenance_by_identity` | One governed object, by id |
+
+On the small dataset (100 nodes / 200 relationships, 50 governed assets)
+every operation completes in **single-digit milliseconds**, and
+provenance-by-identity - a single indexed row read - is roughly an order
+of magnitude cheaper than the four scoped operations. The smoke test in
+`tests/benchmarks/` asserts the operations run and produce sane unit
+counts and **never asserts wall-clock time**, per this document's
+standing rule.
+
+### The one algorithmic trade, stated
+
+`governed_designation_lookup` filters by kind, state and project **in
+SQL** - all covered by `ix_governed_graph_nodes_project_state` - and
+then folds designations **in Python**.
+
+That is deliberate and it is a determinism-over-speed trade:
+`LOWER(label) = …` or `label ILIKE …` would make the answer depend on
+the database's collation, so the same governed graph could answer
+differently on SQLite and PostgreSQL. A retrieval contract that promises
+reproducibility cannot rest on that.
+
+The cost is one scan of the governed nodes in scope. At present the
+governed graph holds only what somebody has approved, so the set is
+small. **No index was added**, because adding a normalized-designation
+column now would denormalize the governed model ahead of a measured
+need - and the benchmark above is what makes the day that changes
+visible rather than theoretical.
+
 ## Explicit non-goals of this baseline
 
 No caching layer, Redis, Elasticsearch, Neo4j, materialized view, or

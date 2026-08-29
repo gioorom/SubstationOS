@@ -196,6 +196,11 @@ ATTRIBUTE_NAME = "rated_voltage"
 ATTRIBUTE_VALUE = "132kV"
 ORPHAN_FRACTION = 0.05
 
+#: The governed retrieval result limit used for the list-shaped
+#: benchmarks, so the measurement covers assembly of a full page rather
+#: than of the default twenty.
+MAX_BENCHMARK_LIMIT = 200
+
 
 @dataclass(frozen=True, slots=True)
 class DatasetSpec:
@@ -751,20 +756,44 @@ def run_structured_retrieval_benchmarks(
     return measurements
 
 
-def run_context_builder_benchmarks(
+def run_governed_retrieval_benchmarks(
     spec: DatasetSpec, seed: int = 42
 ) -> list[BenchmarkMeasurement]:
     """
-    Measures Context Builder assembly (Milestone 14) over the
-    ``COMBINED``-mode ``KnowledgeCandidateCollection`` Structured
-    Retrieval itself produces for the same populated project -
-    Selection, Aggregation, Coverage Analysis, and Budget Enforcement
-    together, both within a generous budget (nothing discarded) and
-    under a tight budget (forcing discards, warnings, and partial
-    coverage) - proving assembly cost scales with candidate count, not
-    with graph size, since Context Builder never touches Graph Query or
-    the database itself.
+    Measures the five governed retrieval operations named in EPIC 31.2 -
+    designation lookup, quantity traversal, relationship lookup,
+    document-scoped knowledge and provenance-by-identity - against a
+    synthetic **governed** graph of the same size as the Canonical Facts
+    dataset the legacy benchmarks use, so the two are comparable.
+
+    The graph is written through the governed repository (the one
+    promotion uses) and read through ``SqlAlchemyGovernedKnowledgeReader``
+    - exactly the path the real API takes.
+
+    ``designation_lookup`` is the one to watch: it filters by kind,
+    state and project in SQL and folds designations in Python, which is
+    a deliberate determinism-over-speed trade recorded in
+    ``performance_baseline.md``. The number here is what makes the day
+    that trade stops being affordable visible rather than theoretical.
     """
+
+    from app.domain.governed_knowledge_graph.graph_lifecycle import (
+        GraphObjectState,
+    )
+    from app.domain.governed_knowledge_graph.graph_vocabulary import (
+        GraphEdgeKind,
+    )
+    from app.domain.governed_retrieval.governed_retrieval_factory import (
+        GovernedRetrievalQueryFactory,
+    )
+    from app.infrastructure.governed_knowledge_graph.sqlalchemy_governed_graph_repository import (  # noqa: E501
+        SqlAlchemyGovernedGraphRepository,
+    )
+    from app.infrastructure.governed_retrieval.sqlalchemy_governed_knowledge_reader import (  # noqa: E501
+        SqlAlchemyGovernedKnowledgeReader,
+    )
+    from app.services import governed_retrieval_service
+    from tests._governed_graph_builder import governed_asset_with_quantity
 
     engine, session = _new_engine_and_session()
     measurements: list[BenchmarkMeasurement] = []
@@ -772,87 +801,278 @@ def run_context_builder_benchmarks(
     try:
         project_id = _create_project(
             session,
-            f"Benchmark context builder {spec.name}",
-            f"BENCH-CONTEXT-{spec.name.upper()}",
+            f"Benchmark governed retrieval {spec.name}",
+            f"BENCH-GOVERNED-{spec.name.upper()}",
         )
-        node_ids, relationships = _generate_dataset(project_id, spec, seed)
-        graph_store = SqlAlchemyGraphStore(session)
 
-        for entity_id in node_ids:
-            graph_store.upsert_node(
-                graph_entity_id=entity_id, execution_id=1, now=NOW
+        repository = SqlAlchemyGovernedGraphRepository(session)
+        asset_count = spec.node_count // 2
+        designations = [f"TR{index}" for index in range(asset_count)]
+
+        for index, designation in enumerate(designations, start=1):
+            asset, quantity, edge = governed_asset_with_quantity(
+                designation=designation,
+                document_id=index,
+                project_id=project_id,
+                created_at=NOW,
             )
-        for entity_id in node_ids:
-            if entity_id.entity_type in ATTRIBUTE_BEARING_TYPES:
-                graph_store.merge_node_property(
-                    graph_entity_id=entity_id,
-                    attribute=ATTRIBUTE_NAME,
-                    value=ATTRIBUTE_VALUE,
-                    execution_id=1,
-                    now=NOW,
+            repository.upsert_node(asset)
+            repository.upsert_node(quantity)
+            repository.upsert_edge(edge)
+
+        reader = SqlAlchemyGovernedKnowledgeReader(session)
+        target = designations[len(designations) // 2]
+        target_node = reader.nodes(
+            states=(GraphObjectState.ACTIVE,),
+        )[0]
+
+        def _measure(operation: str, units: int, query) -> None:
+            measurements.append(
+                _timed(
+                    operation,
+                    spec.name,
+                    units,
+                    lambda: governed_retrieval_service.retrieve(
+                        reader, query, now=NOW
+                    ),
                 )
-        for source, relationship_type, target in relationships:
-            graph_store.upsert_relationship(
-                source_entity_id=source,
-                relationship_type=GraphRelationshipType(value=relationship_type),
-                target_entity_id=target,
-                execution_id=1,
-                now=NOW,
             )
-        session.commit()
 
-        repository = SqlAlchemyGraphQueryRepository(session)
-        combined_request = StructuredRetrievalRequestFactory.create(
-            project_id=project_id,
-            mode=RetrievalMode.COMBINED,
-            limit=200,
-            include_neighborhood=False,
-            neighborhood_depth=0,
-            entity_type=ENTITY_TYPES[0],
-            attribute_name=ATTRIBUTE_NAME,
+        _measure(
+            "governed_designation_lookup",
+            asset_count,
+            GovernedRetrievalQueryFactory.asset_by_designation(
+                designation=target, project_id=project_id
+            ),
         )
-        retrieval_result = structured_retrieval_service.retrieve(
-            repository, combined_request, now=NOW
+        _measure(
+            "governed_quantity_traversal",
+            asset_count,
+            GovernedRetrievalQueryFactory.quantity_for_asset(
+                designation=target, project_id=project_id
+            ),
         )
-        candidates = retrieval_result.candidates
-
-        within_budget_request = ContextBuildRequestFactory.create(
-            project_id=project_id,
-            candidates=candidates,
-            max_candidates=len(candidates.candidates) or 1,
-            max_entities=len(candidates.candidates) or 1,
-            max_attributes=len(candidates.candidates) or 1,
+        _measure(
+            "governed_relationship_lookup",
+            asset_count,
+            GovernedRetrievalQueryFactory.relationships(
+                edge_kind=GraphEdgeKind.HAS_RATED_POWER,
+                project_id=project_id,
+                limit=MAX_BENCHMARK_LIMIT,
+            ),
         )
-        measurements.append(
-            _timed(
-                "context_builder_within_budget",
-                spec.name,
-                len(candidates.candidates),
-                lambda: assemble_context_package(
-                    within_budget_request, now=NOW
-                ),
-            )
+        _measure(
+            "governed_document_knowledge",
+            asset_count,
+            GovernedRetrievalQueryFactory.document_knowledge(
+                document_id=1, project_id=project_id
+            ),
         )
-
-        tight_budget_request = ContextBuildRequestFactory.create(
-            project_id=project_id,
-            candidates=candidates,
-            max_candidates=max(1, len(candidates.candidates) // 4),
-            max_entities=max(1, len(candidates.candidates) // 8),
-        )
-        measurements.append(
-            _timed(
-                "context_builder_tight_budget",
-                spec.name,
-                len(candidates.candidates),
-                lambda: assemble_context_package(
-                    tight_budget_request, now=NOW
-                ),
-            )
+        _measure(
+            "governed_provenance_by_identity",
+            1,
+            GovernedRetrievalQueryFactory.governed_identity(
+                node_id=target_node.node_id.value
+            ),
         )
     finally:
         session.close()
         engine.dispose()
+
+    return measurements
+
+
+
+#: Governed results the Context Assembly benchmarks assemble from.
+#:
+#: Generated in memory rather than retrieved, and that is the point:
+#: Context Assembly performs **no I/O**, so its cost is a function of how
+#: many governed results it was handed and of nothing else. Driving it
+#: from a database read would measure the read.
+def _governed_results(count: int) -> tuple:
+    from app.domain.governed_knowledge_graph.graph_lifecycle import (
+        GraphObjectState,
+    )
+    from app.domain.governed_knowledge_graph.graph_vocabulary import (
+        GraphNodeKind,
+    )
+    from app.domain.governed_retrieval.governed_match_policy import (
+        precedence_of,
+    )
+    from app.domain.governed_retrieval.governed_result_identity import (
+        node_result_id,
+    )
+    from app.domain.governed_retrieval.governed_retrieval_models import (
+        AssetDesignationQuery,
+        GovernedGraphVersion,
+        GovernedMatchExplanation,
+        GovernedNodeReference,
+        GovernedProvenanceView,
+        GovernedRetrievalDiagnostics,
+        GovernedRetrievalItem,
+        GovernedRetrievalResult,
+    )
+    from app.domain.governed_retrieval.governed_retrieval_vocabulary import (
+        GovernedMatchOutcome,
+        GovernedMatchStrategy,
+        GovernedResultKind,
+        RetrievalScope,
+    )
+
+    strategy = GovernedMatchStrategy.EXACT_DESIGNATION
+    results = []
+
+    for index in range(count):
+        designation = f"TR{index}"
+        node_id = f"node-{index}"
+
+        item = GovernedRetrievalItem(
+            result_id=node_result_id(GovernedResultKind.ASSET, node_id),
+            kind=GovernedResultKind.ASSET,
+            node=GovernedNodeReference(
+                node_id=node_id,
+                kind=GraphNodeKind.ENGINEERING_ASSET,
+                label=designation,
+                normalized_value=designation.lower(),
+                unit=None,
+            ),
+            relationship=None,
+            state=GraphObjectState.ACTIVE,
+            retirement_reason=None,
+            match=GovernedMatchExplanation(
+                strategy=strategy,
+                matched_field="label",
+                matched_value=designation,
+                normalized_query=designation.lower(),
+            ),
+            provenance=GovernedProvenanceView(
+                statement_key=f"statement-{index}",
+                document_id=1,
+                content_checksum="checksum",
+                review_id=1,
+                reviewer_user_id=1,
+                reviewer_display_name="Benchmark Engineer",
+                reviewed_at=NOW,
+                semantic_rule_id="rule",
+                semantic_rule_version="1.0",
+                semantic_contract_version="1.0",
+                resolution_policy_version="1.0",
+                fact_policy_version="1.0",
+                semantic_policy_version="1.0",
+                support_fingerprint="fingerprint",
+                project_id=1,
+            ),
+            sort_key=(
+                precedence_of(strategy),
+                designation.lower(),
+                "",
+                node_id,
+            ),
+        )
+
+        query = AssetDesignationQuery(
+            designation=designation,
+            scope=RetrievalScope.CURRENT_ONLY,
+            limit=200,
+            project_id=1,
+        )
+
+        results.append(
+            GovernedRetrievalResult(
+                query=query,
+                outcome=GovernedMatchOutcome.UNIQUE_MATCH,
+                items=(item,),
+                total_before_limit=1,
+                applied_limit=200,
+                diagnostics=GovernedRetrievalDiagnostics(
+                    query_type=query.query_type,
+                    scope=query.scope,
+                    normalized_query=designation.lower(),
+                    strategies_attempted=(strategy,),
+                    candidates_examined=1,
+                    matched_count=1,
+                    returned_count=1,
+                    ambiguous=False,
+                    no_match=False,
+                    normalization_version="1.0",
+                    matching_policy_version="1.0",
+                    graph_version=GovernedGraphVersion(
+                        generation_number=1,
+                        generation_created_at=NOW,
+                        promotion_contract_version="1.0",
+                    ),
+                    duration_seconds=None,
+                ),
+                retrieved_at=NOW,
+            )
+        )
+
+    return tuple(results)
+
+
+def _benchmark_context_package(count: int):
+    """One governed ``ContextPackage`` of ``count`` approved assets."""
+
+    request = ContextBuildRequestFactory.create(
+        project_id=1,
+        results=_governed_results(count),
+        max_items=max(count, 1),
+        max_assets=max(count, 1),
+    )
+
+    return assemble_context_package(request, now=NOW)
+
+
+def run_context_builder_benchmarks(
+    spec: DatasetSpec, seed: int = 42
+) -> list[BenchmarkMeasurement]:
+    """
+    Measures Governed Context Assembly (EPIC 31.3) over a generated set
+    of governed retrieval results - Ingestion, Selection, Aggregation,
+    Coverage Analysis and Budget Enforcement together, both within a
+    generous budget (nothing discarded) and under a tight budget
+    (forcing discards, warnings and partial coverage).
+
+    **No database is touched**, and that is the measurement: Context
+    Assembly transforms already-retrieved governed data, so its cost is
+    a function of the number of governed results and of nothing else.
+    Since EPIC 31.3 it cannot read for itself even if it wanted to - the
+    only input it has is the results it was handed.
+    """
+
+    measurements: list[BenchmarkMeasurement] = []
+    count = spec.node_count
+    results = _governed_results(count)
+
+    within_budget_request = ContextBuildRequestFactory.create(
+        project_id=1,
+        results=results,
+        max_items=max(count, 1),
+        max_assets=max(count, 1),
+    )
+    measurements.append(
+        _timed(
+            "context_builder_within_budget",
+            spec.name,
+            count,
+            lambda: assemble_context_package(within_budget_request, now=NOW),
+        )
+    )
+
+    tight_budget_request = ContextBuildRequestFactory.create(
+        project_id=1,
+        results=results,
+        max_items=max(1, count // 4),
+        max_assets=max(1, count // 8),
+    )
+    measurements.append(
+        _timed(
+            "context_builder_tight_budget",
+            spec.name,
+            count,
+            lambda: assemble_context_package(tight_budget_request, now=NOW),
+        )
+    )
 
     return measurements
 
@@ -905,28 +1125,10 @@ def run_prompt_builder_benchmarks(
             )
         session.commit()
 
-        repository = SqlAlchemyGraphQueryRepository(session)
-        combined_request = StructuredRetrievalRequestFactory.create(
-            project_id=project_id,
-            mode=RetrievalMode.COMBINED,
-            limit=200,
-            include_neighborhood=False,
-            neighborhood_depth=0,
-            entity_type=ENTITY_TYPES[0],
-            attribute_name=ATTRIBUTE_NAME,
-        )
-        retrieval_result = structured_retrieval_service.retrieve(
-            repository, combined_request, now=NOW
-        )
-
-        context_request = ContextBuildRequestFactory.create(
-            project_id=project_id,
-            candidates=retrieval_result.candidates,
-            max_candidates=len(retrieval_result.candidates.candidates) or 1,
-            max_entities=len(retrieval_result.candidates.candidates) or 1,
-            max_attributes=len(retrieval_result.candidates.candidates) or 1,
-        )
-        context_package = assemble_context_package(context_request, now=NOW)
+        # The governed context is generated rather than retrieved: these
+        # benchmarks measure composition, and driving them through a
+        # database read would measure the read instead.
+        context_package = _benchmark_context_package(spec.node_count)
 
         prompt_request = PromptBuildRequestFactory.create(
             project_id=project_id, context_package=context_package
@@ -935,7 +1137,7 @@ def run_prompt_builder_benchmarks(
             _timed(
                 "prompt_builder_composition",
                 spec.name,
-                len(context_package.selected_candidates),
+                len(context_package.selected_items),
                 lambda: assemble_prompt_package(prompt_request, now=NOW),
             )
         )
@@ -994,28 +1196,10 @@ def run_llm_provider_benchmarks(
             )
         session.commit()
 
-        repository = SqlAlchemyGraphQueryRepository(session)
-        combined_request = StructuredRetrievalRequestFactory.create(
-            project_id=project_id,
-            mode=RetrievalMode.COMBINED,
-            limit=200,
-            include_neighborhood=False,
-            neighborhood_depth=0,
-            entity_type=ENTITY_TYPES[0],
-            attribute_name=ATTRIBUTE_NAME,
-        )
-        retrieval_result = structured_retrieval_service.retrieve(
-            repository, combined_request, now=NOW
-        )
-
-        context_request = ContextBuildRequestFactory.create(
-            project_id=project_id,
-            candidates=retrieval_result.candidates,
-            max_candidates=len(retrieval_result.candidates.candidates) or 1,
-            max_entities=len(retrieval_result.candidates.candidates) or 1,
-            max_attributes=len(retrieval_result.candidates.candidates) or 1,
-        )
-        context_package = assemble_context_package(context_request, now=NOW)
+        # The governed context is generated rather than retrieved: these
+        # benchmarks measure composition, and driving them through a
+        # database read would measure the read instead.
+        context_package = _benchmark_context_package(spec.node_count)
 
         prompt_request = PromptBuildRequestFactory.create(
             project_id=project_id, context_package=context_package
@@ -1089,7 +1273,7 @@ def _synthetic_llm_request():
 
     metadata = LLMRequestMetadata(
         project_id=0,
-        context_builder_version="1.0",
+        context_assembly_version="1.0",
         prompt_builder_version="1.0",
         composition_policy_version="1.0",
         prompt_package_version="1.0",
@@ -1271,13 +1455,7 @@ def run_engineering_response_benchmarks() -> list[BenchmarkMeasurement]:
 
     measurements: list[BenchmarkMeasurement] = []
 
-    empty_candidates = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
-    context_request = ContextBuildRequestFactory.create(
-        project_id=1, candidates=empty_candidates
-    )
-    context_package = assemble_context_package(context_request, now=NOW)
+    context_package = _benchmark_context_package(0)
 
     prompt_request = PromptBuildRequestFactory.create(
         project_id=1, context_package=context_package
@@ -1340,13 +1518,7 @@ def run_engineering_session_benchmarks() -> list[BenchmarkMeasurement]:
 
     measurements: list[BenchmarkMeasurement] = []
 
-    empty_candidates = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
-    context_request = ContextBuildRequestFactory.create(
-        project_id=1, candidates=empty_candidates
-    )
-    context_package = assemble_context_package(context_request, now=NOW)
+    context_package = _benchmark_context_package(0)
 
     prompt_request = PromptBuildRequestFactory.create(
         project_id=1, context_package=context_package
@@ -1422,13 +1594,7 @@ def run_conversation_benchmarks() -> list[BenchmarkMeasurement]:
 
     measurements: list[BenchmarkMeasurement] = []
 
-    empty_candidates = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
-    context_request = ContextBuildRequestFactory.create(
-        project_id=1, candidates=empty_candidates
-    )
-    context_package = assemble_context_package(context_request, now=NOW)
+    context_package = _benchmark_context_package(0)
 
     prompt_request = PromptBuildRequestFactory.create(
         project_id=1, context_package=context_package
@@ -1515,13 +1681,7 @@ def run_working_memory_benchmarks() -> list[BenchmarkMeasurement]:
 
     measurements: list[BenchmarkMeasurement] = []
 
-    empty_candidates = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
-    context_request = ContextBuildRequestFactory.create(
-        project_id=1, candidates=empty_candidates
-    )
-    context_package = assemble_context_package(context_request, now=NOW)
+    context_package = _benchmark_context_package(0)
 
     prompt_request = PromptBuildRequestFactory.create(
         project_id=1, context_package=context_package
@@ -1599,6 +1759,7 @@ def run_all(specs: tuple[DatasetSpec, ...]) -> list[BenchmarkMeasurement]:
         measurements.extend(run_store_level_and_read_benchmarks(spec))
         measurements.extend(run_batch_execution_benchmark(spec))
         measurements.extend(run_structured_retrieval_benchmarks(spec))
+        measurements.extend(run_governed_retrieval_benchmarks(spec))
         measurements.extend(run_context_builder_benchmarks(spec))
         measurements.extend(run_prompt_builder_benchmarks(spec))
         measurements.extend(run_llm_provider_benchmarks(spec))

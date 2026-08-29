@@ -38,7 +38,6 @@ from app.routers import (
     canonical_pdf as canonical_pdf_router,
     canonical_text as canonical_text_router,
     canonicalization as canonicalization_router,
-    context_builder as context_builder_router,
     conversation as conversation_router,
     documents,
     document_ingestion as document_ingestion_router,
@@ -55,6 +54,7 @@ from app.routers import (
     engineering_session as engineering_session_router,
     graph_builder as graph_builder_router,
     governed_knowledge_graph as governed_knowledge_graph_router,
+    governed_retrieval as governed_retrieval_router,
     graph_query as graph_query_router,
     human_review as human_review_router,
     llm_provider as llm_provider_router,
@@ -122,6 +122,7 @@ app.include_router(engineering_facts_router.router)
 app.include_router(engineering_semantics_router.router)
 app.include_router(human_review_router.router)
 app.include_router(governed_knowledge_graph_router.router)
+app.include_router(governed_retrieval_router.router)
 app.include_router(evidence_evaluation_router.router)
 app.include_router(projects.router)
 app.include_router(engineering_index_router.router)
@@ -132,7 +133,6 @@ app.include_router(graph_builder_router.router)
 app.include_router(project_knowledge_graph_router.router)
 app.include_router(graph_query_router.router)
 app.include_router(structured_retrieval_router.router)
-app.include_router(context_builder_router.router)
 app.include_router(prompt_builder_router.router)
 app.include_router(llm_provider_router.router)
 app.include_router(engineering_response_router.router)

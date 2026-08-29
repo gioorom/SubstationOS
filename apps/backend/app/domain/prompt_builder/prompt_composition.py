@@ -39,9 +39,10 @@ from app.domain.prompt_builder.prompt_builder_models import (
     PromptSectionType,
 )
 from app.domain.prompt_builder.token_estimation import estimate_tokens
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidate,
-    KnowledgeCandidateKind,
+from app.domain.context_builder.context_builder_models import ContextItem
+from app.domain.governed_retrieval.governed_retrieval_vocabulary import (
+    GovernedMatchOutcome,
+    GovernedResultKind,
 )
 
 # The canonical, fixed, deterministic section order - independent of
@@ -86,9 +87,13 @@ def section(
 def _build_system_context() -> PromptSection:
     content = (
         "You are an engineering assistant operating over SubstationOS's "
-        "governed Project Knowledge Graph.",
-        "Every fact supplied below has already been reviewed and "
-        "approved before reaching this context.",
+        "Governed Knowledge Graph.",
+        "Every statement supplied below was interpreted deterministically "
+        "from a document and approved by a named engineer, and each one "
+        "cites the review that authorised it.",
+        "Approved means an engineer accepted that statement. It does not "
+        "mean the knowledge below is complete, and it does not mean a "
+        "question has exactly one answer.",
         "Do not use any source of knowledge other than what is "
         "explicitly supplied below.",
     )
@@ -101,58 +106,156 @@ def _build_engineering_context(context_package: ContextPackage) -> PromptSection
 
     content = (
         f"Project id: {context_package.project_id}",
-        f"Knowledge candidates retrieved: {summary.retrieved_candidate_count}",
-        "Knowledge candidates selected into this context: "
-        f"{len(context_package.selected_candidates)}",
+        "Governed results retrieved: "
+        f"{summary.retrieved_item_count} of {summary.total_before_limit} "
+        "matched",
+        "Governed results included in this context: "
+        f"{len(context_package.selected_items)}",
         "Selection completeness: "
         f"{context_package.coverage.overall_completeness:.2f}",
-    )
+    ) + _ambiguity_lines(context_package)
 
     return section(PromptSectionType.ENGINEERING_CONTEXT, content)
 
 
-def describe_candidate(candidate: KnowledgeCandidate) -> str:
-    if candidate.candidate_kind is KnowledgeCandidateKind.ATTRIBUTE:
-        reference = candidate.primary_reference
-        attribute = candidate.matched_attributes[0]
-        subject = (
-            f"{reference.entity_type}:{reference.canonical_id}"
-            if reference is not None
-            else "unknown"
+def evidence_reference(item: ContextItem) -> PromptEvidenceReference:
+    """
+    One governed citation for one context item.
+
+    Built here rather than in Context Assembly because a citation is a
+    *prompt* concept: the context carries the whole governed item, and
+    this is the subset a consumer needs in order to follow a claim back
+    to the review that authorised it.
+    """
+
+    result = item.result
+    node_ids = () if result.node is None else (result.node.node_id,)
+    edge_ids = (
+        ()
+        if result.relationship is None
+        else (result.relationship.edge_id,)
+    )
+
+    return PromptEvidenceReference(
+        item_id=result.result_id,
+        node_ids=node_ids,
+        edge_ids=edge_ids,
+        statement_key=result.provenance.statement_key,
+        review_id=result.provenance.review_id,
+        document_id=result.provenance.document_id,
+    )
+
+
+def describe_reference(reference: PromptEvidenceReference) -> str:
+    """One citation, as one prompt line. Identities only - never the
+    statement, the facts, the evidence or their text, all of which stay
+    in the pipeline that produced them."""
+
+    return (
+        f"{reference.item_id}: nodes={list(reference.node_ids)}, "
+        f"edges={list(reference.edge_ids)}, "
+        f"statement={reference.statement_key}, "
+        f"review={reference.review_id}, "
+        f"document={reference.document_id}"
+    )
+
+
+def _ambiguity_lines(context_package: ContextPackage) -> tuple[str, ...]:
+    """
+    What the model must be told when a governed question had more than
+    one governed answer.
+
+    Stated in the prompt rather than left to the ordering: an ordered
+    list reads as a ranked one, and the first line of a ranked list
+    reads as the answer. Ambiguity that survives retrieval and Context
+    Assembly must survive the prompt too, or the whole chain hid it at
+    the last step.
+    """
+
+    ambiguous = tuple(
+        query
+        for query in context_package.retrieval_summary.queries
+        if query.outcome is GovernedMatchOutcome.MULTIPLE_MATCHES
+    )
+
+    if not ambiguous:
+        return ()
+
+    lines = [
+        "AMBIGUOUS: the following subjects matched more than one "
+        "governed object. They are distinct governed identities and were "
+        "not merged. Do not present one of them as the answer.",
+    ]
+    lines.extend(
+        f"  - '{query.normalized_query}' matched "
+        f"{query.matched_before_limit} governed objects"
+        if query.normalized_query
+        else (
+            f"  - a {query.query_type.value} query matched "
+            f"{query.matched_before_limit} governed objects"
         )
+        for query in ambiguous
+    )
+
+    return tuple(lines)
+
+
+def describe_item(item: ContextItem) -> str:
+    """
+    One governed context item, as one prompt line.
+
+    **No score.** The legacy description ended in ``(score 100.0)``, a
+    number the model could only read as confidence. What replaces it is
+    the governed match strategy - a statement about *how* the item was
+    found, in a closed vocabulary - and the statement key that
+    authorises it, so a line in a prompt can be traced to a review
+    without leaving the prompt.
+
+    Nothing is formatted, converted or rounded: a governed label and its
+    unit are reproduced exactly as the pipeline recorded them, because
+    an engineering value that the prompt reshaped would be a value
+    nobody reviewed.
+    """
+
+    result = item.result
+    strategy = result.match.strategy.value
+    statement = result.provenance.statement_key
+
+    if item.kind is GovernedResultKind.RELATIONSHIP:
+        relationship = result.relationship
         return (
-            f"ATTRIBUTE {subject}.{attribute.name} = {attribute.value} "
-            f"(score {candidate.score.total})"
+            f"RELATIONSHIP {relationship.subject.label} "
+            f"{relationship.kind.value} {relationship.object.label} "
+            f"[edge {relationship.edge_id}] "
+            f"(matched by {strategy}; statement {statement})"
         )
 
-    if candidate.candidate_kind is KnowledgeCandidateKind.RELATIONSHIP:
-        relationship = candidate.matched_relationships[0]
-        subject = (
-            f"{relationship.subject.entity_type}:"
-            f"{relationship.subject.canonical_id}"
-        )
-        obj = f"{relationship.object.entity_type}:{relationship.object.canonical_id}"
+    node = result.node
+
+    if item.kind is GovernedResultKind.QUANTITY and (
+        result.relationship is not None
+    ):
+        relationship = result.relationship
         return (
-            f"RELATIONSHIP {subject} {relationship.relationship_type.value} "
-            f"{obj} (score {candidate.score.total})"
+            f"QUANTITY {relationship.subject.label} "
+            f"{relationship.kind.value} {node.label} "
+            f"[node {node.node_id}] "
+            f"(matched by {strategy}; statement {statement})"
         )
 
-    if candidate.primary_reference is not None:
-        reference = candidate.primary_reference
-        return (
-            f"ENTITY {reference.entity_type}:{reference.canonical_id} "
-            f"(score {candidate.score.total})"
-        )
+    kind = item.kind.value.upper()
 
-    return f"{candidate.candidate_kind.value.upper()} {candidate.candidate_id}"
+    return (
+        f"{kind} {node.label} [node {node.node_id}] "
+        f"(matched by {strategy}; statement {statement})"
+    )
 
 
 def _build_selected_knowledge(
     context_package: ContextPackage,
 ) -> PromptSection:
     content = tuple(
-        describe_candidate(candidate)
-        for candidate in context_package.selected_candidates
+        describe_item(item) for item in context_package.selected_items
     )
 
     return section(PromptSectionType.SELECTED_KNOWLEDGE, content)
@@ -161,24 +264,13 @@ def _build_selected_knowledge(
 def _build_references(
     context_package: ContextPackage,
 ) -> tuple[PromptEvidenceReference, ...]:
-    return tuple(
-        PromptEvidenceReference(
-            candidate_id=candidate.candidate_id,
-            graph_node_ids=candidate.graph_node_ids,
-            graph_relationship_ids=candidate.graph_relationship_ids,
-        )
-        for candidate in context_package.selected_candidates
-    )
+    return tuple(evidence_reference(item) for item in context_package.selected_items)
 
 
 def _build_evidence_references(
     references: tuple[PromptEvidenceReference, ...],
 ) -> PromptSection:
-    content = tuple(
-        f"{reference.candidate_id}: nodes={list(reference.graph_node_ids)}, "
-        f"relationships={list(reference.graph_relationship_ids)}"
-        for reference in references
-    )
+    content = tuple(describe_reference(reference) for reference in references)
 
     return section(PromptSectionType.EVIDENCE_REFERENCES, content)
 
@@ -217,9 +309,11 @@ def _build_metadata_section(context_package: ContextPackage) -> PromptSection:
     metadata = context_package.metadata
     content = (
         f"Context assembled at: {metadata.assembled_at.isoformat()}",
-        f"Context builder version: {metadata.context_builder_version}",
-        "Retrieval policy version: "
-        f"{metadata.retrieval_policy_version or 'unknown'}",
+        f"Context assembly version: {metadata.context_assembly_version}",
+        "Retrieval matching policy version: "
+        f"{metadata.retrieval_matching_policy_version or 'unknown'}",
+        "Governed graph generation: "
+        f"{metadata.graph_generation_number or 'unknown'}",
     )
 
     return section(PromptSectionType.METADATA, content)

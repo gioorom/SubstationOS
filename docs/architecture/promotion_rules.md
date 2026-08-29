@@ -1,5 +1,13 @@
 # Promotion Rules
 
+> **Since EPIC 31.2 this rule is also the *retrieval* gate.** Governed
+> Structured Retrieval reads a graph object's `state` and performs no
+> governance logic of its own, so what is written here is the only
+> definition of which knowledge may answer an engineering question. See
+> [governed_structured_retrieval.md](governed_structured_retrieval.md)
+> §8 and [ADR-0026](adr/0026-governed-structured-retrieval.md) §4 for
+> why a second definition was deliberately not created.
+
 > What may become governed engineering knowledge, and what may not.
 > Implemented in `app/domain/governed_knowledge_graph/promotion_rules.py`.
 > Every rule here is tested individually.

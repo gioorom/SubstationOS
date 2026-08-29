@@ -25,7 +25,7 @@ from app.infrastructure.llm.base.fake_llm_provider_adapter import (
 from app.services.engineering_engine.composition import build_workflow_registry
 from tests.services._engineering_engine_support import (
     NOW,
-    FakeGraphQueryRepository,
+    FakeGovernedKnowledgeReader,
     build_test_engine,
     execution_request,
     runtime_configuration,
@@ -110,8 +110,8 @@ def test_execution_identity_is_deterministic() -> None:
 
 
 def test_a_drawing_request_is_unsupported_and_runs_nothing() -> None:
-    repository = FakeGraphQueryRepository()
-    engine = build_test_engine(graph_query_repository=repository)
+    repository = FakeGovernedKnowledgeReader()
+    engine = build_test_engine(governed_knowledge_reader=repository)
 
     result = _execute(
         engine,
@@ -127,7 +127,7 @@ def test_a_drawing_request_is_unsupported_and_runs_nothing() -> None:
     assert result.execution is None
     assert result.engineering_response is None
     assert result.prepared_updates is None
-    assert repository.list_nodes_calls == 0
+    assert repository.node_reads == 0
     assert result.validation.valid is True
 
 
@@ -188,7 +188,7 @@ def test_an_invalid_execution_request_fails_before_planning() -> None:
 
 def test_a_retrieval_failure_stops_execution_at_that_step() -> None:
     engine = build_test_engine(
-        graph_query_repository=FakeGraphQueryRepository(
+        governed_knowledge_reader=FakeGovernedKnowledgeReader(
             raises=RuntimeError("graph query exploded")
         )
     )
@@ -271,7 +271,7 @@ def test_no_raw_provider_exception_escapes_the_engine() -> None:
     provider-neutral engine failure rather than propagating."""
 
     engine = build_test_engine(
-        graph_query_repository=FakeGraphQueryRepository(
+        governed_knowledge_reader=FakeGovernedKnowledgeReader(
             raises=ValueError("something nobody anticipated")
         )
     )
@@ -295,13 +295,13 @@ def test_select_workflow_is_independently_callable() -> None:
 
 
 def test_build_plan_is_independently_callable_without_executing() -> None:
-    repository = FakeGraphQueryRepository()
-    engine = build_test_engine(graph_query_repository=repository)
+    repository = FakeGovernedKnowledgeReader()
+    engine = build_test_engine(governed_knowledge_reader=repository)
 
     plan = engine.build_plan(execution_request(), KNOWLEDGE_QUERY_WORKFLOW)
 
     assert len(plan.steps) == len(KNOWLEDGE_QUERY_WORKFLOW.steps)
-    assert repository.list_nodes_calls == 0
+    assert repository.node_reads == 0
 
 
 def test_validate_plan_is_independently_callable() -> None:

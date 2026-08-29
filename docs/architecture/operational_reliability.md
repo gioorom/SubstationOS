@@ -143,6 +143,33 @@ suite never reads, writes, or migrates the real on-disk
 `substationos.db` file. This was already true before this milestone
 and is unchanged.
 
+## Governed retrieval adds no operational surface (EPIC 31.2)
+
+Worth stating because a milestone that moved the Engineering Engine's
+retrieval onto a different substrate could easily have added some.
+
+- **No new configuration.** No environment variable, no feature flag,
+  no toggle between the old and new retrieval. The engine reads governed
+  knowledge; there is no switch back, and therefore no configuration
+  that could be wrong in production.
+- **No new external dependency**, no cache, no background job, no
+  scheduled work. Retrieval is a read inside the request that asked for
+  it.
+- **No new table and no migration.** Governed retrieval reads the three
+  `governed_graph_*` tables EPIC 31 already created, through a port with
+  no write method. Nothing about the schema changed, so nothing about
+  upgrade or rollback changed either.
+- **Failure posture is unchanged.** A query that matches nothing is a
+  successful, explicitly-classified empty result rather than an error;
+  only a structurally invalid query fails, and it fails with a typed
+  domain error the router maps to `422`.
+- **An installation with an empty governed graph answers `no_match`**
+  rather than failing. That is the correct behaviour and it is also the
+  first thing to check if engineering answers go quiet after upgrading:
+  the engine now requires *promoted* knowledge, so a platform whose
+  statements have never been reviewed and promoted has nothing to
+  retrieve. `GET /knowledge-graph/status` reports the counts.
+
 ## What this document deliberately does not do
 
 - No distributed tracing, APM, or external monitoring platform is

@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime
+
 import io
 from unittest.mock import AsyncMock
 
 import anthropic
 from fastapi.testclient import TestClient
+
+from app.schemas.context_builder import ContextPackageRead
+from app.services import context_builder_service
+
+from tests._governed_context import asset_item, results_for
 
 from tests.infrastructure._anthropic_test_support import make_httpx_response, make_message
 
@@ -109,23 +117,40 @@ def _build_and_execute_graph(api_client: TestClient, code: str) -> dict:
     return project
 
 
-def _prompt_package(api_client: TestClient, project_id: int, **retrieval_body) -> dict:
-    retrieval_response = api_client.post(
-        f"/projects/{project_id}/structured-retrieval/search", json=retrieval_body
-    )
-    assert retrieval_response.status_code == 200
-    candidates = retrieval_response.json()["candidates"]
+def _prompt_package(api_client: TestClient, project_id: int, **_ignored) -> dict:
+    """
+    A prompt package, over the API.
 
-    context_response = api_client.post(
-        f"/projects/{project_id}/context-builder/build",
-        json={"candidates": candidates},
-    )
-    assert context_response.status_code == 200
-    context_package = context_response.json()["package"]
+    The governed ``ContextPackage`` is built in-process and posted to
+    `/prompt-builder/build`. It is no longer produced by a
+    `/context-builder/build` call: EPIC 31.3 withdrew that route, because
+    a governed context cannot honestly be assembled from a request body -
+    provenance a caller asserts is not provenance.
+    """
+
+    package = context_builder_service.build_context_package(
+        project_id=project_id,
+        results=results_for(
+            (
+                asset_item(
+                    "node-tr1",
+                    "TR1",
+                    statement_key="statement-1",
+                    project_id=project_id,
+                ),
+            ),
+            project_id=project_id,
+        ),
+        now=datetime(2026, 1, 1, 12, 0, 0),
+    ).package
 
     prompt_response = api_client.post(
         f"/projects/{project_id}/prompt-builder/build",
-        json={"context_package": context_package},
+        json={
+            "context_package": json.loads(
+                ContextPackageRead.from_domain(package).model_dump_json()
+            )
+        },
     )
     assert prompt_response.status_code == 200
 

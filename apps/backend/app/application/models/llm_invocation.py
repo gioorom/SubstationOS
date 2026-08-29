@@ -218,7 +218,7 @@ class LLMResponseMetadata:
     adapter_version: str
     request_preparation_policy_version: str
     prompt_package_version: str | None
-    context_builder_version: str | None
+    context_assembly_version: str | None
     prompt_builder_version: str | None
 
 

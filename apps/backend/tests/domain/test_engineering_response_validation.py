@@ -88,7 +88,7 @@ def _response(**overrides) -> EngineeringResponse:
             returned_model_identifier="model-x",
             request_correlation_id="corr-1",
             prompt_package_version="1.0",
-            context_builder_version="1.0",
+            context_assembly_version="1.0",
             prompt_builder_version="1.0",
             package_version="1.0",
         ),
@@ -105,7 +105,7 @@ def _response(**overrides) -> EngineeringResponse:
             engineering_response_version="1.0",
             response_policy_version="1.0",
             prompt_builder_version="1.0",
-            context_builder_version="1.0",
+            context_assembly_version="1.0",
             request_preparation_policy_version="1.0",
             runtime_version="1.0",
             package_version="1.0",
@@ -176,7 +176,12 @@ def test_reference_count_inconsistency_is_rejected() -> None:
     response = _response(
         references=(
             EngineeringEvidenceReference(
-                candidate_id="c1", graph_node_ids=(), graph_relationship_ids=()
+                item_id="asset:node-tr1",
+                node_ids=(),
+                edge_ids=(),
+                statement_key="statement-1",
+                review_id=21,
+                document_id=11,
             ),
         )
     )
@@ -278,13 +283,13 @@ def _deterministic_response(**overrides) -> EngineeringResponse:
         configured_model_identifier=None,
         returned_model_identifier=None,
         prompt_package_version=None,
-        context_builder_version=None,
+        context_assembly_version=None,
         prompt_builder_version=None,
     )
     version = replace(
         response.version,
         prompt_builder_version=None,
-        context_builder_version=None,
+        context_assembly_version=None,
         request_preparation_policy_version=None,
         runtime_version=None,
     )

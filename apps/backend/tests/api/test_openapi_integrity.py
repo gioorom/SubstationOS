@@ -144,7 +144,6 @@ def test_every_active_router_contributes_at_least_one_route() -> None:
         "Project Knowledge Graph",
         "Graph Query",
         "Structured Retrieval",
-        "Context Builder",
         "Prompt Builder",
         "LLM Provider",
         "Governed Knowledge Graph",
@@ -187,7 +186,6 @@ def test_governed_graph_routes_are_not_deprecated() -> None:
         "Graph Query",
         "Graph Builder",
         "Structured Retrieval",
-        "Context Builder",
         "Prompt Builder",
         "LLM Provider",
     }
@@ -229,7 +227,6 @@ def test_governed_knowledge_pipeline_routes_declare_response_models() -> (
         "Project Knowledge Graph",
         "Graph Query",
         "Structured Retrieval",
-        "Context Builder",
         "Prompt Builder",
         "LLM Provider",
     }

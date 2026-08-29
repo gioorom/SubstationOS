@@ -2,9 +2,9 @@
 Comparison prompt composition (Milestone 24.2) - the only composition
 that assembles a prompt from **two** labelled evidence groups.
 
-It reuses ``prompt_composition``'s own section builder and candidate
+It reuses ``prompt_composition``'s own section builder and item
 renderer rather than restating them, so a comparison prompt places its
-sections in the same canonical order and describes a candidate the same
+sections in the same canonical order and describes an item the same
 way every other prompt does. What it adds is the one thing a comparison
 genuinely needs: ``LEFT_KNOWLEDGE`` and ``RIGHT_KNOWLEDGE`` as separate,
 typed sections.
@@ -17,7 +17,7 @@ sections make the direction structural.
 
 ``EVIDENCE_REFERENCES`` carries both sides' references, in left-then-right
 order, because a citation must be resolvable whichever side it came from.
-Which side a candidate belongs to remains recoverable from the
+Which side an item belongs to remains recoverable from the
 ``ComparisonContextPackage`` itself, which keeps the two packages whole.
 
 Pure and deterministic, and performs no AI usage: every line is built from
@@ -43,7 +43,9 @@ from app.domain.prompt_builder.prompt_builder_models import (
     PromptSectionType,
 )
 from app.domain.prompt_builder.prompt_composition import (
-    describe_candidate,
+    describe_item,
+    describe_reference,
+    evidence_reference,
     section,
 )
 
@@ -109,8 +111,8 @@ def _build_side(
         )
 
     content = (f"{label} subject: {operand.designation}",) + tuple(
-        f"{label}: {describe_candidate(candidate)}"
-        for candidate in operand.package.selected_candidates
+        f"{label}: {describe_item(item)}"
+        for item in operand.package.selected_items
     )
 
     return section(section_type, content)
@@ -120,13 +122,9 @@ def _build_references(
     comparison: ComparisonContextPackage,
 ) -> tuple[PromptEvidenceReference, ...]:
     return tuple(
-        PromptEvidenceReference(
-            candidate_id=candidate.candidate_id,
-            graph_node_ids=candidate.graph_node_ids,
-            graph_relationship_ids=candidate.graph_relationship_ids,
-        )
+        evidence_reference(item)
         for operand in (comparison.left, comparison.right)
-        for candidate in operand.package.selected_candidates
+        for item in operand.package.selected_items
     )
 
 
@@ -134,14 +132,12 @@ def _build_evidence_references_section(
     comparison: ComparisonContextPackage,
 ) -> PromptSection:
     content = tuple(
-        f"{label}: {candidate.candidate_id}: "
-        f"nodes={list(candidate.graph_node_ids)}, "
-        f"relationships={list(candidate.graph_relationship_ids)}"
+        f"{label}: {describe_reference(evidence_reference(item))}"
         for label, operand in (
             ("LEFT", comparison.left),
             ("RIGHT", comparison.right),
         )
-        for candidate in operand.package.selected_candidates
+        for item in operand.package.selected_items
     )
 
     return section(PromptSectionType.EVIDENCE_REFERENCES, content)
@@ -180,9 +176,10 @@ def _build_metadata_section(
 
     content = (
         f"Context assembled at: {comparison.assembled_at.isoformat()}",
-        f"Context builder version: {left_metadata.context_builder_version}",
-        "Retrieval policy version: "
-        f"{left_metadata.retrieval_policy_version or 'unknown'}",
+        f"Context assembly version: "
+        f"{left_metadata.context_assembly_version}",
+        "Retrieval matching policy version: "
+        f"{left_metadata.retrieval_matching_policy_version or 'unknown'}",
     )
 
     return section(PromptSectionType.METADATA, content)

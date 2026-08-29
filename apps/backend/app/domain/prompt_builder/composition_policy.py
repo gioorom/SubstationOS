@@ -91,9 +91,9 @@ INSTRUCTIONS: tuple[PromptInstruction, ...] = (
         description="Structure the answer with clear, labeled sections.",
     ),
     PromptInstruction(
-        identifier="reference_evidence_by_candidate_id",
+        identifier="reference_evidence_by_item_id",
         description=(
-            "When citing evidence, reference it by its candidate "
+            "When citing evidence, reference it by its governed item "
             "identifier, exactly as supplied."
         ),
     ),
@@ -129,9 +129,9 @@ EXPLANATION_INSTRUCTIONS: tuple[PromptInstruction, ...] = (
         description="Structure the answer with clear, labeled sections.",
     ),
     PromptInstruction(
-        identifier="reference_evidence_by_candidate_id",
+        identifier="reference_evidence_by_item_id",
         description=(
-            "When citing evidence, reference it by its candidate "
+            "When citing evidence, reference it by its governed item "
             "identifier, exactly as supplied."
         ),
     ),
@@ -230,9 +230,9 @@ VERIFICATION_INSTRUCTIONS: tuple[PromptInstruction, ...] = (
         ),
     ),
     PromptInstruction(
-        identifier="cite_supporting_evidence_by_candidate_id",
+        identifier="cite_supporting_evidence_by_item_id",
         description=(
-            "Cite the evidence behind the verdict by its candidate "
+            "Cite the evidence behind the verdict by its governed item "
             "identifier, exactly as supplied."
         ),
     ),

@@ -147,8 +147,8 @@ Its ten steps are the *real* pipeline:
 | # | Step | Capability | Requires → Produces |
 |---:|---|---|---|
 | 0 | `VALIDATE_EXECUTION_REQUEST` | request validation | execution request → – |
-| 1 | `BUILD_RETRIEVAL_REQUEST` | structured retrieval | execution request → retrieval request |
-| 2 | `EXECUTE_RETRIEVAL` | structured retrieval | retrieval request → retrieval result |
+| 1 | `BUILD_RETRIEVAL_REQUEST` | structured retrieval | execution request → governed retrieval plan |
+| 2 | `EXECUTE_RETRIEVAL` | structured retrieval | governed retrieval plan → governed retrieval outcome |
 | 3 | `BUILD_CONTEXT` | context building | retrieval result → context package |
 | 4 | `BUILD_PROMPT` | prompt building | context package → prompt package |
 | 5 | `INVOKE_LLM_RUNTIME` | runtime invocation | prompt package → response envelope |
@@ -157,10 +157,25 @@ Its ten steps are the *real* pipeline:
 | 8 | `PREPARE_CONVERSATION_UPDATE` | update preparation | response → conversation proposal |
 | 9 | `PREPARE_SESSION_UPDATE` | update preparation | response → session proposal |
 
-**There is deliberately no separate graph-query step**: Graph Query is
-already an internal dependency of Structured Retrieval (which reads
-through `GraphQueryRepository`), so modelling it here would duplicate
-it artificially.
+**There is deliberately no separate graph-query step**: reading the
+graph is already an internal dependency of retrieval, so modelling it
+here would duplicate it artificially.
+
+> **EPIC 31.2 changed what those two steps read, and nothing else.**
+> Retrieval now consumes the **Governed Knowledge Graph** through
+> `GovernedKnowledgeReader` - a port with no write method - rather than
+> the Canonical Facts projection through `GraphQueryRepository`. The
+> step types, the artifact keys, the workflow definitions, the planner
+> and the executor were untouched: a step still builds a retrieval plan
+> and a step still executes it.
+>
+> The consequence for an engineer is that **every reference in an
+> answer now names the semantic statement, the review and the reviewer
+> that authorised it**, and that knowledge nobody approved never reaches
+> a prompt. See
+> [governed_structured_retrieval.md](governed_structured_retrieval.md)
+> for the query model, the matching, and how each legacy retrieval mode
+> maps across.
 
 ### `DOCUMENT_LOOKUP_WORKFLOW`
 

@@ -25,9 +25,6 @@ from app.domain.engineering_session.engineering_session_builder import (
     append_engineering_response,
     build_initial_session,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidateCollection,
-)
 from app.domain.working_memory.working_memory_builder import (
     WorkingMemoryBuilder,
     build_working_memory,
@@ -40,16 +37,15 @@ from app.domain.working_memory.working_memory_exceptions import (
 from app.domain.working_memory.working_memory_models import WorkingMemoryEntryType
 from app.services import context_builder_service, engineering_response_service, prompt_builder_service
 
+from tests._governed_context import designation_result
+
 PROJECT_ID = 81
 NOW = datetime(2026, 1, 1, 12, 0, 0)
 
 
 def _engineering_response(project_id: int = PROJECT_ID, now: datetime = NOW, text: str = "Answer."):
-    collection = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
     context_result = context_builder_service.build_context_package(
-        project_id=project_id, candidates=collection, now=now
+        project_id=project_id, results=(designation_result("TR1", ()),), now=now
     )
     prompt_result = prompt_builder_service.build_prompt_package(
         project_id=project_id, context_package=context_result.package, now=now
@@ -89,7 +85,7 @@ def _engineering_response(project_id: int = PROJECT_ID, now: datetime = NOW, tex
             adapter_version="1.0",
             request_preparation_policy_version="1.0",
             prompt_package_version=prompt_result.package.version.package_version,
-            context_builder_version=prompt_result.package.metadata.context_builder_version,
+            context_assembly_version=prompt_result.package.metadata.context_assembly_version,
             prompt_builder_version=prompt_result.package.version.prompt_builder_version,
         ),
     )

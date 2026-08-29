@@ -120,38 +120,48 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
     # Query itself depends on - never GraphStore, never Proposed
     # Claims/Review Workflow directly (see the dedicated tests below).
     "structured_retrieval": frozenset({"project", "graph_builder", "graph_query"}),
-    # Context Builder (Milestone 14) consumes Structured Retrieval's own
-    # output types (KnowledgeCandidateCollection/KnowledgeCandidate) as
-    # its shared, stable input vocabulary - the same "reuse the upstream
-    # read-oriented type" pattern Structured Retrieval itself
-    # established for Graph Query. Context Builder never imports
-    # graph_query or graph_builder directly: it never constructs a new
-    # GraphEntityId/GraphRelationshipType itself, only holds references
-    # to whatever a KnowledgeCandidate already carries.
-    "context_builder": frozenset({"project", "structured_retrieval"}),
-    # Prompt Builder (Milestone 15) consumes Context Builder's own
+    # Governed Context Assembly (EPIC 31.3) consumes Governed Structured
+    # Retrieval's own output types (GovernedRetrievalResult /
+    # GovernedRetrievalItem) as its shared, stable input vocabulary -
+    # the same "reuse the upstream read-oriented type" pattern the rest
+    # of the pipeline follows.
+    #
+    # It no longer depends on structured_retrieval, and therefore no
+    # longer depends transitively on graph_builder: a ContextItem holds
+    # a governed node id and a governed edge id, never a GraphEntityId
+    # or a GraphRelationshipType. The governed graph vocabulary
+    # (governed_knowledge_graph) comes with the governed result types it
+    # reuses - a node kind and an edge kind are part of the answer, not
+    # a second dependency.
+    "context_builder": frozenset(
+        {"project", "governed_retrieval", "governed_knowledge_graph"}
+    ),
+    # Prompt Builder (Milestone 15) consumes Context Assembly's own
     # output type (ContextPackage) as its shared, stable input
-    # vocabulary - the same pattern one level further downstream. It
-    # also reads structured_retrieval's own KnowledgeCandidate/
-    # KnowledgeCandidateKind vocabulary directly (ContextPackage embeds
-    # KnowledgeCandidate objects verbatim - the same transitive
-    # "shared, stable type" reuse graph_query/structured_retrieval
-    # already established), but never imports graph_query or
-    # graph_builder directly: it never constructs a new
-    # GraphEntityId/GraphRelationshipType itself, only reads fields off
-    # objects the ContextPackage already carries.
+    # vocabulary - the same pattern one level further downstream. Since
+    # EPIC 31.3 it reads the **governed** vocabulary a ContextPackage
+    # embeds verbatim, and no longer imports structured_retrieval at
+    # all. It still constructs no identity of its own: it reads governed
+    # node, edge, statement and review identities off objects the
+    # ContextPackage already carries.
     "prompt_builder": frozenset(
-        {"project", "context_builder", "structured_retrieval"}
+        {
+            "project",
+            "context_builder",
+            "governed_retrieval",
+            "governed_knowledge_graph",
+        }
     ),
     # Engineering Response (Milestone 18) consumes Prompt Builder's own
     # output type (PromptPackage) as its shared, stable input vocabulary
     # - the same pattern one level further downstream - and Context
     # Builder's ContextPackage directly (for coverage/retrieval-summary
     # fields PromptPackage does not itself expose as structured data).
-    # It also reads structured_retrieval's own vocabulary transitively,
-    # the same "shared, stable type reused across contexts" chain
-    # prompt_builder already established. It never imports graph_query
-    # or graph_builder directly. Critically, it never imports
+    # Since EPIC 31.3 it reads the governed retrieval vocabulary
+    # transitively (an ambiguity outcome it must report rather than
+    # collapse), the same "shared, stable type reused across contexts"
+    # chain prompt_builder already established. It never imports
+    # graph_query or graph_builder. Critically, it never imports
     # app.application.** (LLMResponseEnvelope, an application-layer
     # type) either - see the dedicated boundary test below, which is
     # this milestone's own new architectural guarantee.
@@ -173,7 +183,7 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
             "project",
             "context_builder",
             "prompt_builder",
-            "structured_retrieval",
+            "governed_retrieval",
             "engineering_index",
         }
     ),
@@ -462,7 +472,6 @@ def test_structured_retrieval_surface_has_no_ai_or_vector_dependency() -> (
 _CONTEXT_BUILDER_SURFACE = (
     DOMAIN_ROOT / "context_builder",
     APP_ROOT / "services" / "context_builder_service.py",
-    APP_ROOT / "routers" / "context_builder.py",
 )
 
 # Context Builder must never perform I/O, query the graph, or re-derive
@@ -557,7 +566,6 @@ _FORBIDDEN_FOR_PROMPT_BUILDER = (
     "app.services.structured_retrieval_service",
     "app.routers.structured_retrieval",
     "app.services.context_builder_service",
-    "app.routers.context_builder",
     "app.models.knowledge_graph",
     "app.services.knowledge_graph",
     "app.routers.knowledge_graph",
@@ -654,7 +662,6 @@ _FORBIDDEN_FOR_ENGINEERING_RESPONSE = (
     "app.services.structured_retrieval_service",
     "app.routers.structured_retrieval",
     "app.services.context_builder_service",
-    "app.routers.context_builder",
     "app.services.prompt_builder_service",
     "app.routers.prompt_builder",
     "app.models.knowledge_graph",
@@ -784,7 +791,6 @@ _FORBIDDEN_FOR_ENGINEERING_SESSION = (
     "app.services.structured_retrieval_service",
     "app.routers.structured_retrieval",
     "app.services.context_builder_service",
-    "app.routers.context_builder",
     "app.services.prompt_builder_service",
     "app.routers.prompt_builder",
     "app.services.engineering_response_service",
@@ -897,7 +903,6 @@ _FORBIDDEN_FOR_CONVERSATION = (
     "app.services.structured_retrieval_service",
     "app.routers.structured_retrieval",
     "app.services.context_builder_service",
-    "app.routers.context_builder",
     "app.services.prompt_builder_service",
     "app.routers.prompt_builder",
     "app.services.engineering_response_service",
@@ -1006,7 +1011,6 @@ _FORBIDDEN_FOR_WORKING_MEMORY = (
     "app.services.structured_retrieval_service",
     "app.routers.structured_retrieval",
     "app.services.context_builder_service",
-    "app.routers.context_builder",
     "app.services.prompt_builder_service",
     "app.routers.prompt_builder",
     "app.services.engineering_response_service",
@@ -1128,7 +1132,6 @@ _FORBIDDEN_FOR_ENGINEERING_INTENT = (
     "app.services.structured_retrieval_service",
     "app.routers.structured_retrieval",
     "app.services.context_builder_service",
-    "app.routers.context_builder",
     "app.services.prompt_builder_service",
     "app.routers.prompt_builder",
     "app.services.engineering_response_service",

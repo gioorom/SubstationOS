@@ -33,7 +33,7 @@ NOW = datetime(2026, 1, 1, 6, 0, 0)
 def _metadata() -> LLMRequestMetadata:
     return LLMRequestMetadata(
         project_id=3,
-        context_builder_version="1.0",
+        context_assembly_version="1.0",
         prompt_builder_version="1.0",
         composition_policy_version="1.0",
         prompt_package_version="1.0",

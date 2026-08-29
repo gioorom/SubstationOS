@@ -16,7 +16,6 @@ from app.routers import authentication as authentication_router_module
 from app.routers import canonical_pdf as canonical_pdf_router_module
 from app.routers import canonical_text as canonical_text_router_module
 from app.routers import canonicalization as canonicalization_router_module
-from app.routers import context_builder as context_builder_router_module
 from app.routers import conversation as conversation_router_module
 from app.routers import document_ingestion as document_ingestion_router_module
 from app.routers import documents as documents_router_module
@@ -27,6 +26,7 @@ from app.routers import engineering_facts as engineering_facts_router_module
 from app.routers import engineering_semantics as engineering_semantics_router_module
 from app.routers import engineering_index as engineering_index_router_module
 from app.routers import evidence_evaluation as evidence_evaluation_router_module
+from app.routers import governed_retrieval as governed_retrieval_router_module
 from app.routers import engineering_intent as engineering_intent_router_module
 from app.routers import (
     engineering_request_preparation as engineering_request_preparation_router_module,
@@ -239,6 +239,7 @@ def secured_app(db_session: Session, session_factory: sessionmaker):
     test_app.include_router(audit_router_module.router)
     test_app.include_router(human_review_router_module.router)
     test_app.include_router(governed_graph_router_module.router)
+    test_app.include_router(governed_retrieval_router_module.router)
     test_app.include_router(projects_router_module.router)
     test_app.include_router(documents_router_module.router)
     test_app.include_router(document_ingestion_router_module.router)
@@ -257,7 +258,6 @@ def secured_app(db_session: Session, session_factory: sessionmaker):
     test_app.include_router(project_knowledge_graph_router_module.router)
     test_app.include_router(graph_query_router_module.router)
     test_app.include_router(structured_retrieval_router_module.router)
-    test_app.include_router(context_builder_router_module.router)
     test_app.include_router(prompt_builder_router_module.router)
     test_app.include_router(llm_provider_router_module.router)
     test_app.include_router(engineering_response_router_module.router)
@@ -329,6 +329,9 @@ def secured_app(db_session: Session, session_factory: sessionmaker):
     ] = _override_get_db
     test_app.dependency_overrides[
         engineering_engine_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        governed_retrieval_router_module.get_db
     ] = _override_get_db
     test_app.dependency_overrides[
         authentication_router_module.get_db

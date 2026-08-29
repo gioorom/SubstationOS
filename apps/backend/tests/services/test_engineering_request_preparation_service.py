@@ -25,12 +25,9 @@ from app.domain.engineering_intent.engineering_intent_models import (
 from app.domain.retrieval_bridge.retrieval_bridge_models import (
     RetrievalBridgeFailureCode,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    RetrievalMode,
-)
 from app.services import engineering_request_preparation_service
-from app.services.engineering_engine.step_handlers import (
-    BuildRetrievalRequestStepHandler,
+from app.services.engineering_engine.governed_retrieval_step_handlers import (
+    BuildGovernedRetrievalPlanStepHandler,
 )
 from app.services.engineering_engine.execution_context import (
     WorkflowExecutionContext,
@@ -139,28 +136,33 @@ def test_runtime_selection_passes_through_but_criteria_never_do() -> None:
 
 
 @pytest.mark.parametrize(
-    ("request_text", "expected_mode"),
+    ("request_text", "expected_designations"),
     [
-        ("Quale TA è installato sul cavo C-295?", RetrievalMode.ENTITY_LOOKUP),
-        ("Quale TA è installato sul montante T2?", RetrievalMode.LEXICAL_SEARCH),
-        (
-            "Spiegami il funzionamento della protezione 87T",
-            RetrievalMode.LEXICAL_SEARCH,
-        ),
+        ("Quale TA è installato sul cavo C-295?", ["C-295"]),
+        ("Quale TA è installato sul montante T2?", ["T2"]),
+        ("Spiegami il funzionamento della protezione 87T", ["87T"]),
     ],
 )
-def test_the_engine_derives_exactly_the_mode_the_bridge_declared(
-    request_text: str, expected_mode: RetrievalMode
+def test_the_engine_resolves_exactly_the_designations_the_bridge_evidenced(
+    request_text: str, expected_designations: list[str]
 ) -> None:
-    """The invariant that makes the bridge honest: it reports the mode the
-    engine will actually use, never a different one."""
+    """
+    The invariant that makes the bridge honest, restated for governed
+    retrieval (EPIC 31.2): the designations the bridge found in the
+    request text are exactly the designations the engine asks the
+    governed graph about - no more, and none invented.
+
+    It used to be stated as "the mode the bridge declares is the mode
+    the engine derives". Governed retrieval has no modes: a designation
+    resolves to governed assets or it resolves to nothing, so the
+    invariant is now about *what is asked*, which is the thing that
+    actually mattered.
+    """
 
     prepared = _prepare(request_text)
 
-    assert prepared.bridge.configuration.mode is expected_mode
-
     context = asyncio.run(
-        BuildRetrievalRequestStepHandler().execute(
+        BuildGovernedRetrievalPlanStepHandler().execute(
             None,
             WorkflowExecutionContext(
                 execution_request=prepared.execution_request
@@ -168,7 +170,13 @@ def test_the_engine_derives_exactly_the_mode_the_bridge_declared(
         )
     )
 
-    assert context.retrieval_request.mode is expected_mode
+    asked = [
+        query.designation
+        for query in context.retrieval_request.queries
+        if query.query_type.value == "asset_by_designation"
+    ]
+
+    assert asked == expected_designations
 
 
 # --- Unresolvable requests --------------------------------------------------

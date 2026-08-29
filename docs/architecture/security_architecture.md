@@ -283,6 +283,22 @@ The long-term shape is `user → project membership → permissions`. None of
 it is built, and building it now would mean a table, an invitation flow
 and a permission catalogue committed to ahead of a requirement.
 
+### Governed retrieval, and why it opens nothing (EPIC 31.2)
+
+`GET /projects/{id}/governed-retrieval/assets` requires
+`use_engineering_platform` — the same capability
+`/knowledge-graph/nodes` requires, because it reads exactly the same
+rows, through a port (`GovernedKnowledgeReader`) with no write method at
+all.
+
+`project_id` on a governed retrieval query is **filtering, not
+enforcement**, inherited unchanged from §9: any authenticated engineer
+may read any project's governed knowledge, exactly as they already
+could through the graph API. This milestone did not widen that and could
+not have narrowed it without the membership model §9 describes — a
+retrieval-shaped fix would have been project authorization implemented
+in one endpoint and nowhere else, which is worse than the gap.
+
 ## 10. Hardening
 
 | Threat | Answer |

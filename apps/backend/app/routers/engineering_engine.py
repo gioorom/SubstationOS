@@ -3,8 +3,9 @@ The Engineering Engine API (Milestone 23A; DOCUMENT_LOOKUP added in
 23B.1).
 
 This router is the composition root for one engine execution: it wires
-the concrete Graph Query repository, the Engineering Index repository and
-document metadata adapter, the LLM provider registry (with a real
+the concrete governed knowledge reader (EPIC 31.2 - engineering
+retrieval reads the Governed Knowledge Graph and nothing else), the
+Engineering Index repository and document metadata adapter, the LLM provider registry (with a real
 Anthropic client only when a credential is present), and runtime
 configuration into ``build_engineering_engine`` - the engine itself
 never constructs a concrete dependency.
@@ -50,8 +51,8 @@ from app.infrastructure.engineering_index.sqlalchemy_document_metadata import (
 from app.infrastructure.engineering_index.sqlalchemy_engineering_index_repository import (  # noqa: E501
     SqlAlchemyEngineeringIndexRepository,
 )
-from app.infrastructure.graph_query.sqlalchemy_graph_query_repository import (
-    SqlAlchemyGraphQueryRepository,
+from app.infrastructure.governed_retrieval.sqlalchemy_governed_knowledge_reader import (  # noqa: E501
+    SqlAlchemyGovernedKnowledgeReader,
 )
 from app.infrastructure.llm.anthropic.anthropic_adapter import (
     ANTHROPIC_PROVIDER_ID,
@@ -158,7 +159,7 @@ async def execute_engineering_workflow(
     credential_env_var_name = PROVIDER_CREDENTIAL_ENV_VARS.get(provider_id, "")
 
     engine = build_engineering_engine(
-        graph_query_repository=SqlAlchemyGraphQueryRepository(db),
+        governed_knowledge_reader=SqlAlchemyGovernedKnowledgeReader(db),
         engineering_index_repository=SqlAlchemyEngineeringIndexRepository(db),
         document_metadata_port=SqlAlchemyDocumentMetadataRepository(db),
         provider_registry=_build_provider_registry(

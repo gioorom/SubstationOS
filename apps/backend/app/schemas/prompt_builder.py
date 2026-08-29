@@ -69,9 +69,12 @@ class PromptInstructionRead(BaseModel):
 
 
 class PromptEvidenceReferenceRead(BaseModel):
-    candidate_id: str
-    graph_node_ids: list[str]
-    graph_relationship_ids: list[str]
+    item_id: str
+    node_ids: list[str]
+    edge_ids: list[str]
+    statement_key: str
+    review_id: int
+    document_id: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -79,7 +82,7 @@ class PromptEvidenceReferenceRead(BaseModel):
 class PromptMetadataRead(BaseModel):
     prompt_builder_version: str
     composition_policy_version: str
-    context_builder_version: str | None
+    context_assembly_version: str | None
     assembled_at: datetime
     package_version: str
 
@@ -101,7 +104,7 @@ class PromptStatisticsRead(BaseModel):
 class PromptVersionRead(BaseModel):
     prompt_builder_version: str
     composition_policy_version: str
-    context_builder_version: str | None
+    context_assembly_version: str | None
     package_version: str
 
     model_config = ConfigDict(from_attributes=True)
@@ -198,9 +201,12 @@ def prompt_package_from_schema(model: PromptPackageRead) -> PromptPackage:
         expected_output=_section_from_read(model.expected_output),
         references=tuple(
             PromptEvidenceReference(
-                candidate_id=r.candidate_id,
-                graph_node_ids=tuple(r.graph_node_ids),
-                graph_relationship_ids=tuple(r.graph_relationship_ids),
+                item_id=r.item_id,
+                node_ids=tuple(r.node_ids),
+                edge_ids=tuple(r.edge_ids),
+                statement_key=r.statement_key,
+                review_id=r.review_id,
+                document_id=r.document_id,
             )
             for r in model.references
         ),
@@ -208,7 +214,7 @@ def prompt_package_from_schema(model: PromptPackageRead) -> PromptPackage:
         metadata=PromptMetadata(
             prompt_builder_version=model.metadata.prompt_builder_version,
             composition_policy_version=model.metadata.composition_policy_version,
-            context_builder_version=model.metadata.context_builder_version,
+            context_assembly_version=model.metadata.context_assembly_version,
             assembled_at=model.metadata.assembled_at,
             package_version=model.metadata.package_version,
         ),
@@ -224,7 +230,7 @@ def prompt_package_from_schema(model: PromptPackageRead) -> PromptPackage:
         version=PromptVersion(
             prompt_builder_version=model.version.prompt_builder_version,
             composition_policy_version=model.version.composition_policy_version,
-            context_builder_version=model.version.context_builder_version,
+            context_assembly_version=model.version.context_assembly_version,
             package_version=model.version.package_version,
         ),
     )

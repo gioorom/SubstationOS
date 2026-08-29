@@ -23,7 +23,6 @@ the declared outcome.
 from __future__ import annotations
 
 from app.domain.engineering_engine.engineering_engine_models import (
-    ComparisonOperandCriteria,
     EngineeringEngineFailureCode,
     WorkflowArtifactKey,
     WorkflowStep,
@@ -38,20 +37,10 @@ from app.domain.engineering_response.engineering_response_exceptions import (
 from app.domain.prompt_builder.prompt_builder_exceptions import (
     PromptBuilderError,
 )
-from app.domain.structured_retrieval.structured_retrieval_exceptions import (
-    StructuredRetrievalError,
-)
-from app.domain.structured_retrieval.structured_retrieval_factory import (
-    StructuredRetrievalRequestFactory,
-)
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    RetrievalMode,
-)
 from app.services import (
     context_builder_service,
     engineering_response_service,
     prompt_builder_service,
-    structured_retrieval_service,
 )
 from app.services.engineering_engine.execution_context import (
     WorkflowExecutionContext,
@@ -62,147 +51,17 @@ from app.services.engineering_engine.step_handler import (
 )
 
 
-def _retrieval_mode(operand: ComparisonOperandCriteria) -> RetrievalMode:
-    """The same mode derivation the single-operand handler performs, per
-    side - the engine never invents criteria an operand did not carry."""
-
-    if operand.retrieval_canonical_entity_id:
-        return RetrievalMode.ENTITY_LOOKUP
-    if operand.retrieval_entity_type and operand.retrieval_attribute_name:
-        return RetrievalMode.COMBINED
-    if operand.retrieval_entity_type:
-        return RetrievalMode.ENTITY_TYPE_SEARCH
-    if operand.retrieval_attribute_name:
-        return RetrievalMode.ATTRIBUTE_SEARCH
-
-    return RetrievalMode.LEXICAL_SEARCH
-
-
-class BuildComparisonRetrievalRequestsStepHandler(BaseStepHandler):
-    """
-    Builds **both** operands' retrieval requests in one step.
-
-    One step rather than two because building is pure and deterministic,
-    and an operand set that cannot produce a valid request is an invalid
-    *request* whichever side it came from - attributing that to "the left
-    retrieval" would be misleading. Execution is where the sides genuinely
-    diverge, and that is two steps.
-
-    A request missing either operand is rejected here rather than in the
-    engine's shared validator: the workflow validates its own inputs, and
-    the engine's request validation stays free of workflow-specific rules.
-    """
-
-    step_type = WorkflowStepType.BUILD_COMPARISON_RETRIEVAL_REQUESTS
-
-    async def execute(
-        self, step: WorkflowStep, context: WorkflowExecutionContext
-    ) -> WorkflowExecutionContext:
-        request = context.execution_request
-        left = request.comparison_left
-        right = request.comparison_right
-
-        missing = [
-            name
-            for name, operand in (("left", left), ("right", right))
-            if operand is None
-        ]
-        if missing:
-            raise StepHandlerError(
-                EngineeringEngineFailureCode.INVALID_EXECUTION_REQUEST,
-                "A comparison requires exactly two operands.",
-                detail=(
-                    "Missing operand(s): "
-                    + ", ".join(missing)
-                    + ". A comparison is never run against a single "
-                    "subject, and the second is never inferred."
-                ),
-            )
-
-        return context.with_artifact(
-            WorkflowArtifactKey.LEFT_RETRIEVAL_REQUEST,
-            self._build(left, request.project_id, "left"),
-        ).with_artifact(
-            WorkflowArtifactKey.RIGHT_RETRIEVAL_REQUEST,
-            self._build(right, request.project_id, "right"),
-        )
-
-    @staticmethod
-    def _build(
-        operand: ComparisonOperandCriteria, project_id: int, side: str
-    ):
-        try:
-            return StructuredRetrievalRequestFactory.create(
-                project_id=project_id,
-                mode=_retrieval_mode(operand),
-                limit=operand.retrieval_limit,
-                include_neighborhood=operand.retrieval_include_neighborhood,
-                neighborhood_depth=operand.retrieval_neighborhood_depth,
-                canonical_entity_id=operand.retrieval_canonical_entity_id,
-                entity_type=operand.retrieval_entity_type,
-                attribute_name=operand.retrieval_attribute_name,
-                lexical_terms=operand.retrieval_lexical_terms,
-            )
-        except StructuredRetrievalError as error:
-            raise StepHandlerError(
-                EngineeringEngineFailureCode.INVALID_EXECUTION_REQUEST,
-                f"Could not build a valid retrieval request for the {side} "
-                "comparison operand.",
-                detail=f"{side} operand '{operand.designation}': {error}",
-            ) from error
-
-
-class _ExecuteSideRetrievalStepHandler(BaseStepHandler):
-    """Shared body for the two retrieval steps. The *side* is fixed per
-    subclass rather than resolved at runtime, so no code path can read one
-    side's request and write the other's result."""
-
-    request_key: WorkflowArtifactKey
-    result_key: WorkflowArtifactKey
-    side: str
-
-    def __init__(self, graph_query_repository) -> None:
-        self._repository = graph_query_repository
-
-    async def execute(
-        self, step: WorkflowStep, context: WorkflowExecutionContext
-    ) -> WorkflowExecutionContext:
-        try:
-            result = structured_retrieval_service.retrieve(
-                self._repository,
-                context.get_artifact(self.request_key),
-                now=context.execution_request.executed_at,
-            )
-        except StructuredRetrievalError as error:
-            raise StepHandlerError(
-                EngineeringEngineFailureCode.RETRIEVAL_FAILURE,
-                f"Structured retrieval failed for the {self.side} "
-                "comparison operand.",
-                detail=str(error),
-            ) from error
-
-        return context.with_artifact(self.result_key, result)
-
-
-class ExecuteLeftRetrievalStepHandler(_ExecuteSideRetrievalStepHandler):
-    step_type = WorkflowStepType.EXECUTE_LEFT_RETRIEVAL
-    request_key = WorkflowArtifactKey.LEFT_RETRIEVAL_REQUEST
-    result_key = WorkflowArtifactKey.LEFT_RETRIEVAL_RESULT
-    side = "left"
-
-
-class ExecuteRightRetrievalStepHandler(_ExecuteSideRetrievalStepHandler):
-    step_type = WorkflowStepType.EXECUTE_RIGHT_RETRIEVAL
-    request_key = WorkflowArtifactKey.RIGHT_RETRIEVAL_REQUEST
-    result_key = WorkflowArtifactKey.RIGHT_RETRIEVAL_RESULT
-    side = "right"
-
-
 class BuildComparisonContextStepHandler(BaseStepHandler):
-    """Delegates to the existing Context Builder, once per side, through
-    the service's two-sided entry point. It never merges the results - the
-    two ``ContextPackage``s stay whole inside the
-    ``ComparisonContextPackage``."""
+    """
+    Delegates to Governed Context Assembly, once per side, through the
+    service's two-sided entry point.
+
+    Each side hands over **its own** governed results (EPIC 31.3) - no
+    projection, no merge. The two ``ContextPackage``s stay whole inside
+    the ``ComparisonContextPackage``, so an ambiguous left subject
+    cannot make the right one look ambiguous and neither side's
+    provenance can be attributed to the other.
+    """
 
     step_type = WorkflowStepType.BUILD_COMPARISON_CONTEXT
 
@@ -218,15 +77,9 @@ class BuildComparisonContextStepHandler(BaseStepHandler):
                 context_builder_service.build_comparison_context_package(
                     project_id=request.project_id,
                     left_designation=request.comparison_left.designation,
-                    left_candidates=left_result.candidates,
+                    left_results=left_result.results,
                     right_designation=request.comparison_right.designation,
-                    right_candidates=right_result.candidates,
-                    left_retrieval_policy_version=(
-                        left_result.metadata.scoring_policy_version
-                    ),
-                    right_retrieval_policy_version=(
-                        right_result.metadata.scoring_policy_version
-                    ),
+                    right_results=right_result.results,
                     now=request.executed_at,
                 )
             )

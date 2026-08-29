@@ -107,7 +107,7 @@ def map_prompt_package_to_llm_request(
 
     metadata = LLMRequestMetadata(
         project_id=prompt_package.project_id,
-        context_builder_version=prompt_package.metadata.context_builder_version,
+        context_assembly_version=prompt_package.metadata.context_assembly_version,
         prompt_builder_version=prompt_package.metadata.prompt_builder_version,
         composition_policy_version=prompt_package.metadata.composition_policy_version,
         prompt_package_version=prompt_package.metadata.package_version,

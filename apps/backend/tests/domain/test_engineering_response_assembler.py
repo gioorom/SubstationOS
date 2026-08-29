@@ -21,72 +21,69 @@ from app.domain.engineering_response.engineering_response_models import (
     EngineeringUncertaintyLevel,
     EngineeringWarningCategory,
 )
-from app.domain.graph_builder.graph_builder_models import GraphEntityId
 from app.domain.prompt_builder.prompt_builder_models import PromptPackage
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidate,
-    KnowledgeCandidateCollection,
-    KnowledgeCandidateKind,
-    KnowledgeCandidateReference,
-    KnowledgeCandidateScore,
-    KnowledgeCandidateScoreComponent,
-    ScoreComponentCategory,
-)
 from app.services import context_builder_service, prompt_builder_service
+
+from tests._governed_context import (
+    asset_item,
+    designation_result,
+    quantity_item,
+    relationship_item,
+    results_for,
+)
 
 PROJECT_ID = 21
 NOW = datetime(2026, 1, 1, 10, 0, 0)
 
 
-def _entity_id(entity_type: str, canonical_id: str) -> GraphEntityId:
-    return GraphEntityId(
-        project_id=PROJECT_ID, entity_type=entity_type, canonical_id=canonical_id
-    )
+def _asset(designation: str):
+    """One approved governed asset, designated as an engineer wrote it."""
 
-
-def _entity_candidate(canonical_id: str, score: float) -> KnowledgeCandidate:
-    reference = KnowledgeCandidateReference(
-        graph_entity_id=_entity_id("CABLE", canonical_id),
-        entity_type="CABLE",
-        canonical_id=canonical_id,
-    )
-    return KnowledgeCandidate(
-        candidate_id=f"{PROJECT_ID}:entity:{reference.graph_entity_id.value}",
+    return asset_item(
+        f"node-{designation.lower()}",
+        designation,
+        statement_key=f"statement-{designation}",
         project_id=PROJECT_ID,
-        candidate_kind=KnowledgeCandidateKind.ENTITY,
-        primary_reference=reference,
-        matched_attributes=(),
-        matched_relationships=(),
-        related_entities=(),
-        source_fact_ids=(),
-        graph_node_ids=(reference.graph_entity_id.value,),
-        graph_relationship_ids=(),
-        graph_execution_ids=(1,),
-        score=KnowledgeCandidateScore(
-            total=score,
-            components=(
-                KnowledgeCandidateScoreComponent(
-                    category=ScoreComponentCategory.ENTITY_TYPE_MATCH,
-                    weight=score,
-                    detail="CABLE",
-                ),
-            ),
-        ),
-        reasons=(),
-        matches=(),
-        sort_key=(0.0, 0, "", ""),
     )
 
 
-def _packages(candidates: tuple, **context_overrides) -> tuple[ContextPackage, PromptPackage]:
-    collection = KnowledgeCandidateCollection(
-        candidates=candidates,
-        total_before_limit=len(candidates),
-        returned_count=len(candidates),
-        applied_limit=20,
+def _quantity(designation: str, *, value: str = "630 kVA"):
+    """One approved governed quantity, reached from its asset by the
+    governed relationship that asserted it."""
+
+    return quantity_item(
+        subject_node_id=f"node-{designation.lower()}",
+        subject_label=designation,
+        quantity_node_id=f"node-{value.replace(' ', '').lower()}",
+        quantity_label=value,
+        edge_id=f"edge-{designation.lower()}",
+        statement_key=f"statement-q-{designation}",
+        project_id=PROJECT_ID,
     )
+
+
+def _relationship(subject: str, object_designation: str):
+    """One approved governed relationship, both endpoints resolved."""
+
+    return relationship_item(
+        subject_node_id=f"node-{subject.lower()}",
+        subject_label=subject,
+        object_node_id=f"node-{object_designation.lower()}",
+        object_label=object_designation,
+        edge_id=f"edge-{subject.lower()}-{object_designation.lower()}",
+        statement_key=f"statement-r-{subject}",
+        project_id=PROJECT_ID,
+    )
+
+
+def _packages(
+    items: tuple, **context_overrides
+) -> tuple[ContextPackage, PromptPackage]:
     context_result = context_builder_service.build_context_package(
-        project_id=PROJECT_ID, candidates=collection, now=NOW, **context_overrides
+        project_id=PROJECT_ID,
+        results=results_for(tuple(items), project_id=PROJECT_ID),
+        now=NOW,
+        **context_overrides,
     )
     prompt_result = prompt_builder_service.build_prompt_package(
         project_id=PROJECT_ID, context_package=context_result.package, now=NOW
@@ -137,7 +134,7 @@ def _build(context_package, prompt_package, source):
 
 
 def test_sections_follow_the_canonical_deterministic_order() -> None:
-    context_package, prompt_package = _packages((_entity_candidate("C-1", 100.0),))
+    context_package, prompt_package = _packages((_asset("C-1"),))
     result = _build(context_package, prompt_package, _text_source())
 
     section_types = tuple(s.section_type for s in result.response.sections)
@@ -147,7 +144,7 @@ def test_sections_follow_the_canonical_deterministic_order() -> None:
 def test_summary_technical_explanation_assumptions_and_next_actions_are_always_empty() -> (
     None
 ):
-    context_package, prompt_package = _packages((_entity_candidate("C-1", 100.0),))
+    context_package, prompt_package = _packages((_asset("C-1"),))
     result = _build(context_package, prompt_package, _text_source())
 
     always_empty = {
@@ -166,7 +163,7 @@ def test_full_coverage_and_completed_finish_reason_yields_complete_status_and_lo
     None
 ):
     context_package, prompt_package = _packages(
-        (_entity_candidate("C-1", 100.0),), max_candidates=10
+        (_asset("C-1"),), max_items=10
     )
     assert context_package.coverage.overall_completeness == 1.0
 
@@ -194,8 +191,8 @@ def test_partial_coverage_yields_partial_context_warning_and_medium_uncertainty(
     None
 ):
     context_package, prompt_package = _packages(
-        (_entity_candidate("C-1", 100.0), _entity_candidate("C-2", 90.0)),
-        max_candidates=1,
+        (_asset("C-1"), _asset("C-2")),
+        max_items=1,
     )
     assert 0.5 <= context_package.coverage.overall_completeness < 1.0
 
@@ -210,7 +207,7 @@ def test_unsupported_content_alongside_text_yields_partial_status_and_warnings()
     None
 ):
     context_package, prompt_package = _packages(
-        (_entity_candidate("C-1", 100.0),), max_candidates=10
+        (_asset("C-1"),), max_items=10
     )
     source = _text_source(
         extra_content=(
@@ -242,7 +239,7 @@ def test_only_unsupported_content_yields_unsupported_status_and_high_uncertainty
     None
 ):
     context_package, prompt_package = _packages(
-        (_entity_candidate("C-1", 100.0),), max_candidates=10
+        (_asset("C-1"),), max_items=10
     )
     source = EngineeringResponseSourceEnvelope(
         provider_id="fake",
@@ -279,7 +276,7 @@ def test_only_unsupported_content_yields_unsupported_status_and_high_uncertainty
 
 def test_no_content_at_all_yields_empty_status_and_unknown_uncertainty() -> None:
     context_package, prompt_package = _packages(
-        (_entity_candidate("C-1", 100.0),), max_candidates=10
+        (_asset("C-1"),), max_items=10
     )
     source = EngineeringResponseSourceEnvelope(
         provider_id="fake",
@@ -305,7 +302,7 @@ def test_no_content_at_all_yields_empty_status_and_unknown_uncertainty() -> None
 
 def test_truncated_finish_reason_yields_partial_status_and_limitations() -> None:
     context_package, prompt_package = _packages(
-        (_entity_candidate("C-1", 100.0),), max_candidates=10
+        (_asset("C-1"),), max_items=10
     )
     source = _text_source(finish_reason=EngineeringSourceFinishReason.MAXIMUM_OUTPUT_REACHED)
 
@@ -325,7 +322,7 @@ def test_provider_warnings_are_echoed_as_structured_provider_warning_entries() -
     None
 ):
     context_package, prompt_package = _packages(
-        (_entity_candidate("C-1", 100.0),), max_candidates=10
+        (_asset("C-1"),), max_items=10
     )
     source = _text_source(provider_warnings=("A raw provider-level warning.",))
 
@@ -341,7 +338,7 @@ def test_provider_warnings_are_echoed_as_structured_provider_warning_entries() -
 
 
 def test_references_are_preserved_verbatim_from_the_prompt_package() -> None:
-    context_package, prompt_package = _packages((_entity_candidate("C-1", 100.0),))
+    context_package, prompt_package = _packages((_asset("C-1"),))
 
     result = _build(context_package, prompt_package, _text_source())
 
@@ -349,16 +346,16 @@ def test_references_are_preserved_verbatim_from_the_prompt_package() -> None:
     for engineering_reference, prompt_reference in zip(
         result.response.references, prompt_package.references
     ):
-        assert engineering_reference.candidate_id == prompt_reference.candidate_id
-        assert engineering_reference.graph_node_ids == prompt_reference.graph_node_ids
+        assert engineering_reference.item_id == prompt_reference.item_id
+        assert engineering_reference.node_ids == prompt_reference.node_ids
         assert (
-            engineering_reference.graph_relationship_ids
-            == prompt_reference.graph_relationship_ids
+            engineering_reference.edge_ids
+            == prompt_reference.edge_ids
         )
 
 
 def test_statistics_are_internally_consistent() -> None:
-    context_package, prompt_package = _packages((_entity_candidate("C-1", 100.0),))
+    context_package, prompt_package = _packages((_asset("C-1"),))
     result = _build(context_package, prompt_package, _text_source())
     response = result.response
 
@@ -374,7 +371,7 @@ def test_statistics_are_internally_consistent() -> None:
 
 
 def test_identical_inputs_produce_an_identical_response() -> None:
-    context_package, prompt_package = _packages((_entity_candidate("C-1", 100.0),))
+    context_package, prompt_package = _packages((_asset("C-1"),))
     source = _text_source()
 
     first = _build(context_package, prompt_package, source)
@@ -385,7 +382,7 @@ def test_identical_inputs_produce_an_identical_response() -> None:
 
 
 def test_a_well_formed_response_is_valid() -> None:
-    context_package, prompt_package = _packages((_entity_candidate("C-1", 100.0),))
+    context_package, prompt_package = _packages((_asset("C-1"),))
     result = _build(context_package, prompt_package, _text_source())
 
     assert result.validation.valid is True

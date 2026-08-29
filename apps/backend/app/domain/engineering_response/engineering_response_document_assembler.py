@@ -71,7 +71,7 @@ def build_document_lookup_metadata(
         returned_model_identifier=None,
         request_correlation_id=request.request_correlation_id,
         prompt_package_version=None,
-        context_builder_version=None,
+        context_assembly_version=None,
         prompt_builder_version=None,
         package_version=RESPONSE_PACKAGE_VERSION,
     )
@@ -92,7 +92,7 @@ def build_document_lookup_version(
         ),
         response_policy_version=request.configuration.response_policy.version,
         prompt_builder_version=None,
-        context_builder_version=None,
+        context_assembly_version=None,
         request_preparation_policy_version=None,
         runtime_version=None,
         package_version=RESPONSE_PACKAGE_VERSION,

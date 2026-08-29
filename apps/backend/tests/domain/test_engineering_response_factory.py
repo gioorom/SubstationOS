@@ -15,24 +15,19 @@ from app.domain.engineering_response.engineering_response_models import (
     EngineeringResponseSourceEnvelope,
     EngineeringSourceFinishReason,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidateCollection,
-)
 from app.services import context_builder_service, prompt_builder_service
+
+from tests._governed_context import designation_result
 
 PROJECT_ID = 11
 NOW = datetime(2026, 1, 1, 9, 0, 0)
 
 
-def _empty_collection() -> KnowledgeCandidateCollection:
-    return KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
-
-
 def _packages(project_id: int = PROJECT_ID):
     context_result = context_builder_service.build_context_package(
-        project_id=project_id, candidates=_empty_collection(), now=NOW
+        project_id=project_id,
+        results=(designation_result("TR1", ()),),
+        now=NOW,
     )
     prompt_result = prompt_builder_service.build_prompt_package(
         project_id=project_id, context_package=context_result.package, now=NOW

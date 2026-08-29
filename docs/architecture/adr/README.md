@@ -101,3 +101,5 @@ one.
 | [0023](0023-human-review-append-only-judgement.md) | Human Review as Append-Only Judgement, with Identity-Based Revalidation | Accepted |
 | [0024](0024-governed-knowledge-graph-as-projection.md) | The Governed Knowledge Graph is a Rebuildable Projection | Accepted |
 | [0025](0025-retire-the-legacy-knowledge-graph.md) | Retire the Legacy Knowledge Graph | Accepted |
+| [0026](0026-governed-structured-retrieval.md) | Governed Structured Retrieval | Accepted |
+| [0027](0027-governed-context-assembly.md) | Governed Context Assembly | Accepted |

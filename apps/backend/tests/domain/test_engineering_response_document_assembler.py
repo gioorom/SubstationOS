@@ -96,7 +96,7 @@ def test_no_provider_model_or_runtime_is_named() -> None:
     assert response.version.runtime_version is None
     assert response.metadata.prompt_package_version is None
     assert response.metadata.prompt_builder_version is None
-    assert response.metadata.context_builder_version is None
+    assert response.metadata.context_assembly_version is None
 
 
 def test_the_deterministic_capability_versions_are_recorded() -> None:

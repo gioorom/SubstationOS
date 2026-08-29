@@ -48,9 +48,9 @@ from app.domain.engineering_response.engineering_response_models import (
     EngineeringResponseValidationResult,
 )
 from app.domain.prompt_builder.prompt_builder_models import PromptPackage
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    StructuredRetrievalRequest,
-    StructuredRetrievalResult,
+from app.services.engineering_engine.governed_retrieval_artifacts import (
+    GovernedRetrievalOutcome,
+    GovernedRetrievalPlan,
 )
 
 
@@ -59,17 +59,21 @@ class WorkflowExecutionContext:
     """Immutable; every ``with_artifact`` call returns a new context."""
 
     execution_request: EngineeringEngineExecutionRequest
-    retrieval_request: StructuredRetrievalRequest | None = None
-    retrieval_result: StructuredRetrievalResult | None = None
+    # Retrieval artifacts became governed in EPIC 31.2. The *keys* did
+    # not change: a step still builds a retrieval plan and a step still
+    # executes it, so the workflow definitions, the planner and the
+    # executor were untouched by the substrate change.
+    retrieval_request: GovernedRetrievalPlan | None = None
+    retrieval_result: GovernedRetrievalOutcome | None = None
     document_retrieval_request: DocumentRetrievalRequest | None = None
     document_retrieval_result: DocumentRetrievalResult | None = None
     # The two comparison sides, kept distinct end to end (Milestone 24.2).
     # Named fields rather than a keyed collection: there is no index to
     # transpose, so no code path can silently swap left for right.
-    left_retrieval_request: StructuredRetrievalRequest | None = None
-    right_retrieval_request: StructuredRetrievalRequest | None = None
-    left_retrieval_result: StructuredRetrievalResult | None = None
-    right_retrieval_result: StructuredRetrievalResult | None = None
+    left_retrieval_request: GovernedRetrievalPlan | None = None
+    right_retrieval_request: GovernedRetrievalPlan | None = None
+    left_retrieval_result: GovernedRetrievalOutcome | None = None
+    right_retrieval_result: GovernedRetrievalOutcome | None = None
     comparison_context: ComparisonContextPackage | None = None
     context_package: ContextPackage | None = None
     prompt_package: PromptPackage | None = None

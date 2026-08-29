@@ -11,8 +11,18 @@ an ``EngineeringResponse`` from a deterministically classified
     AnthropicPreparedRequest -> mocked Anthropic invocation ->
     LLMResponseEnvelope -> EngineeringResponse -> EngineeringSession ->
     Conversation -> ConversationTurn -> WorkingMemory ->
-    EngineeringIntent -> Engineering Engine (workflow selection, plan,
-    execution) -> EngineeringResponse
+    EngineeringIntent -> document -> deterministic pipeline ->
+    semantic statement -> Human Review approval -> governed promotion ->
+    Governed Knowledge Graph -> Governed Structured Retrieval ->
+    Engineering Engine (workflow selection, plan, execution) ->
+    EngineeringResponse
+
+**Two lineages, and the split is the point (EPIC 31.2).** Stages 4-11
+still exercise the Canonical Facts projection and the retrieval built on
+it, because both are still live API capabilities. The Engineering Engine
+no longer reads either: its retrieval comes exclusively from governed
+knowledge, so stage 19 promotes a reviewed statement and stage 20 proves
+the engine answered from it.
 
 Every earlier stage already has its own dedicated test suite (domain,
 service, and API tests per bounded context); this file exists purely
@@ -26,8 +36,12 @@ client (never a live call), the same technique
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
+
 from unittest.mock import AsyncMock
 
+from tests._pdf_builder import single_page_pdf
 from tests.infrastructure._anthropic_test_support import make_message
 
 import io
@@ -35,7 +49,7 @@ import io
 from fastapi.testclient import TestClient
 
 
-def test_full_pipeline_reaches_a_structured_retrieval_result(
+def test_full_pipeline_reaches_a_governed_engineering_response(
     api_client: TestClient, monkeypatch
 ) -> None:
     # 1. Project
@@ -179,40 +193,71 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
     assert repeat_candidate["candidate_id"] == candidate["candidate_id"]
     assert repeat_candidate["score"]["total"] == candidate["score"]["total"]
 
-    # 10. Context Builder - the same ranked, explainable candidates,
-    # assembled into a bounded, provenance-aware ContextPackage. Context
-    # Builder never calls Structured Retrieval itself; it consumes
-    # exactly the KnowledgeCandidateCollection the prior call returned.
-    context_response = api_client.post(
-        f"/projects/{project['id']}/context-builder/build",
-        json={"candidates": result["candidates"]},
-    )
-    assert context_response.status_code == 200
-    context_result = context_response.json()
+    # 10. Governed Context Assembly - the governed results assembled into
+    # a bounded, provenance-aware ContextPackage.
+    #
+    # Built in-process rather than through an endpoint: EPIC 31.3
+    # withdrew `/projects/{id}/context-builder/build`, because a governed
+    # context cannot honestly be assembled from a request body -
+    # provenance a caller asserts is not provenance. This is the same
+    # call the Engineering Engine makes, from retrieval it ran itself.
+    from app.schemas.context_builder import ContextPackageRead
+    from app.services import context_builder_service
 
-    package = context_result["package"]
+    from tests._governed_context import asset_item, results_for
+
+    governed_results = results_for(
+        (
+            asset_item(
+                "node-c-295",
+                "C-295",
+                statement_key="statement-c-295",
+                project_id=project["id"],
+            ),
+        ),
+        project_id=project["id"],
+    )
+    context_package = context_builder_service.build_context_package(
+        project_id=project["id"],
+        results=governed_results,
+        now=datetime(2026, 1, 1, 12, 0, 0),
+    ).package
+
+    package = json.loads(
+        ContextPackageRead.from_domain(context_package).model_dump_json()
+    )
+
     assert package["project_id"] == project["id"]
-    assert len(package["selected_candidates"]) == 1
-    selected = package["selected_candidates"][0]
-    assert selected["candidate_id"] == candidate["candidate_id"]
-    assert selected["score"]["total"] == candidate["score"]["total"]
-    assert selected["graph_execution_ids"] == [execution["id"]]
+    assert len(package["selected_items"]) == 1
+
+    selected = package["selected_items"][0]
+
+    # The governed chain, intact on the wire: an item names the governed
+    # object, the statement it was promoted from, and the review that
+    # authorised it.
+    assert selected["node"]["label"] == "C-295"
+    assert selected["provenance"]["statement_key"] == "statement-c-295"
+    assert selected["provenance"]["review_id"] > 0
+    assert selected["provenance"]["reviewer_display_name"]
+    assert selected["match"]["strategy"] == "exact_designation"
+
+    # Ambiguity is stated rather than implied by ordering.
+    assert selected["origin"]["outcome"] == "unique_match"
 
     assert package["coverage"]["overall_completeness"] == 1.0
     assert package["budget"]["exceeded"] is False
     assert package["warnings"] == []
-    assert package["metadata"]["context_builder_version"]
+    assert package["metadata"]["context_assembly_version"]
 
-    # Deterministic: the same collection always assembles into the same
-    # ContextPackage.
-    repeat_context_response = api_client.post(
-        f"/projects/{project['id']}/context-builder/build",
-        json={"candidates": result["candidates"]},
-    )
-    repeat_selected = repeat_context_response.json()["package"][
-        "selected_candidates"
-    ][0]
-    assert repeat_selected["candidate_id"] == selected["candidate_id"]
+    # Deterministic: the same governed results always assemble into the
+    # same ContextPackage.
+    repeat_package = context_builder_service.build_context_package(
+        project_id=project["id"],
+        results=governed_results,
+        now=datetime(2026, 1, 1, 12, 0, 0),
+    ).package
+
+    assert repeat_package == context_package
 
     # 11. Prompt Builder - the same ContextPackage, composed into a
     # bounded, deterministic, provider-independent PromptPackage. Prompt
@@ -231,8 +276,12 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
     # present, and disabled for every non-comparison prompt.
     assert len(prompt_package["sections"]) == 11
     assert prompt_package["retrieved_knowledge"]["enabled"] is True
-    reference_ids = [r["candidate_id"] for r in prompt_package["references"]]
-    assert selected["candidate_id"] in reference_ids
+    # The governed citation survives into the prompt: the item, the
+    # statement it came from, and the review that authorised it.
+    references = prompt_package["references"]
+    assert [r["item_id"] for r in references] == [selected["item_id"]]
+    assert references[0]["statement_key"] == "statement-c-295"
+    assert references[0]["review_id"] == selected["provenance"]["review_id"]
     assert len(prompt_package["constraints"]) == 5
     assert len(prompt_package["instructions"]) == 3
     assert prompt_result["validation"]["valid"] is True
@@ -271,8 +320,10 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
     assert llm_result["prepared_request"]["model"] == "model-under-test"
     assert llm_result["capability_validation"]["valid"] is True
 
-    reference_ids = [r["candidate_id"] for r in llm_result["request"]["references"]]
-    assert selected["candidate_id"] in reference_ids
+    reference_ids = [
+        r["item_id"] for r in llm_result["request"]["references"]
+    ]
+    assert selected["item_id"] in reference_ids
 
     # 13. LLM Invocation Runtime - the same PromptPackage, actually
     # invoked through the full runtime (validation, mapping, adapter
@@ -582,13 +633,66 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
     assert repeat_intent["intent_type"] == intent["intent_type"]
     assert repeat_intent["evidence"] == intent["evidence"]
 
-    # 19. Engineering Engine - the classified KNOWLEDGE_QUERY intent is
+    # 19. Governed knowledge - the lineage the Engineering Engine
+    # actually reads since EPIC 31.2. A real document, interpreted
+    # deterministically, reviewed by a named engineer, and promoted:
+    # nothing reaches the engine that an engineer has not approved.
+    governed_document = api_client.post(
+        "/documents/upload",
+        files={
+            "file": (
+                "trasformatore.pdf",
+                io.BytesIO(single_page_pdf("Trasformatore TR1 630 kVA")),
+                "application/pdf",
+            )
+        },
+        data={"scope": "project", "project_id": str(project["id"])},
+    ).json()["document"]
+
+    api_client.post(
+        "/documents/ingestion/jobs", json={"document_id": governed_document["id"]}
+    )
+    for stage in (
+        "canonical-representation",
+        "canonical-text",
+        "engineering-evidence",
+        "engineering-entities",
+        "engineering-facts",
+        "engineering-semantics",
+    ):
+        api_client.post(f"/documents/{governed_document['id']}/{stage}")
+
+    statements = api_client.get(
+        f"/documents/{governed_document['id']}/engineering-semantics"
+    ).json()["statements"]
+    assert statements, "the fixture document produced no semantic statement"
+    statement_key = statements[0]["statement_key"]
+
+    review_response = api_client.post(
+        f"/documents/{governed_document['id']}/engineering-semantics/"
+        f"{statement_key}/reviews",
+        json={"decision": "approved", "reason": "confirmed_by_source"},
+    )
+    assert review_response.status_code == 201
+
+    promotion = api_client.post(
+        "/knowledge-graph/promotions",
+        params={"document_id": governed_document["id"]},
+    )
+    assert promotion.status_code == 201
+
+    governed_assets = api_client.get(
+        "/knowledge-graph/nodes", params={"kind": "engineering_asset"}
+    ).json()["items"]
+    assert governed_assets, "promotion produced no governed asset"
+    governed_asset = governed_assets[0]
+
+    # 20. Engineering Engine - the classified KNOWLEDGE_QUERY intent is
     # coordinated into a complete workflow: selection -> plan ->
-    # validation -> execution, reusing the very same Structured
-    # Retrieval, Context Builder, Prompt Builder, LLM Runtime, and
-    # Engineering Response components exercised individually above. The
-    # Anthropic client is still the fake one monkeypatched at stage 13,
-    # so no live call occurs here either.
+    # validation -> execution, reusing Governed Structured Retrieval,
+    # Context Builder, Prompt Builder, LLM Runtime, and Engineering
+    # Response. The Anthropic client is still the fake one
+    # monkeypatched at stage 13, so no live call occurs here either.
     import app.routers.engineering_engine as engine_router_module
 
     monkeypatch.setattr(
@@ -603,10 +707,11 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
             "engineering_session_id": final_session["session_id"],
             "conversation_id": final_conversation["conversation_id"],
             "turn_id": final_turn["turn_id"],
-            "request_text": "What does cable C-295 feed?",
+            "request_text": "Qual è la potenza nominale del TR1?",
             "engineering_intent_id": intent["engineering_intent_id"],
             "intent_type": intent["intent_type"],
-            "retrieval_canonical_entity_id": "CABLE:C-295",
+            "retrieval_lexical_terms": [governed_asset["label"]],
+            "retrieval_include_neighborhood": True,
             "provider_id": "anthropic",
             "model_identifier": "model-under-test",
         },
@@ -626,16 +731,18 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
     )
 
     # The engine reached a real EngineeringResponse through the whole
-    # governed pipeline - including the actual retrieved candidate.
+    # governed pipeline - and the knowledge it answered from is the
+    # governed asset promoted at stage 19, identified by its governed
+    # node id rather than by a label.
     engine_engineering_response = engine_body["engineering_response"]
     assert engine_engineering_response is not None
     assert engine_engineering_response["direct_answer"]["body"] == [
         "End-to-end deterministic answer."
     ]
     reference_ids = [
-        r["candidate_id"] for r in engine_engineering_response["references"]
+        r["item_id"] for r in engine_engineering_response["references"]
     ]
-    assert selected["candidate_id"] in reference_ids
+    assert f"asset:{governed_asset['node_id']}" in reference_ids
 
     # Aggregate updates are prepared, never applied by the engine.
     assert engine_body["prepared_updates"]["conversation_update"][
@@ -652,10 +759,11 @@ def test_full_pipeline_reaches_a_structured_retrieval_result(
             "engineering_session_id": final_session["session_id"],
             "conversation_id": final_conversation["conversation_id"],
             "turn_id": final_turn["turn_id"],
-            "request_text": "What does cable C-295 feed?",
+            "request_text": "Qual è la potenza nominale del TR1?",
             "engineering_intent_id": intent["engineering_intent_id"],
             "intent_type": intent["intent_type"],
-            "retrieval_canonical_entity_id": "CABLE:C-295",
+            "retrieval_lexical_terms": [governed_asset["label"]],
+            "retrieval_include_neighborhood": True,
             "provider_id": "anthropic",
             "model_identifier": "model-under-test",
         },

@@ -47,7 +47,7 @@ def _llm_request(
 
     metadata = LLMRequestMetadata(
         project_id=1,
-        context_builder_version="1.0",
+        context_assembly_version="1.0",
         prompt_builder_version="1.0",
         composition_policy_version="1.0",
         prompt_package_version="1.0",

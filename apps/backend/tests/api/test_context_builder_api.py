@@ -1,274 +1,103 @@
+"""
+The withdrawal of ``POST /projects/{id}/context-builder/build``
+(EPIC 31.3).
+
+The endpoint took a legacy ``KnowledgeCandidateCollection`` - the output
+of ``/structured-retrieval/search`` - and assembled a ``ContextPackage``
+from it. After this milestone a ``ContextPackage`` is a **governed**
+artefact: every item asserts a statement key, a review id and a named
+reviewer.
+
+There is no honest request body for that any more. Accepting one would
+let any authenticated caller mint a context that *looks* reviewed, which
+is precisely the ADR-0004 failure three milestones were spent removing.
+So the route is gone rather than repointed, and this file is what
+remains of its test suite: proof that it is gone, and that the two
+neighbouring stage-inspection routes still work.
+
+`governed_context_assembly.md` records the decision. Assembling a
+governed context is what the Engineering Engine does, from retrieval it
+ran itself under its own scope and authorization.
+"""
+
 from __future__ import annotations
 
-import io
-
+import app.main
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 
-def _create_project(api_client: TestClient, code: str = "CTX-001") -> dict:
-    response = api_client.post(
-        "/projects/",
-        json={
-            "name": "Alpha Substation",
-            "code": code,
-            "customer": "Acme Utilities",
-        },
-    )
-    assert response.status_code == 201
+def _paths() -> set[str]:
+    """Every served path, including those contributed by included
+    routers (which the app records as wrappers rather than as flat
+    ``APIRoute``s)."""
 
-    return response.json()
+    paths: set[str] = set()
 
-
-def _upload_document(api_client: TestClient, project_id: int) -> dict:
-    response = api_client.post(
-        "/documents/upload",
-        files={
-            "file": (
-                "functional-schematic.pdf",
-                io.BytesIO(b"%PDF-1.4"),
-                "application/pdf",
+    for route in app.main.app.routes:
+        if isinstance(route, APIRoute):
+            paths.add(route.path)
+        elif type(route).__name__ == "_IncludedRouter":
+            paths.update(
+                sub_route.path
+                for sub_route in route.original_router.routes
+                if isinstance(sub_route, APIRoute)
             )
-        },
-        data={"scope": "project", "project_id": str(project_id)},
-    )
-    assert response.status_code == 200
 
-    return response.json()["document"]
+    return paths
 
 
-def _approve_claim(
-    api_client: TestClient,
-    *,
-    claim_type: str,
-    subject: str,
-    predicate: str | None,
-    object_: str | None,
-    entry_ids: list[int],
-) -> dict:
-    payload = {
-        "claim_type": claim_type,
-        "subject": subject,
-        "engineering_index_entry_ids": entry_ids,
-    }
-    if predicate is not None:
-        payload["predicate"] = predicate
-    if object_ is not None:
-        payload["object"] = object_
+def test_the_context_builder_build_route_no_longer_exists() -> None:
+    """Against the live route table, not against a comment."""
 
-    claim = api_client.post("/proposed-claims", json=payload).json()
-    candidate = api_client.post(
-        "/review-candidates",
-        json={"proposed_claim_id": claim["id"]},
-    ).json()
-    approved = api_client.post(
-        f"/review-candidates/{candidate['id']}/approve",
-        json={"reviewed_by": "engineer.smith"},
-    ).json()
-    fact_response = api_client.post(
-        "/canonical-facts",
-        json={"review_candidate_id": approved["id"]},
-    )
-    assert fact_response.status_code == 200
-
-    return fact_response.json()
+    assert "/projects/{project_id}/context-builder/build" not in _paths()
 
 
-def _build_and_execute_graph(api_client: TestClient, code: str) -> dict:
-    project = _create_project(api_client, code=code)
-    document = _upload_document(api_client, project["id"])
+def test_no_router_module_serves_context_assembly() -> None:
+    """Deleted, not merely unregistered - a module that still exists is a
+    module something can register again."""
 
-    cable_entry = api_client.post(
-        "/engineering-index/entries",
-        json={
-            "document_id": document["id"],
-            "kind": "equipment",
-            "identifier": "C-295",
-        },
-    ).json()
+    from pathlib import Path
 
-    _approve_claim(
-        api_client,
-        claim_type="relationship",
-        subject="Cable 295",
-        predicate="feeds",
-        object_="TR2",
-        entry_ids=[cable_entry["id"]],
-    )
-    _approve_claim(
-        api_client,
-        claim_type="attribute",
-        subject="TR2",
-        predicate="Rated Voltage",
-        object_="132kV",
-        entry_ids=[cable_entry["id"]],
+    router = (
+        Path(app.main.__file__).parent / "routers" / "context_builder.py"
     )
 
-    batch = api_client.post(
-        f"/graph-builder/build/project/{project['id']}"
-    ).json()
-    executed = api_client.post(f"/graph-executions/batches/{batch['id']}")
-    assert executed.status_code == 200
-    assert executed.json()["execution"]["status"] == "succeeded"
-
-    return project
+    assert not router.exists()
 
 
-def _retrieve_candidates(api_client: TestClient, project_id: int, **body) -> dict:
-    response = api_client.post(
-        f"/projects/{project_id}/structured-retrieval/search", json=body
-    )
-    assert response.status_code == 200
-
-    return response.json()["candidates"]
-
-
-def test_build_endpoint_assembles_a_package_from_retrieved_candidates(
+def test_posting_to_the_retired_route_is_a_plain_404(
     api_client: TestClient,
 ) -> None:
-    project = _build_and_execute_graph(api_client, code="CTX-BUILD-001")
-    candidates = _retrieve_candidates(
-        api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
-    )
+    """
+    No ``410 Gone`` shim.
+
+    The same reasoning ADR-0025 applied to the legacy graph routes: a
+    shim preserves a URL whose only honest answer is that the request it
+    accepted should never have produced governed knowledge, and it leaves
+    a route to maintain and explain forever.
+    """
 
     response = api_client.post(
-        f"/projects/{project['id']}/context-builder/build",
-        json={"candidates": candidates},
+        "/projects/1/context-builder/build", json={"candidates": {}}
     )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["project_id"] == project["id"]
-    package = body["package"]
-    assert package["project_id"] == project["id"]
-    assert len(package["selected_candidates"]) == 1
-    assert package["selected_candidates"][0]["primary_reference"]["canonical_id"] == "C-295"
-    assert package["budget"]["exceeded"] is False
-    assert package["metadata"]["context_builder_version"] == "1.0"
+    assert response.status_code == 404
 
 
-def test_build_endpoint_enforces_a_caller_supplied_budget(
-    api_client: TestClient,
-) -> None:
-    project = _build_and_execute_graph(api_client, code="CTX-BUDGET-001")
-    candidates = _retrieve_candidates(
-        api_client, project["id"], mode="combined", entity_type="CABLE",
-        attribute_name="rated_voltage",
-    )
+def test_the_neighbouring_stage_routes_still_exist() -> None:
+    """
+    Prompt Builder and Engineering Response keep their
+    ``context_package`` bodies.
 
-    response = api_client.post(
-        f"/projects/{project['id']}/context-builder/build",
-        json={
-            "candidates": candidates,
-            "max_candidates": 1,
-        },
-    )
+    They persist nothing, write no graph, and return a prompt or a
+    response artefact, so a fabricated body harms only the caller's own
+    answer. Context Assembly is different because it is the step where
+    "this is governed knowledge" is *claimed*, and that claim must come
+    from retrieval rather than from a request.
+    """
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["package"]["budget"]["policy"]["max_candidates"] == 1
-    assert len(body["package"]["selected_candidates"]) <= 1
+    paths = _paths()
 
-
-def test_build_endpoint_on_an_empty_collection_is_a_successful_empty_package(
-    api_client: TestClient,
-) -> None:
-    project = _create_project(api_client, code="CTX-EMPTY-001")
-
-    response = api_client.post(
-        f"/projects/{project['id']}/context-builder/build",
-        json={
-            "candidates": {
-                "candidates": [],
-                "total_before_limit": 0,
-                "returned_count": 0,
-                "applied_limit": 20,
-            }
-        },
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["package"]["selected_candidates"] == []
-    assert body["package"]["warnings"] == []
-
-
-def test_build_endpoint_rejects_an_invalid_project_id(
-    api_client: TestClient,
-) -> None:
-    response = api_client.post(
-        "/projects/0/context-builder/build",
-        json={
-            "candidates": {
-                "candidates": [],
-                "total_before_limit": 0,
-                "returned_count": 0,
-                "applied_limit": 20,
-            }
-        },
-    )
-
-    assert response.status_code == 422
-
-
-def test_build_endpoint_rejects_an_out_of_range_budget_value(
-    api_client: TestClient,
-) -> None:
-    project = _create_project(api_client, code="CTX-INVALID-001")
-
-    response = api_client.post(
-        f"/projects/{project['id']}/context-builder/build",
-        json={
-            "candidates": {
-                "candidates": [],
-                "total_before_limit": 0,
-                "returned_count": 0,
-                "applied_limit": 20,
-            },
-            "max_candidates": 0,
-        },
-    )
-
-    assert response.status_code == 422
-
-
-def test_build_endpoint_preserves_score_and_provenance_through_the_wire(
-    api_client: TestClient,
-) -> None:
-    project = _build_and_execute_graph(api_client, code="CTX-PROV-001")
-    candidates = _retrieve_candidates(
-        api_client, project["id"], mode="entity_lookup",
-        canonical_entity_id="CABLE:C-295",
-    )
-
-    response = api_client.post(
-        f"/projects/{project['id']}/context-builder/build",
-        json={"candidates": candidates},
-    )
-
-    assert response.status_code == 200
-    selected = response.json()["package"]["selected_candidates"][0]
-    assert selected["score"]["total"] == candidates["candidates"][0]["score"]["total"]
-    assert selected["graph_execution_ids"] == candidates["candidates"][0]["graph_execution_ids"]
-
-
-def test_build_endpoint_response_is_deterministic(api_client: TestClient) -> None:
-    project = _build_and_execute_graph(api_client, code="CTX-DETERM-001")
-    candidates = _retrieve_candidates(
-        api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
-    )
-    payload = {"candidates": candidates}
-
-    first = api_client.post(
-        f"/projects/{project['id']}/context-builder/build", json=payload
-    )
-    second = api_client.post(
-        f"/projects/{project['id']}/context-builder/build", json=payload
-    )
-
-    first_ids = [
-        c["candidate_id"] for c in first.json()["package"]["selected_candidates"]
-    ]
-    second_ids = [
-        c["candidate_id"] for c in second.json()["package"]["selected_candidates"]
-    ]
-    assert first_ids == second_ids
+    assert "/projects/{project_id}/prompt-builder/build" in paths
+    assert "/projects/{project_id}/engineering-response/build" in paths

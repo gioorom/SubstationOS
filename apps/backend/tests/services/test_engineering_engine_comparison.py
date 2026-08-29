@@ -59,8 +59,8 @@ from app.services.engineering_engine.composition import (
 from tests.services._engineering_engine_support import (
     FakeDocumentMetadataPort,
     FakeEngineeringIndexRepository,
-    FakeGraphQueryRepository,
-    PopulatedFakeGraphQueryRepository,
+    FakeGovernedKnowledgeReader,
+    PopulatedFakeGovernedKnowledgeReader,
     build_test_engine,
     execution_request,
     no_op_sleeper,
@@ -102,8 +102,8 @@ def _comparison_request(left: str = "T1", right: str = "T2", **overrides):
 def _engine(text: str = COMPARABLE, *, graph=None, **overrides):
     return build_test_engine(
         outcomes=(FakeInvocationOutcome(text=text),),
-        graph_query_repository=(
-            graph or PopulatedFakeGraphQueryRepository(("T1", "T2"))
+        governed_knowledge_reader=(
+            graph or PopulatedFakeGovernedKnowledgeReader(("T1", "T2"))
         ),
         **overrides,
     )
@@ -148,7 +148,7 @@ def test_selecting_the_comparison_intent_yields_a_selection() -> None:
 
 def test_the_composed_handler_registry_covers_every_step() -> None:
     registry = build_step_handler_registry(
-        graph_query_repository=FakeGraphQueryRepository(),
+        governed_knowledge_reader=FakeGovernedKnowledgeReader(),
         provider_registry=provider_registry(),
         runtime_configuration=runtime_configuration(),
         credential_present=True,
@@ -244,7 +244,7 @@ def test_aggregate_updates_are_prepared_never_applied() -> None:
 
 
 def test_both_sides_are_retrieved_independently() -> None:
-    graph = PopulatedFakeGraphQueryRepository(("T1", "T2"))
+    graph = PopulatedFakeGovernedKnowledgeReader(("T1", "T2"))
 
     _compare(graph=graph)
 
@@ -258,25 +258,27 @@ def test_the_context_keeps_the_two_sides_separate() -> None:
 
     from app.services.engineering_engine.comparison_step_handlers import (
         BuildComparisonContextStepHandler,
-        BuildComparisonRetrievalRequestsStepHandler,
-        ExecuteLeftRetrievalStepHandler,
-        ExecuteRightRetrievalStepHandler,
+    )
+    from app.services.engineering_engine.governed_retrieval_step_handlers import (  # noqa: E501
+        BuildComparisonGovernedRetrievalPlansStepHandler,
+        ExecuteLeftGovernedRetrievalStepHandler,
+        ExecuteRightGovernedRetrievalStepHandler,
     )
     from app.services.engineering_engine.execution_context import (
         WorkflowExecutionContext,
     )
 
-    graph = PopulatedFakeGraphQueryRepository(("T1", "T2"))
+    graph = PopulatedFakeGovernedKnowledgeReader(("T1", "T2"))
     context = WorkflowExecutionContext(execution_request=_comparison_request())
 
     context = asyncio.run(
-        BuildComparisonRetrievalRequestsStepHandler().execute(None, context)
+        BuildComparisonGovernedRetrievalPlansStepHandler().execute(None, context)
     )
     context = asyncio.run(
-        ExecuteLeftRetrievalStepHandler(graph).execute(None, context)
+        ExecuteLeftGovernedRetrievalStepHandler(graph).execute(None, context)
     )
     context = asyncio.run(
-        ExecuteRightRetrievalStepHandler(graph).execute(None, context)
+        ExecuteRightGovernedRetrievalStepHandler(graph).execute(None, context)
     )
     context = asyncio.run(
         BuildComparisonContextStepHandler().execute(None, context)
@@ -288,32 +290,32 @@ def test_the_context_keeps_the_two_sides_separate() -> None:
     assert comparison.left.package is not comparison.right.package
 
     left_ids = {
-        c.candidate_id for c in comparison.left.package.selected_candidates
+        item.item_id for item in comparison.left.package.selected_items
     }
     right_ids = {
-        c.candidate_id for c in comparison.right.package.selected_candidates
+        item.item_id for item in comparison.right.package.selected_items
     }
     assert left_ids and right_ids
     assert left_ids != right_ids
 
 
 def test_the_left_request_never_becomes_the_right_result() -> None:
-    from app.services.engineering_engine.comparison_step_handlers import (
-        BuildComparisonRetrievalRequestsStepHandler,
+    from app.services.engineering_engine.governed_retrieval_step_handlers import (  # noqa: E501
+        BuildComparisonGovernedRetrievalPlansStepHandler,
     )
     from app.services.engineering_engine.execution_context import (
         WorkflowExecutionContext,
     )
 
     context = asyncio.run(
-        BuildComparisonRetrievalRequestsStepHandler().execute(
+        BuildComparisonGovernedRetrievalPlansStepHandler().execute(
             None,
             WorkflowExecutionContext(execution_request=_comparison_request()),
         )
     )
 
-    assert context.left_retrieval_request.criteria[0].value == "T1"
-    assert context.right_retrieval_request.criteria[0].value == "T2"
+    assert context.left_retrieval_request.queries[0].designation == "T1"
+    assert context.right_retrieval_request.queries[0].designation == "T2"
 
 
 def test_the_prompt_retains_left_and_right_direction() -> None:
@@ -321,19 +323,18 @@ def test_the_prompt_retains_left_and_right_direction() -> None:
         compose_comparison_sections,
     )
     from app.services import context_builder_service
-    from app.domain.structured_retrieval.structured_retrieval_models import (
-        KnowledgeCandidateCollection,
-    )
+    from tests._governed_context import designation_result
 
-    empty = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
+    # Each side keeps its **own** governed results: a comparison never
+    # shares one retrieval between two subjects.
+    left = (designation_result("T1", ()),)
+    right = (designation_result("T2", ()),)
     comparison = context_builder_service.build_comparison_context_package(
         project_id=1,
         left_designation="T1",
-        left_candidates=empty,
+        left_results=left,
         right_designation="T2",
-        right_candidates=empty,
+        right_results=right,
         now=NOW,
     )
 
@@ -354,19 +355,18 @@ def test_the_prompt_retains_left_and_right_direction() -> None:
 
 def test_the_prompt_uses_the_comparison_objective() -> None:
     from app.services import context_builder_service, prompt_builder_service
-    from app.domain.structured_retrieval.structured_retrieval_models import (
-        KnowledgeCandidateCollection,
-    )
+    from tests._governed_context import designation_result
 
-    empty = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
+    # Each side keeps its **own** governed results: a comparison never
+    # shares one retrieval between two subjects.
+    left = (designation_result("T1", ()),)
+    right = (designation_result("T2", ()),)
     comparison = context_builder_service.build_comparison_context_package(
         project_id=1,
         left_designation="T1",
-        left_candidates=empty,
+        left_results=left,
         right_designation="T2",
-        right_candidates=empty,
+        right_results=right,
         now=NOW,
     )
 
@@ -394,7 +394,7 @@ def test_a_missing_side_is_never_reported_as_a_difference(
 
     result = _compare(
         "COMPARABLE\nT2 is missing the differential protection T1 has.",
-        graph=PopulatedFakeGraphQueryRepository(present),
+        graph=PopulatedFakeGovernedKnowledgeReader(present),
     )
     assessment = result.engineering_response.comparison
 
@@ -407,7 +407,7 @@ def test_a_missing_side_is_never_reported_as_a_difference(
 
 def test_both_sides_empty_reports_insufficient_evidence() -> None:
     result = _compare(
-        "COMPARABLE\nThey are identical.", graph=FakeGraphQueryRepository()
+        "COMPARABLE\nThey are identical.", graph=FakeGovernedKnowledgeReader()
     )
     assessment = result.engineering_response.comparison
 
@@ -419,7 +419,7 @@ def test_both_sides_empty_reports_insufficient_evidence() -> None:
 
 def test_a_missing_side_is_warned_about_by_name() -> None:
     response = _compare(
-        COMPARABLE, graph=PopulatedFakeGraphQueryRepository(("T1",))
+        COMPARABLE, graph=PopulatedFakeGovernedKnowledgeReader(("T1",))
     ).engineering_response
 
     messages = " ".join(warning.message for warning in response.warnings)
@@ -430,7 +430,7 @@ def test_a_missing_side_is_warned_about_by_name() -> None:
 
 def test_a_missing_side_raises_uncertainty_to_high() -> None:
     response = _compare(
-        COMPARABLE, graph=PopulatedFakeGraphQueryRepository(("T1",))
+        COMPARABLE, graph=PopulatedFakeGovernedKnowledgeReader(("T1",))
     ).engineering_response
 
     assert response.overall_uncertainty.value == "high"
@@ -438,7 +438,7 @@ def test_a_missing_side_raises_uncertainty_to_high() -> None:
 
 def test_the_limitations_state_the_override_was_applied() -> None:
     response = _compare(
-        COMPARABLE, graph=PopulatedFakeGraphQueryRepository(("T1",))
+        COMPARABLE, graph=PopulatedFakeGovernedKnowledgeReader(("T1",))
     ).engineering_response
 
     limitations = next(
@@ -452,24 +452,46 @@ def test_the_limitations_state_the_override_was_applied() -> None:
 # --- 5. Failure attribution ------------------------------------------------
 
 
-class _SideFailingGraph(PopulatedFakeGraphQueryRepository):
-    """Fails on the Nth read, so a left-only or right-only retrieval
-    failure can be provoked deterministically."""
+class _SideFailingGraph(PopulatedFakeGovernedKnowledgeReader):
+    """
+    Fails once a given number of governed reads have succeeded, so a
+    left-only or right-only retrieval failure can be provoked
+    deterministically.
 
-    def __init__(self, fail_on_call: int) -> None:
+    The threshold is expressed as "reads already served" rather than as
+    a call index, because how many governed reads one side performs is a
+    property of the plan (an asset query, plus a quantity traversal when
+    the operand asks for relationships) and not something a failure test
+    should have to restate.
+    """
+
+    def __init__(self, *, fail_after_reads: int) -> None:
         super().__init__(("T1", "T2"))
-        self._fail_on_call = fail_on_call
-        self._calls = 0
+        self._fail_after_reads = fail_after_reads
+        self._served = 0
 
-    def list_nodes(self, project_id):
-        self._calls += 1
-        if self._calls == self._fail_on_call:
-            raise RuntimeError("graph query exploded")
-        return super().list_nodes(project_id)
+    def nodes(self, *, states, kind=None, project_id=None, document_id=None):
+        if self._served >= self._fail_after_reads:
+            raise RuntimeError("governed graph read exploded")
+
+        self._served += 1
+
+        return super().nodes(
+            states=states,
+            kind=kind,
+            project_id=project_id,
+            document_id=document_id,
+        )
+
+
+#: How many governed node reads one comparison side performs: the asset
+#: designation query, plus the subject resolution of its quantity
+#: traversal.
+_READS_PER_SIDE = 2
 
 
 def test_a_left_retrieval_failure_is_attributed_to_the_left_step() -> None:
-    result = _compare(graph=_SideFailingGraph(fail_on_call=1))
+    result = _compare(graph=_SideFailingGraph(fail_after_reads=0))
 
     assert result.status is EngineeringEngineExecutionStatus.FAILED
     assert result.failure.step_type is (
@@ -482,7 +504,9 @@ def test_a_right_retrieval_failure_is_attributed_to_the_right_step() -> None:
     """The reason retrieval is two steps rather than one: a combined step
     would report these two failures identically."""
 
-    result = _compare(graph=_SideFailingGraph(fail_on_call=2))
+    result = _compare(
+        graph=_SideFailingGraph(fail_after_reads=_READS_PER_SIDE)
+    )
 
     assert result.status is EngineeringEngineExecutionStatus.FAILED
     assert result.failure.step_type is (
@@ -523,7 +547,7 @@ def test_a_runtime_failure_uses_the_existing_code() -> None:
                 ),
             ),
         ),
-        graph_query_repository=PopulatedFakeGraphQueryRepository(("T1", "T2")),
+        governed_knowledge_reader=PopulatedFakeGovernedKnowledgeReader(("T1", "T2")),
     )
 
     result = _execute(engine, _comparison_request())

@@ -1,205 +1,250 @@
+"""
+Wire shapes for Governed Context Assembly (EPIC 31.3).
+
+``ContextPackageRead`` is both a **response** (nothing serves it on its
+own any more - see below) and, more importantly, the **request** shape
+Prompt Builder and Engineering Response accept, so this module owns both
+directions: the Pydantic models and the reconstruction back into the
+domain.
+
+---
+
+## What EPIC 31.3 changed here
+
+The package's items were ``KnowledgeCandidateRead`` - the legacy
+Structured Retrieval shape, carrying a score, a ``GraphEntityId`` and a
+``GraphRelationshipType``. They are now ``ContextItemRead``: governed
+node and edge identities, the match strategy that explains the item, the
+governed provenance that authorises it, and the retrieval outcome it
+came from. This module no longer imports ``app.domain.graph_builder`` or
+``app.domain.structured_retrieval`` at all.
+
+## Why there is no `/context-builder/build` route any more
+
+The endpoint took a ``KnowledgeCandidateCollection`` - the output of
+legacy ``/structured-retrieval/search`` - and assembled a
+``ContextPackage`` from it. After this milestone a ``ContextPackage`` is
+a **governed** artefact: every item asserts a statement key, a review id
+and a reviewer. There is no honest request body for that endpoint any
+more, because provenance a caller asserts in a request is not
+provenance - accepting one would let any authenticated client mint a
+context that *looks* reviewed, which is the ADR-0004 failure three
+milestones were spent removing.
+
+Assembling a governed context is what
+``POST /projects/{id}/engineering-engine/execute`` does, from retrieval
+it ran itself. `governed_context_assembly.md` records the withdrawal.
+
+## Why Prompt Builder and Engineering Response still accept one
+
+Those two take a ``ContextPackageRead`` in the request body and were
+already caller-asserted before this milestone. They persist nothing,
+write no graph and return a prompt or a response artefact, so a
+fabricated body harms only the caller's own answer. They are stage
+inspection tools, they are authenticated, and they are documented as
+such - the asymmetry with Context Assembly is that assembling context
+is the step where "this is governed knowledge" is *claimed*, and that
+claim must come from retrieval rather than from a request.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from app.domain.context_builder.context_builder_models import (
     BudgetCategory,
     BudgetConsumption,
     BudgetPolicy,
     ContextBudget,
+    ContextItem,
+    ContextItemOrigin,
     ContextMetadata,
     ContextMetadataEntry,
     ContextPackage,
-    ContextStatistics,
     ContextWarning,
     ContextWarningCategory,
     CoverageCategory,
     CoverageMetric,
     CoverageReport,
+    GovernedQuerySummary,
     RetrievalSummary,
 )
-from app.domain.graph_builder.graph_builder_models import (
-    GraphEntityId,
-    GraphRelationshipType,
+from app.domain.governed_knowledge_graph.graph_lifecycle import (
+    GraphObjectState,
+    GraphRetirementReason,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidate,
-    KnowledgeCandidateAttribute,
-    KnowledgeCandidateCollection,
-    KnowledgeCandidateReference,
-    KnowledgeCandidateRelationship,
-    KnowledgeCandidateScore,
-    KnowledgeCandidateScoreComponent,
-    RetrievalMatch,
-    RetrievalReason,
+from app.domain.governed_knowledge_graph.graph_vocabulary import (
+    GraphEdgeKind,
+    GraphNodeKind,
 )
-from app.schemas.graph_builder import GraphEntityIdRead
-from app.schemas.structured_retrieval import (
-    KnowledgeCandidateCollectionRead,
-    KnowledgeCandidateReferenceRead,
-    KnowledgeCandidateRead,
+from app.domain.governed_retrieval.governed_match_policy import (
+    precedence_of,
+)
+from app.domain.governed_retrieval.governed_normalization import (
+    normalize_designation,
+)
+from app.domain.governed_retrieval.governed_retrieval_models import (
+    GovernedMatchExplanation,
+    GovernedNodeReference,
+    GovernedProvenanceView,
+    GovernedRelationshipReference,
+    GovernedRetrievalItem,
+)
+from app.domain.governed_retrieval.governed_retrieval_vocabulary import (
+    GovernedMatchOutcome,
+    GovernedMatchStrategy,
+    GovernedQueryType,
+    GovernedResultKind,
+    RetrievalScope,
 )
 
-# --- Request -----------------------------------------------------------
+# --- Governed item ------------------------------------------------------
 
 
-class ContextMetadataEntryInput(BaseModel):
-    key: str
-    value: str
-
-
-class ContextBuildRequestBody(BaseModel):
+class GovernedProvenanceRead(BaseModel):
     """
-    A Context Builder build request. ``project_id`` is deliberately
-    absent - the path's own ``{project_id}`` is authoritative, matching
-    Structured Retrieval's own convention. ``candidates`` is the
-    ``KnowledgeCandidateCollection`` a prior call to
-    ``/structured-retrieval/search`` returned (its ``candidates`` field)
-    - Context Builder never calls Structured Retrieval itself, so the
-    caller supplies this collection directly. Every budget field is
-    optional; an omitted field falls back to Context Builder's own
-    documented default (see ``app.domain.context_builder.budget_policy``).
+    The full origin of one governed context item.
+
+    Every field is an **identity or a version**, never engineering
+    content: the statement, the facts, the entities and the evidence
+    stay in the pipeline, which remains their single account.
     """
 
-    candidates: KnowledgeCandidateCollectionRead
+    statement_key: str
+    document_id: int
+    content_checksum: str
+    review_id: int
+    reviewer_user_id: int
+    reviewer_display_name: str
+    reviewed_at: datetime
+    semantic_rule_id: str
+    semantic_rule_version: str
+    semantic_contract_version: str
+    resolution_policy_version: str
+    fact_policy_version: str
+    semantic_policy_version: str
+    support_fingerprint: str
+    project_id: int | None
 
-    max_candidates: int | None = None
-    max_entities: int | None = None
-    max_relationships: int | None = None
-    max_attributes: int | None = None
-    max_metadata_entries: int | None = None
-    max_warnings: int | None = None
-
-    metadata_entries: list[ContextMetadataEntryInput] = Field(
-        default_factory=list
-    )
-    retrieval_policy_version: str | None = None
-
-
-def _entity_id_from_read(entity_id: GraphEntityIdRead) -> GraphEntityId:
-    return GraphEntityId(
-        project_id=entity_id.project_id,
-        entity_type=entity_id.entity_type,
-        canonical_id=entity_id.canonical_id,
-    )
+    model_config = ConfigDict(from_attributes=True)
 
 
-def _reference_from_read(
-    reference: KnowledgeCandidateReferenceRead,
-) -> KnowledgeCandidateReference:
-    return KnowledgeCandidateReference(
-        graph_entity_id=_entity_id_from_read(reference.graph_entity_id),
-        entity_type=reference.entity_type,
-        canonical_id=reference.canonical_id,
-    )
+class GovernedNodeReferenceRead(BaseModel):
+    node_id: str
+    kind: GraphNodeKind
+    label: str
+    normalized_value: str
+    unit: str | None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
-def _candidate_from_read(candidate: KnowledgeCandidateRead) -> KnowledgeCandidate:
+class GovernedRelationshipReferenceRead(BaseModel):
+    edge_id: str
+    kind: GraphEdgeKind
+    subject: GovernedNodeReferenceRead
+    object: GovernedNodeReferenceRead
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GovernedMatchExplanationRead(BaseModel):
+    """Why this item is in the context. A closed strategy vocabulary and
+    the governed field that carried it - never a relevance number."""
+
+    strategy: GovernedMatchStrategy
+    matched_field: str
+    matched_value: str
+    normalized_query: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ContextItemOriginRead(BaseModel):
+    """Which governed query produced this item, and how certainly.
+    ``matched_before_limit`` is retrieval's own count, so a reader can
+    tell a complete answer from a truncated one."""
+
+    query_type: GovernedQueryType
+    outcome: GovernedMatchOutcome
+    scope: RetrievalScope
+    normalized_query: str | None
+    matched_before_limit: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ContextItemRead(BaseModel):
     """
-    Reconstructs a domain ``KnowledgeCandidate`` from the wire shape
-    Structured Retrieval's own API returns. ``sort_key`` is deliberately
-    not part of ``KnowledgeCandidateRead`` (Structured Retrieval treats
-    it as an internal ranking aid never exposed to a caller - see
-    ``app/schemas/structured_retrieval.py``), so it is filled here with
-    an inert placeholder: Context Builder's own Selection stage
-    (``candidate_selection.py``) computes its own deterministic ordering
-    key from public fields and never reads this value.
+    One governed result in a context.
+
+    ``provenance`` is **not optional** and has no default, mirroring the
+    domain: an item that could not say where it came from cannot be
+    serialized any more than it can be constructed.
     """
 
-    score = KnowledgeCandidateScore(
-        total=candidate.score.total,
-        components=tuple(
-            KnowledgeCandidateScoreComponent(
-                category=component.category,
-                weight=component.weight,
-                detail=component.detail,
-            )
-            for component in candidate.score.components
-        ),
-    )
+    item_id: str
+    kind: GovernedResultKind
+    node: GovernedNodeReferenceRead | None
+    relationship: GovernedRelationshipReferenceRead | None
+    state: GraphObjectState
+    retirement_reason: GraphRetirementReason | None
+    match: GovernedMatchExplanationRead
+    provenance: GovernedProvenanceRead
+    origin: ContextItemOriginRead
 
-    return KnowledgeCandidate(
-        candidate_id=candidate.candidate_id,
-        project_id=candidate.project_id,
-        candidate_kind=candidate.candidate_kind,
-        primary_reference=(
-            _reference_from_read(candidate.primary_reference)
-            if candidate.primary_reference is not None
-            else None
-        ),
-        matched_attributes=tuple(
-            KnowledgeCandidateAttribute(name=attribute.name, value=attribute.value)
-            for attribute in candidate.matched_attributes
-        ),
-        matched_relationships=tuple(
-            KnowledgeCandidateRelationship(
-                subject=_reference_from_read(relationship.subject),
-                relationship_type=GraphRelationshipType(
-                    value=relationship.relationship_type.value
-                ),
-                object=_reference_from_read(relationship.object),
-            )
-            for relationship in candidate.matched_relationships
-        ),
-        related_entities=tuple(
-            _reference_from_read(reference)
-            for reference in candidate.related_entities
-        ),
-        source_fact_ids=tuple(candidate.source_fact_ids),
-        graph_node_ids=tuple(candidate.graph_node_ids),
-        graph_relationship_ids=tuple(candidate.graph_relationship_ids),
-        graph_execution_ids=tuple(candidate.graph_execution_ids),
-        score=score,
-        reasons=tuple(
-            RetrievalReason(
-                category=reason.category,
-                criterion_kind=reason.criterion_kind,
-                description=reason.description,
-            )
-            for reason in candidate.reasons
-        ),
-        matches=tuple(
-            RetrievalMatch(
-                criterion_kind=match.criterion_kind,
-                criterion_value=match.criterion_value,
-            )
-            for match in candidate.matches
-        ),
-        sort_key=(0.0, 0, "", ""),
-    )
+    @classmethod
+    def from_domain(cls, item: ContextItem) -> "ContextItemRead":
+        result = item.result
+
+        return cls(
+            item_id=result.result_id,
+            kind=result.kind,
+            node=(
+                None
+                if result.node is None
+                else GovernedNodeReferenceRead.model_validate(result.node)
+            ),
+            relationship=(
+                None
+                if result.relationship is None
+                else GovernedRelationshipReferenceRead.model_validate(
+                    result.relationship
+                )
+            ),
+            state=result.state,
+            retirement_reason=result.retirement_reason,
+            match=GovernedMatchExplanationRead.model_validate(result.match),
+            provenance=GovernedProvenanceRead.model_validate(
+                result.provenance
+            ),
+            origin=ContextItemOriginRead.model_validate(item.origin),
+        )
 
 
-def collection_from_schema(
-    model: KnowledgeCandidateCollectionRead,
-) -> KnowledgeCandidateCollection:
-    return KnowledgeCandidateCollection(
-        candidates=tuple(
-            _candidate_from_read(candidate) for candidate in model.candidates
-        ),
-        total_before_limit=model.total_before_limit,
-        returned_count=model.returned_count,
-        applied_limit=model.applied_limit,
-    )
+# --- Package ------------------------------------------------------------
 
 
-# --- Response ------------------------------------------------------------
-#
-# GraphEntityIdRead is imported from app.schemas.graph_builder and
-# KnowledgeCandidateRead (with its own nested KnowledgeCandidateReferenceRead
-# etc.) from app.schemas.structured_retrieval - Context Builder reuses
-# Structured Retrieval's own response shapes for the KnowledgeCandidate
-# objects it threads through unchanged, rather than redefining them.
+class GovernedQuerySummaryRead(BaseModel):
+    query_type: GovernedQueryType
+    outcome: GovernedMatchOutcome
+    scope: RetrievalScope
+    normalized_query: str | None
+    matched_before_limit: int
+    returned_count: int
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RetrievalSummaryRead(BaseModel):
-    retrieved_candidate_count: int
+    retrieved_item_count: int
     total_before_limit: int
-    applied_limit: int
-    retrieved_entity_count: int
+    retrieved_asset_count: int
+    retrieved_quantity_count: int
     retrieved_relationship_count: int
-    retrieved_attribute_count: int
+    queries: list[GovernedQuerySummaryRead]
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -217,10 +262,10 @@ class BudgetConsumptionRead(BaseModel):
 
 class BudgetPolicyRead(BaseModel):
     version: str
-    max_candidates: int
-    max_entities: int
+    max_items: int
+    max_assets: int
+    max_quantities: int
     max_relationships: int
-    max_attributes: int
     max_metadata_entries: int
     max_warnings: int
 
@@ -254,17 +299,17 @@ class CoverageReportRead(BaseModel):
 class ContextWarningRead(BaseModel):
     category: ContextWarningCategory
     message: str
-    candidate_id: str | None
+    item_id: str | None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ContextStatisticsRead(BaseModel):
-    selected_candidate_count: int
-    discarded_candidate_count: int
-    entity_count: int
+    selected_item_count: int
+    discarded_item_count: int
+    asset_count: int
+    quantity_count: int
     relationship_count: int
-    attribute_count: int
     coverage_summary: CoverageReportRead
     budget_summary: ContextBudgetRead
 
@@ -279,11 +324,13 @@ class ContextMetadataEntryRead(BaseModel):
 
 
 class ContextMetadataRead(BaseModel):
-    context_builder_version: str
+    context_assembly_version: str
     assembled_at: datetime
     selection_policy_version: str
     budget_policy_version: str
-    retrieval_policy_version: str | None
+    retrieval_normalization_version: str | None
+    retrieval_matching_policy_version: str | None
+    graph_generation_number: int | None
     entries: list[ContextMetadataEntryRead]
 
     model_config = ConfigDict(from_attributes=True)
@@ -292,58 +339,187 @@ class ContextMetadataRead(BaseModel):
 class ContextPackageRead(BaseModel):
     project_id: int
     retrieval_summary: RetrievalSummaryRead
-    selected_entities: list[KnowledgeCandidateRead]
-    selected_relationships: list[KnowledgeCandidateRead]
-    selected_attributes: list[KnowledgeCandidateRead]
-    selected_candidates: list[KnowledgeCandidateRead]
+    selected_assets: list[ContextItemRead]
+    selected_quantities: list[ContextItemRead]
+    selected_relationships: list[ContextItemRead]
+    selected_items: list[ContextItemRead]
     coverage: CoverageReportRead
     statistics: ContextStatisticsRead
     warnings: list[ContextWarningRead]
     budget: ContextBudgetRead
     metadata: ContextMetadataRead
 
-    model_config = ConfigDict(from_attributes=True)
+    @classmethod
+    def from_domain(cls, package: ContextPackage) -> "ContextPackageRead":
+        return cls(
+            project_id=package.project_id,
+            retrieval_summary=RetrievalSummaryRead.model_validate(
+                package.retrieval_summary
+            ),
+            selected_assets=[
+                ContextItemRead.from_domain(item)
+                for item in package.selected_assets
+            ],
+            selected_quantities=[
+                ContextItemRead.from_domain(item)
+                for item in package.selected_quantities
+            ],
+            selected_relationships=[
+                ContextItemRead.from_domain(item)
+                for item in package.selected_relationships
+            ],
+            selected_items=[
+                ContextItemRead.from_domain(item)
+                for item in package.selected_items
+            ],
+            coverage=CoverageReportRead.model_validate(package.coverage),
+            statistics=ContextStatisticsRead.model_validate(
+                package.statistics
+            ),
+            warnings=[
+                ContextWarningRead.model_validate(warning)
+                for warning in package.warnings
+            ],
+            budget=ContextBudgetRead.model_validate(package.budget),
+            metadata=ContextMetadataRead.model_validate(package.metadata),
+        )
 
 
-class ContextSelectionPolicyRead(BaseModel):
-    version: str
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class ContextBuilderConfigurationRead(BaseModel):
+class ContextAssemblyConfigurationRead(BaseModel):
     budget_policy: BudgetPolicyRead
-    selection_policy: ContextSelectionPolicyRead
-    context_builder_version: str
+    selection_policy_version: str
+    context_assembly_version: str
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class ContextBuilderResultRead(BaseModel):
-    project_id: int
-    configuration: ContextBuilderConfigurationRead
-    package: ContextPackageRead
-
-    model_config = ConfigDict(from_attributes=True)
+# --- Reconstruction (Prompt Builder / Engineering Response input) --------
 
 
-# --- Reconstruction (Prompt Builder's own input shape) --------------------
-#
-# Prompt Builder's input is a full ContextPackage, not a
-# KnowledgeCandidateCollection - app/schemas/prompt_builder.py reuses
-# ContextPackageRead as its own request body's context_package field and
-# calls context_package_from_schema to reconstruct the domain object,
-# the same "reuse the upstream response shape" pattern this module's own
-# collection_from_schema already established for Structured Retrieval.
+def _node_from_read(
+    model: GovernedNodeReferenceRead,
+) -> GovernedNodeReference:
+    return GovernedNodeReference(
+        node_id=model.node_id,
+        kind=model.kind,
+        label=model.label,
+        normalized_value=model.normalized_value,
+        unit=model.unit,
+    )
+
+
+def _match_from_read(
+    model: GovernedMatchExplanationRead,
+) -> GovernedMatchExplanation:
+    return GovernedMatchExplanation(
+        strategy=model.strategy,
+        matched_field=model.matched_field,
+        matched_value=model.matched_value,
+        normalized_query=model.normalized_query,
+    )
+
+
+def _provenance_from_read(
+    model: GovernedProvenanceRead,
+) -> GovernedProvenanceView:
+    return GovernedProvenanceView(
+        statement_key=model.statement_key,
+        document_id=model.document_id,
+        content_checksum=model.content_checksum,
+        review_id=model.review_id,
+        reviewer_user_id=model.reviewer_user_id,
+        reviewer_display_name=model.reviewer_display_name,
+        reviewed_at=model.reviewed_at,
+        semantic_rule_id=model.semantic_rule_id,
+        semantic_rule_version=model.semantic_rule_version,
+        semantic_contract_version=model.semantic_contract_version,
+        resolution_policy_version=model.resolution_policy_version,
+        fact_policy_version=model.fact_policy_version,
+        semantic_policy_version=model.semantic_policy_version,
+        support_fingerprint=model.support_fingerprint,
+        project_id=model.project_id,
+    )
+
+
+def _sort_key_of(model: ContextItemRead) -> tuple[int, str, str, str]:
+    """
+    Recomputes the governed ordering key from the fields on the wire.
+
+    ``sort_key`` is deliberately **not** serialized: it is derived, and a
+    caller able to send one could reorder a context without changing any
+    governed fact. Re-deriving it here from the strategy and the governed
+    labels applies exactly the rule ``governed_result_assembly`` applies,
+    so a round trip preserves the order rather than trusting it.
+    """
+
+    rank = precedence_of(model.match.strategy)
+
+    if model.relationship is not None and model.kind is not (
+        GovernedResultKind.ASSET
+    ):
+        return (
+            rank,
+            normalize_designation(model.relationship.subject.label),
+            (
+                ""
+                if model.kind is GovernedResultKind.RELATIONSHIP
+                and model.node is None
+                else normalize_designation(
+                    model.relationship.object.label
+                )
+            ),
+            model.relationship.edge_id,
+        )
+
+    label = "" if model.node is None else model.node.label
+    node_id = "" if model.node is None else model.node.node_id
+
+    return (rank, normalize_designation(label), "", node_id)
+
+
+def _item_from_read(model: ContextItemRead) -> ContextItem:
+    relationship = (
+        None
+        if model.relationship is None
+        else GovernedRelationshipReference(
+            edge_id=model.relationship.edge_id,
+            kind=model.relationship.kind,
+            subject=_node_from_read(model.relationship.subject),
+            object=_node_from_read(model.relationship.object),
+        )
+    )
+
+    result = GovernedRetrievalItem(
+        result_id=model.item_id,
+        kind=model.kind,
+        node=None if model.node is None else _node_from_read(model.node),
+        relationship=relationship,
+        state=model.state,
+        retirement_reason=model.retirement_reason,
+        match=_match_from_read(model.match),
+        provenance=_provenance_from_read(model.provenance),
+        sort_key=_sort_key_of(model),
+    )
+
+    return ContextItem(
+        result=result,
+        origin=ContextItemOrigin(
+            query_type=model.origin.query_type,
+            outcome=model.origin.outcome,
+            scope=model.origin.scope,
+            normalized_query=model.origin.normalized_query,
+            matched_before_limit=model.origin.matched_before_limit,
+        ),
+    )
 
 
 def _budget_policy_from_read(model: BudgetPolicyRead) -> BudgetPolicy:
     return BudgetPolicy(
         version=model.version,
-        max_candidates=model.max_candidates,
-        max_entities=model.max_entities,
+        max_items=model.max_items,
+        max_assets=model.max_assets,
+        max_quantities=model.max_quantities,
         max_relationships=model.max_relationships,
-        max_attributes=model.max_attributes,
         max_metadata_entries=model.max_metadata_entries,
         max_warnings=model.max_warnings,
     )
@@ -382,13 +558,17 @@ def _coverage_from_read(model: CoverageReportRead) -> CoverageReport:
     )
 
 
-def _statistics_from_read(model: ContextStatisticsRead) -> ContextStatistics:
+def _statistics_from_read(model: ContextStatisticsRead):
+    from app.domain.context_builder.context_builder_models import (
+        ContextStatistics,
+    )
+
     return ContextStatistics(
-        selected_candidate_count=model.selected_candidate_count,
-        discarded_candidate_count=model.discarded_candidate_count,
-        entity_count=model.entity_count,
+        selected_item_count=model.selected_item_count,
+        discarded_item_count=model.discarded_item_count,
+        asset_count=model.asset_count,
+        quantity_count=model.quantity_count,
         relationship_count=model.relationship_count,
-        attribute_count=model.attribute_count,
         coverage_summary=_coverage_from_read(model.coverage_summary),
         budget_summary=_budget_from_read(model.budget_summary),
     )
@@ -396,11 +576,17 @@ def _statistics_from_read(model: ContextStatisticsRead) -> ContextStatistics:
 
 def _metadata_from_read(model: ContextMetadataRead) -> ContextMetadata:
     return ContextMetadata(
-        context_builder_version=model.context_builder_version,
+        context_assembly_version=model.context_assembly_version,
         assembled_at=model.assembled_at,
         selection_policy_version=model.selection_policy_version,
         budget_policy_version=model.budget_policy_version,
-        retrieval_policy_version=model.retrieval_policy_version,
+        retrieval_normalization_version=(
+            model.retrieval_normalization_version
+        ),
+        retrieval_matching_policy_version=(
+            model.retrieval_matching_policy_version
+        ),
+        graph_generation_number=model.graph_generation_number,
         entries=tuple(
             ContextMetadataEntry(key=entry.key, value=entry.value)
             for entry in model.entries
@@ -412,27 +598,40 @@ def context_package_from_schema(model: ContextPackageRead) -> ContextPackage:
     return ContextPackage(
         project_id=model.project_id,
         retrieval_summary=RetrievalSummary(
-            retrieved_candidate_count=model.retrieval_summary.retrieved_candidate_count,
+            retrieved_item_count=model.retrieval_summary.retrieved_item_count,
             total_before_limit=model.retrieval_summary.total_before_limit,
-            applied_limit=model.retrieval_summary.applied_limit,
-            retrieved_entity_count=model.retrieval_summary.retrieved_entity_count,
-            retrieved_relationship_count=model.retrieval_summary.retrieved_relationship_count,
-            retrieved_attribute_count=model.retrieval_summary.retrieved_attribute_count,
+            retrieved_asset_count=(
+                model.retrieval_summary.retrieved_asset_count
+            ),
+            retrieved_quantity_count=(
+                model.retrieval_summary.retrieved_quantity_count
+            ),
+            retrieved_relationship_count=(
+                model.retrieval_summary.retrieved_relationship_count
+            ),
+            queries=tuple(
+                GovernedQuerySummary(
+                    query_type=query.query_type,
+                    outcome=query.outcome,
+                    scope=query.scope,
+                    normalized_query=query.normalized_query,
+                    matched_before_limit=query.matched_before_limit,
+                    returned_count=query.returned_count,
+                )
+                for query in model.retrieval_summary.queries
+            ),
         ),
-        selected_entities=tuple(
-            _candidate_from_read(candidate) for candidate in model.selected_entities
+        selected_assets=tuple(
+            _item_from_read(item) for item in model.selected_assets
+        ),
+        selected_quantities=tuple(
+            _item_from_read(item) for item in model.selected_quantities
         ),
         selected_relationships=tuple(
-            _candidate_from_read(candidate)
-            for candidate in model.selected_relationships
+            _item_from_read(item) for item in model.selected_relationships
         ),
-        selected_attributes=tuple(
-            _candidate_from_read(candidate)
-            for candidate in model.selected_attributes
-        ),
-        selected_candidates=tuple(
-            _candidate_from_read(candidate)
-            for candidate in model.selected_candidates
+        selected_items=tuple(
+            _item_from_read(item) for item in model.selected_items
         ),
         coverage=_coverage_from_read(model.coverage),
         statistics=_statistics_from_read(model.statistics),
@@ -440,10 +639,18 @@ def context_package_from_schema(model: ContextPackageRead) -> ContextPackage:
             ContextWarning(
                 category=warning.category,
                 message=warning.message,
-                candidate_id=warning.candidate_id,
+                item_id=warning.item_id,
             )
             for warning in model.warnings
         ),
         budget=_budget_from_read(model.budget),
         metadata=_metadata_from_read(model.metadata),
     )
+
+
+__all__ = [
+    "ContextAssemblyConfigurationRead",
+    "ContextItemRead",
+    "ContextPackageRead",
+    "context_package_from_schema",
+]

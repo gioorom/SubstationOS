@@ -37,6 +37,9 @@ materialized data.
 from __future__ import annotations
 
 from app.domain.context_builder.context_builder_models import ContextPackage
+from app.domain.governed_retrieval.governed_retrieval_vocabulary import (
+    GovernedMatchOutcome,
+)
 from app.domain.engineering_response.engineering_response_models import (
     EngineeringEvidenceReference,
     EngineeringResponseCompositionResult,
@@ -154,9 +157,12 @@ def _build_references(
 ) -> tuple[EngineeringEvidenceReference, ...]:
     return tuple(
         EngineeringEvidenceReference(
-            candidate_id=reference.candidate_id,
-            graph_node_ids=reference.graph_node_ids,
-            graph_relationship_ids=reference.graph_relationship_ids,
+            item_id=reference.item_id,
+            node_ids=reference.node_ids,
+            edge_ids=reference.edge_ids,
+            statement_key=reference.statement_key,
+            review_id=reference.review_id,
+            document_id=reference.document_id,
         )
         for reference in prompt_package.references
     )
@@ -166,8 +172,11 @@ def _build_references_section(
     references: tuple[EngineeringEvidenceReference, ...],
 ) -> EngineeringResponseSection:
     body = tuple(
-        f"{reference.candidate_id}: nodes={list(reference.graph_node_ids)}, "
-        f"relationships={list(reference.graph_relationship_ids)}"
+        f"{reference.item_id}: nodes={list(reference.node_ids)}, "
+        f"edges={list(reference.edge_ids)}, "
+        f"statement={reference.statement_key}, "
+        f"review={reference.review_id}, "
+        f"document={reference.document_id}"
         for reference in references
     )
 
@@ -187,6 +196,22 @@ def _build_unknown_section(
     return build_section(EngineeringSectionType.UNKNOWN, "Unrecognized Content", body)
 
 
+def _ambiguous_queries(context_package: ContextPackage):
+    """
+    The governed queries that had more than one governed answer.
+
+    Read from the context rather than recomputed: retrieval decided what
+    was ambiguous, Context Assembly carried that decision through, and a
+    second definition here would eventually disagree with the first.
+    """
+
+    return tuple(
+        query
+        for query in context_package.retrieval_summary.queries
+        if query.outcome is GovernedMatchOutcome.MULTIPLE_MATCHES
+    )
+
+
 def _build_warnings(
     context_package: ContextPackage,
     source: EngineeringResponseSourceEnvelope,
@@ -194,7 +219,7 @@ def _build_warnings(
 ) -> tuple[EngineeringWarning, ...]:
     warnings: list[EngineeringWarning] = []
 
-    retrieved_count = context_package.retrieval_summary.retrieved_candidate_count
+    retrieved_count = context_package.retrieval_summary.retrieved_item_count
     completeness = context_package.coverage.overall_completeness
 
     if retrieved_count == 0:
@@ -212,6 +237,25 @@ def _build_warnings(
                 message="Knowledge context selection completeness was "
                 f"{completeness:.2f}; some retrieved knowledge was not "
                 "included.",
+            )
+        )
+
+    for ambiguous in _ambiguous_queries(context_package):
+        warnings.append(
+            EngineeringWarning(
+                category=EngineeringWarningCategory.AMBIGUOUS_KNOWLEDGE,
+                message=(
+                    f"'{ambiguous.normalized_query}' matched "
+                    f"{ambiguous.matched_before_limit} distinct governed "
+                    "objects, which were not merged. This answer may "
+                    "describe more than one piece of equipment."
+                    if ambiguous.normalized_query
+                    else (
+                        f"A governed {ambiguous.query_type.value} query "
+                        f"matched {ambiguous.matched_before_limit} distinct "
+                        "governed objects, which were not merged."
+                    )
+                ),
             )
         )
 
@@ -285,7 +329,7 @@ def _build_limitations_section(
             "unsupported type and were omitted from the direct answer."
         )
 
-    retrieved_count = context_package.retrieval_summary.retrieved_candidate_count
+    retrieved_count = context_package.retrieval_summary.retrieved_item_count
     completeness = context_package.coverage.overall_completeness
     if retrieved_count > 0 and completeness < 1.0:
         lines.append(
@@ -310,7 +354,28 @@ def _build_uncertainties(
             )
         )
 
-    retrieved_count = context_package.retrieval_summary.retrieved_candidate_count
+    ambiguous = _ambiguous_queries(context_package)
+    if ambiguous:
+        uncertainties.append(
+            EngineeringUncertainty(
+                level=EngineeringUncertaintyLevel.HIGH,
+                reasons=tuple(
+                    (
+                        f"'{query.normalized_query}' names more than one "
+                        "governed object; this answer may not be about a "
+                        "single piece of equipment."
+                    )
+                    if query.normalized_query
+                    else (
+                        f"A governed {query.query_type.value} query matched "
+                        "more than one governed object."
+                    )
+                    for query in ambiguous
+                ),
+            )
+        )
+
+    retrieved_count = context_package.retrieval_summary.retrieved_item_count
     completeness = context_package.coverage.overall_completeness
 
     if retrieved_count == 0:
@@ -318,7 +383,7 @@ def _build_uncertainties(
             EngineeringUncertainty(
                 level=EngineeringUncertaintyLevel.HIGH,
                 reasons=(
-                    "No knowledge candidates were retrieved for this "
+                    "No governed knowledge was retrieved for this "
                     "project.",
                 ),
             )

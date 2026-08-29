@@ -8,72 +8,42 @@ from app.domain.prompt_builder.prompt_builder_exceptions import (
     InvalidProjectIdError,
     ProjectIdMismatchError,
 )
-from app.domain.graph_builder.graph_builder_models import GraphEntityId
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidate,
-    KnowledgeCandidateCollection,
-    KnowledgeCandidateKind,
-    KnowledgeCandidateReference,
-    KnowledgeCandidateScore,
-    KnowledgeCandidateScoreComponent,
-    ScoreComponentCategory,
-)
 from app.domain.prompt_builder.prompt_composition import (
     PROMPT_SECTION_ORDER,
 )
 from app.services import context_builder_service, prompt_builder_service
 
+from tests._governed_context import (
+    asset_item,
+    designation_result,
+    results_for,
+)
+
 PROJECT_ID = 4
 NOW = datetime(2026, 1, 1, 9, 0, 0)
 
 
-def _entity_candidate(canonical_id: str, score: float) -> KnowledgeCandidate:
-    entity_id = GraphEntityId(
-        project_id=PROJECT_ID, entity_type="CABLE", canonical_id=canonical_id
-    )
-    reference = KnowledgeCandidateReference(
-        graph_entity_id=entity_id, entity_type="CABLE", canonical_id=canonical_id
-    )
-    return KnowledgeCandidate(
-        candidate_id=f"{PROJECT_ID}:entity:{entity_id.value}",
-        project_id=PROJECT_ID,
-        candidate_kind=KnowledgeCandidateKind.ENTITY,
-        primary_reference=reference,
-        matched_attributes=(),
-        matched_relationships=(),
-        related_entities=(),
-        source_fact_ids=(),
-        graph_node_ids=(entity_id.value,),
-        graph_relationship_ids=(),
-        graph_execution_ids=(1,),
-        score=KnowledgeCandidateScore(
-            total=score,
-            components=(
-                KnowledgeCandidateScoreComponent(
-                    category=ScoreComponentCategory.ENTITY_TYPE_MATCH,
-                    weight=score,
-                    detail="CABLE",
-                ),
-            ),
+def _assets(count: int):
+    """``count`` distinct approved governed assets, one per governed
+    query - which is what several designations legitimately produce."""
+
+    return results_for(
+        tuple(
+            asset_item(
+                f"node-c-{index:03d}",
+                f"C-{index:03d}",
+                statement_key=f"statement-{index}",
+                project_id=PROJECT_ID,
+            )
+            for index in range(count)
         ),
-        reasons=(),
-        matches=(),
-        sort_key=(0.0, 0, "", ""),
+        project_id=PROJECT_ID,
     )
 
 
 def _context_package(count: int, **overrides):
-    candidates = tuple(
-        _entity_candidate(f"C-{i:03d}", 100.0 - i) for i in range(count)
-    )
-    collection = KnowledgeCandidateCollection(
-        candidates=candidates,
-        total_before_limit=count,
-        returned_count=count,
-        applied_limit=20,
-    )
     result = context_builder_service.build_context_package(
-        project_id=PROJECT_ID, candidates=collection, now=NOW, **overrides
+        project_id=PROJECT_ID, results=_assets(count), now=NOW, **overrides
     )
     return result.package
 
@@ -116,7 +86,7 @@ def test_build_prompt_package_rejects_a_mismatched_project_id():
 
 
 def test_build_prompt_package_always_has_every_section_regardless_of_budget():
-    package = _context_package(5, max_candidates=1)
+    package = _context_package(5, max_items=1)
     result = prompt_builder_service.build_prompt_package(
         project_id=PROJECT_ID, context_package=package, now=NOW
     )

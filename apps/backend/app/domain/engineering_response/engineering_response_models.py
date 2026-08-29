@@ -128,6 +128,13 @@ class EngineeringWarningCategory(str, Enum):
 
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
     PARTIAL_CONTEXT = "partial_context"
+
+    #: A governed question had more than one governed answer. Added by
+    #: EPIC 31.3: retrieval preserves ambiguity, Context Assembly
+    #: preserves it and the prompt states it, so a response that dropped
+    #: it here would be the one place in the chain that hid it.
+    AMBIGUOUS_KNOWLEDGE = "ambiguous_knowledge"
+
     PROVIDER_WARNING = "provider_warning"
     UNKNOWN_CONTENT = "unknown_content"
     LIMITED_RESPONSE = "limited_response"
@@ -346,15 +353,25 @@ class EngineeringResponseSection:
 
 @dataclass(frozen=True, slots=True)
 class EngineeringEvidenceReference:
-    """One deterministic, citable pointer to the governed graph state
-    that justified this response - a direct restatement of Prompt
-    Builder's own ``PromptEvidenceReference``, preserved unchanged so
-    no provenance is lost between the prompt that was sent and the
-    response that was produced from it."""
+    """
+    One deterministic, citable pointer to the governed knowledge that
+    justified this response - a direct restatement of Prompt Builder's
+    own ``PromptEvidenceReference``, preserved field for field so no
+    provenance is lost between the prompt that was sent and the response
+    produced from it.
 
-    candidate_id: str
-    graph_node_ids: tuple[str, ...]
-    graph_relationship_ids: tuple[str, ...]
+    A citation names **which approved statement, approved in which
+    review, out of which document**. It never says the answer is
+    correct: it says an engineer approved the knowledge the answer was
+    built from, which is a different and much narrower claim.
+    """
+
+    item_id: str
+    node_ids: tuple[str, ...]
+    edge_ids: tuple[str, ...]
+    statement_key: str
+    review_id: int
+    document_id: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -470,7 +487,7 @@ class EngineeringResponseVersion:
     engineering_response_version: str
     response_policy_version: str
     prompt_builder_version: str | None
-    context_builder_version: str | None
+    context_assembly_version: str | None
     request_preparation_policy_version: str | None
     runtime_version: str | None
     package_version: str
@@ -499,7 +516,7 @@ class EngineeringResponseMetadata:
     returned_model_identifier: str | None
     request_correlation_id: str
     prompt_package_version: str | None
-    context_builder_version: str | None
+    context_assembly_version: str | None
     prompt_builder_version: str | None
     package_version: str
 

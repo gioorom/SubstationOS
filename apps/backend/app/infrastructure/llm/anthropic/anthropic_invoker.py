@@ -112,7 +112,7 @@ async def invoke_anthropic(
                 request.version.request_preparation_policy_version
             ),
             prompt_package_version=request.metadata.prompt_package_version,
-            context_builder_version=request.metadata.context_builder_version,
+            context_assembly_version=request.metadata.context_assembly_version,
             prompt_builder_version=request.metadata.prompt_builder_version,
         ),
     )

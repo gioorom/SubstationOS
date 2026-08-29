@@ -110,9 +110,12 @@ def _build_references(
 ) -> tuple[EngineeringEvidenceReference, ...]:
     return tuple(
         EngineeringEvidenceReference(
-            candidate_id=reference.candidate_id,
-            graph_node_ids=reference.graph_node_ids,
-            graph_relationship_ids=reference.graph_relationship_ids,
+            item_id=reference.item_id,
+            node_ids=reference.node_ids,
+            edge_ids=reference.edge_ids,
+            statement_key=reference.statement_key,
+            review_id=reference.review_id,
+            document_id=reference.document_id,
         )
         for reference in prompt_package.references
     )
@@ -122,8 +125,11 @@ def _build_references_section(
     references: tuple[EngineeringEvidenceReference, ...],
 ) -> EngineeringResponseSection:
     body = tuple(
-        f"{reference.candidate_id}: nodes={list(reference.graph_node_ids)}, "
-        f"relationships={list(reference.graph_relationship_ids)}"
+        f"{reference.item_id}: nodes={list(reference.node_ids)}, "
+        f"edges={list(reference.edge_ids)}, "
+        f"statement={reference.statement_key}, "
+        f"review={reference.review_id}, "
+        f"document={reference.document_id}"
         for reference in references
     )
 

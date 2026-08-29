@@ -33,7 +33,7 @@ def build_statistics(
         estimated_total_tokens=total_tokens,
         enabled_section_count=enabled_count,
         disabled_section_count=disabled_count,
-        knowledge_item_count=len(context_package.selected_candidates),
+        knowledge_item_count=len(context_package.selected_items),
         reference_count=len(assembly.references),
         warnings=warnings,
     )

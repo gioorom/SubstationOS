@@ -32,7 +32,7 @@ from app.services.engineering_engine.step_handlers import (
 )
 from app.services.engineering_engine.workflow_registry import WorkflowRegistry
 from tests.services._engineering_engine_support import (
-    FakeGraphQueryRepository,
+    FakeGovernedKnowledgeReader,
     execution_request,
     no_op_sleeper,
     provider_registry,
@@ -147,7 +147,7 @@ def test_registered_intent_types_are_deterministically_ordered() -> None:
 
 def _handler_registry() -> StepHandlerRegistry:
     return build_step_handler_registry(
-        graph_query_repository=FakeGraphQueryRepository(),
+        governed_knowledge_reader=FakeGovernedKnowledgeReader(),
         provider_registry=provider_registry(),
         runtime_configuration=runtime_configuration(),
         credential_present=True,

@@ -14,13 +14,12 @@ from app.application.models.llm_invocation import (
     LLMResponseMetadata,
     LLMUsage,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidateCollection,
-)
 from app.schemas.context_builder import ContextPackageRead
 from app.schemas.llm_provider import LLMResponseEnvelopeRead
 from app.schemas.prompt_builder import PromptPackageRead
 from app.services import context_builder_service, prompt_builder_service
+
+from tests._governed_context import designation_result
 
 NOW = datetime(2026, 1, 1, 14, 0, 0)
 
@@ -39,18 +38,15 @@ def _create_project(api_client: TestClient, code: str = "ENGRESP-001") -> dict:
 
 
 def _packages_json(project_id: int) -> tuple[dict, dict, object]:
-    collection = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
     context_result = context_builder_service.build_context_package(
-        project_id=project_id, candidates=collection, now=NOW
+        project_id=project_id, results=(designation_result("TR1", ()),), now=NOW
     )
     prompt_result = prompt_builder_service.build_prompt_package(
         project_id=project_id, context_package=context_result.package, now=NOW
     )
 
     context_json = json.loads(
-        ContextPackageRead.model_validate(context_result.package).model_dump_json()
+        ContextPackageRead.from_domain(context_result.package).model_dump_json()
     )
     prompt_json = json.loads(
         PromptPackageRead.model_validate(prompt_result.package).model_dump_json()
@@ -94,7 +90,7 @@ def _envelope_json(prompt_package, **overrides) -> dict:
             adapter_version="1.0",
             request_preparation_policy_version="1.0",
             prompt_package_version=prompt_package.version.package_version,
-            context_builder_version=prompt_package.metadata.context_builder_version,
+            context_assembly_version=prompt_package.metadata.context_assembly_version,
             prompt_builder_version=prompt_package.version.prompt_builder_version,
         ),
     )

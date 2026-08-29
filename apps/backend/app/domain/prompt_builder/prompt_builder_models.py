@@ -6,8 +6,8 @@ the same ``PromptBuilderConfiguration`` always produce the same
 estimates, and statistics. Prompt Builder consumes Context Builder's
 own output type (``ContextPackage``) as its shared, stable input
 vocabulary - the same "reuse the upstream artifact" pattern Context
-Builder itself established for Structured Retrieval's
-``KnowledgeCandidateCollection``. No type in this module performs I/O,
+Assembly itself follows for Governed Structured Retrieval's
+``GovernedRetrievalResult``. No type in this module performs I/O,
 calls an LLM, imports a provider SDK, or serializes a provider-specific
 payload - a ``PromptPackage`` is a structured, provider-independent
 artifact; formatting it into an OpenAI/Anthropic/any other provider's
@@ -139,14 +139,29 @@ class PromptInstruction:
 
 @dataclass(frozen=True, slots=True)
 class PromptEvidenceReference:
-    """One deterministic, citable pointer to the governed graph state
-    that justified including one selected candidate - never a copy of
-    engineering content, only the identifiers a consumer could use to
-    trace a claim back to its evidence."""
+    """
+    One deterministic, citable pointer to the governed knowledge that
+    justified including one context item - never a copy of engineering
+    content, only the identities a consumer needs to trace a claim back
+    to the review that authorised it.
 
-    candidate_id: str
-    graph_node_ids: tuple[str, ...]
-    graph_relationship_ids: tuple[str, ...]
+    ``statement_key`` and ``review_id`` are what make the citation
+    governed rather than merely structural: a node id says *which object*,
+    and those two say *which approved statement, approved by whom*. The
+    chain from here is
+
+    ``statement_key -> review_id -> support_fingerprint -> document_id``,
+
+    each addressing an artefact that already has its own API, which is
+    why none of them is copied into the prompt.
+    """
+
+    item_id: str
+    node_ids: tuple[str, ...]
+    edge_ids: tuple[str, ...]
+    statement_key: str
+    review_id: int
+    document_id: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,7 +229,7 @@ class PromptVersion:
 
     prompt_builder_version: str
     composition_policy_version: str
-    context_builder_version: str | None
+    context_assembly_version: str | None
     package_version: str
 
 
@@ -222,7 +237,7 @@ class PromptVersion:
 class PromptMetadata:
     prompt_builder_version: str
     composition_policy_version: str
-    context_builder_version: str | None
+    context_assembly_version: str | None
     assembled_at: datetime
     package_version: str
 

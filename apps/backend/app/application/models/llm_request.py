@@ -126,7 +126,7 @@ class LLMRequestMetadata:
     """
 
     project_id: int
-    context_builder_version: str | None
+    context_assembly_version: str | None
     prompt_builder_version: str
     composition_policy_version: str
     prompt_package_version: str

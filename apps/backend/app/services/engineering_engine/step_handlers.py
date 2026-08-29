@@ -49,20 +49,10 @@ from app.domain.prompt_builder.prompt_builder_exceptions import (
     PromptBuilderError,
 )
 from app.domain.prompt_builder.prompt_builder_models import PromptObjective
-from app.domain.structured_retrieval.structured_retrieval_exceptions import (
-    StructuredRetrievalError,
-)
-from app.domain.structured_retrieval.structured_retrieval_factory import (
-    StructuredRetrievalRequestFactory,
-)
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    RetrievalMode,
-)
 from app.services import (
     context_builder_service,
     engineering_response_service,
     prompt_builder_service,
-    structured_retrieval_service,
 )
 from app.services.engineering_engine.execution_context import (
     WorkflowExecutionContext,
@@ -94,102 +84,31 @@ class ValidateExecutionRequestStepHandler(BaseStepHandler):
         return context
 
 
-class BuildRetrievalRequestStepHandler(BaseStepHandler):
-    """Maps the engine's own retrieval configuration onto the existing
-    ``StructuredRetrievalRequestFactory`` - never a second retrieval
-    request model of its own."""
-
-    step_type = WorkflowStepType.BUILD_RETRIEVAL_REQUEST
-
-    async def execute(
-        self, step: WorkflowStep, context: WorkflowExecutionContext
-    ) -> WorkflowExecutionContext:
-        request = context.execution_request
-
-        # The retrieval mode follows the configuration the caller
-        # actually supplied - the engine never invents criteria the
-        # request did not carry.
-        if request.retrieval_canonical_entity_id:
-            mode = RetrievalMode.ENTITY_LOOKUP
-        elif request.retrieval_entity_type and request.retrieval_attribute_name:
-            mode = RetrievalMode.COMBINED
-        elif request.retrieval_entity_type:
-            mode = RetrievalMode.ENTITY_TYPE_SEARCH
-        elif request.retrieval_attribute_name:
-            mode = RetrievalMode.ATTRIBUTE_SEARCH
-        else:
-            mode = RetrievalMode.LEXICAL_SEARCH
-
-        try:
-            retrieval_request = StructuredRetrievalRequestFactory.create(
-                project_id=request.project_id,
-                mode=mode,
-                limit=request.retrieval_limit,
-                include_neighborhood=request.retrieval_include_neighborhood,
-                neighborhood_depth=request.retrieval_neighborhood_depth,
-                canonical_entity_id=request.retrieval_canonical_entity_id,
-                entity_type=request.retrieval_entity_type,
-                attribute_name=request.retrieval_attribute_name,
-                lexical_terms=request.retrieval_lexical_terms,
-            )
-        except StructuredRetrievalError as error:
-            raise StepHandlerError(
-                EngineeringEngineFailureCode.RETRIEVAL_FAILURE,
-                "Could not build a valid structured retrieval request.",
-                detail=str(error),
-            ) from error
-
-        return context.with_artifact(
-            WorkflowArtifactKey.RETRIEVAL_REQUEST, retrieval_request
-        )
-
-
-class ExecuteRetrievalStepHandler(BaseStepHandler):
-    """Delegates to the existing ``structured_retrieval_service`` through
-    the existing ``GraphQueryRepository`` port - Graph Query is reached
-    only through Structured Retrieval, never separately."""
-
-    step_type = WorkflowStepType.EXECUTE_RETRIEVAL
-
-    def __init__(self, graph_query_repository) -> None:
-        self._repository = graph_query_repository
-
-    async def execute(
-        self, step: WorkflowStep, context: WorkflowExecutionContext
-    ) -> WorkflowExecutionContext:
-        try:
-            result = structured_retrieval_service.retrieve(
-                self._repository,
-                context.retrieval_request,
-                now=context.execution_request.executed_at,
-            )
-        except StructuredRetrievalError as error:
-            raise StepHandlerError(
-                EngineeringEngineFailureCode.RETRIEVAL_FAILURE,
-                "Structured retrieval failed.",
-                detail=str(error),
-            ) from error
-
-        return context.with_artifact(
-            WorkflowArtifactKey.RETRIEVAL_RESULT, result
-        )
-
-
 class BuildContextStepHandler(BaseStepHandler):
+    """
+    Delegates to Governed Context Assembly.
+
+    **Hands over the governed results themselves** (EPIC 31.3). Until
+    that milestone this step projected them into the legacy
+    ``KnowledgeCandidate`` vocabulary through a temporary adapter; the
+    adapter is deleted and Context Assembly now reads
+    ``GovernedRetrievalResult`` natively, so the governed identity, the
+    match strategy, the mandatory provenance and the per-query ambiguity
+    all reach the context without passing through a translation that
+    could drop any of them.
+    """
+
     step_type = WorkflowStepType.BUILD_CONTEXT
 
     async def execute(
         self, step: WorkflowStep, context: WorkflowExecutionContext
     ) -> WorkflowExecutionContext:
-        retrieval_result = context.retrieval_result
+        project_id = context.execution_request.project_id
 
         try:
             result = context_builder_service.build_context_package(
-                project_id=context.execution_request.project_id,
-                candidates=retrieval_result.candidates,
-                retrieval_policy_version=(
-                    retrieval_result.metadata.scoring_policy_version
-                ),
+                project_id=project_id,
+                results=context.retrieval_result.results,
                 now=context.execution_request.executed_at,
             )
         except ContextBuilderError as error:

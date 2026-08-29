@@ -1,9 +1,10 @@
 """
-Statistics (Milestone 14's pipeline stage of the same name). Summarizes
-the already-computed assembly, selection, coverage, and budget results
-into one ``ContextStatistics`` value object - never persistence
-statistics, never a recomputation of anything an earlier stage already
-decided. O(1) given the already-materialized inputs.
+Statistics: one summary of what assembly decided.
+
+Summarizes the already-computed assembly, selection, coverage and budget
+results into one ``ContextStatistics`` value object - never persistence
+statistics, and never a recomputation of anything an earlier stage
+already decided. O(1) given the already-materialized inputs.
 """
 
 from __future__ import annotations
@@ -25,11 +26,11 @@ def build_statistics(
     budget: ContextBudget,
 ) -> ContextStatistics:
     return ContextStatistics(
-        selected_candidate_count=len(assembly.selected_candidates),
-        discarded_candidate_count=len(selection.discarded),
-        entity_count=len(assembly.selected_entities),
+        selected_item_count=len(assembly.selected_items),
+        discarded_item_count=len(selection.discarded),
+        asset_count=len(assembly.selected_assets),
+        quantity_count=len(assembly.selected_quantities),
         relationship_count=len(assembly.selected_relationships),
-        attribute_count=len(assembly.selected_attributes),
         coverage_summary=coverage,
         budget_summary=budget,
     )

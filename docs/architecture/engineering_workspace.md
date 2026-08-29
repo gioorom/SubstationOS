@@ -352,6 +352,27 @@ statement, which is neither an approval nor a rejection — and
 `interpreted` still means *produced by a versioned rule*, never
 *approved*. Both are asserted by tests.
 
+### Retrieval diagnostics (EPIC 31.2)
+
+The Workspace gained **no new panel** in EPIC 31.2, and that is a
+decision rather than an omission. What the milestone made inspectable is
+already visible here: the graph panel below a statement's review panel
+answers *is this in the graph, under what identity, with what
+provenance, and if not why not* — which is the whole of what a governed
+retrieval result carries.
+
+`GET /projects/{id}/governed-retrieval/assets` exists for the
+complementary direction — starting from a designation rather than from a
+statement — and returns the match strategy, the governed identity, the
+provenance and the review for each answer. Wiring it into the Workspace
+is a UI milestone with its own design questions (where a
+designation-first view belongs, how ambiguity is presented so that
+"two drawings designate a TR1" cannot read as one certain answer).
+Shipping a panel that implied a single answer would have been worse than
+shipping none.
+
+The Workspace remains an **inspection** interface, not a graph browser.
+
 ### The graph, as an additional projection (EPIC 31)
 
 A selected statement also shows a **graph panel**: whether the statement

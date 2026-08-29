@@ -325,12 +325,12 @@
     "type": "object"
    },
    "BudgetCategory": {
-    "description": "Every dimension Context Builder's budget bounds - a closed,\nexhaustive set, never an open-ended free-form category.",
+    "description": "Every dimension Context Assembly bounds - a closed, exhaustive\nset, never an open-ended free-form category.",
     "enum": [
-     "candidates",
-     "entities",
+     "items",
+     "assets",
+     "quantities",
      "relationships",
-     "attributes",
      "metadata_entries",
      "warnings"
     ],
@@ -376,20 +376,20 @@
    },
    "BudgetPolicyRead": {
     "properties": {
-     "max_attributes": {
-      "title": "Max Attributes",
+     "max_assets": {
+      "title": "Max Assets",
       "type": "integer"
      },
-     "max_candidates": {
-      "title": "Max Candidates",
-      "type": "integer"
-     },
-     "max_entities": {
-      "title": "Max Entities",
+     "max_items": {
+      "title": "Max Items",
       "type": "integer"
      },
      "max_metadata_entries": {
       "title": "Max Metadata Entries",
+      "type": "integer"
+     },
+     "max_quantities": {
+      "title": "Max Quantities",
       "type": "integer"
      },
      "max_relationships": {
@@ -407,10 +407,10 @@
     },
     "required": [
      "version",
-     "max_candidates",
-     "max_entities",
+     "max_items",
+     "max_assets",
+     "max_quantities",
      "max_relationships",
-     "max_attributes",
      "max_metadata_entries",
      "max_warnings"
     ],
@@ -1293,86 +1293,14 @@
     "title": "ContextBudgetRead",
     "type": "object"
    },
-   "ContextBuildRequestBody": {
-    "description": "A Context Builder build request. ``project_id`` is deliberately\nabsent - the path's own ``{project_id}`` is authoritative, matching\nStructured Retrieval's own convention. ``candidates`` is the\n``KnowledgeCandidateCollection`` a prior call to\n``/structured-retrieval/search`` returned (its ``candidates`` field)\n- Context Builder never calls Structured Retrieval itself, so the\ncaller supplies this collection directly. Every budget field is\noptional; an omitted field falls back to Context Builder's own\ndocumented default (see ``app.domain.context_builder.budget_policy``).",
+   "ContextItemOriginRead": {
+    "description": "Which governed query produced this item, and how certainly.\n``matched_before_limit`` is retrieval's own count, so a reader can\ntell a complete answer from a truncated one.",
     "properties": {
-     "candidates": {
-      "$ref": "#/components/schemas/KnowledgeCandidateCollectionRead"
+     "matched_before_limit": {
+      "title": "Matched Before Limit",
+      "type": "integer"
      },
-     "max_attributes": {
-      "anyOf": [
-       {
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Max Attributes"
-     },
-     "max_candidates": {
-      "anyOf": [
-       {
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Max Candidates"
-     },
-     "max_entities": {
-      "anyOf": [
-       {
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Max Entities"
-     },
-     "max_metadata_entries": {
-      "anyOf": [
-       {
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Max Metadata Entries"
-     },
-     "max_relationships": {
-      "anyOf": [
-       {
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Max Relationships"
-     },
-     "max_warnings": {
-      "anyOf": [
-       {
-        "type": "integer"
-       },
-       {
-        "type": "null"
-       }
-      ],
-      "title": "Max Warnings"
-     },
-     "metadata_entries": {
-      "items": {
-       "$ref": "#/components/schemas/ContextMetadataEntryInput"
-      },
-      "title": "Metadata Entries",
-      "type": "array"
-     },
-     "retrieval_policy_version": {
+     "normalized_query": {
       "anyOf": [
        {
         "type": "string"
@@ -1381,73 +1309,93 @@
         "type": "null"
        }
       ],
-      "title": "Retrieval Policy Version"
+      "title": "Normalized Query"
+     },
+     "outcome": {
+      "$ref": "#/components/schemas/GovernedMatchOutcome"
+     },
+     "query_type": {
+      "$ref": "#/components/schemas/GovernedQueryType"
+     },
+     "scope": {
+      "$ref": "#/components/schemas/RetrievalScope"
      }
     },
     "required": [
-     "candidates"
+     "query_type",
+     "outcome",
+     "scope",
+     "normalized_query",
+     "matched_before_limit"
     ],
-    "title": "ContextBuildRequestBody",
+    "title": "ContextItemOriginRead",
     "type": "object"
    },
-   "ContextBuilderConfigurationRead": {
+   "ContextItemRead": {
+    "description": "One governed result in a context.\n\n``provenance`` is **not optional** and has no default, mirroring the\ndomain: an item that could not say where it came from cannot be\nserialized any more than it can be constructed.",
     "properties": {
-     "budget_policy": {
-      "$ref": "#/components/schemas/BudgetPolicyRead"
-     },
-     "context_builder_version": {
-      "title": "Context Builder Version",
+     "item_id": {
+      "title": "Item Id",
       "type": "string"
      },
-     "selection_policy": {
-      "$ref": "#/components/schemas/ContextSelectionPolicyRead"
+     "kind": {
+      "$ref": "#/components/schemas/GovernedResultKind"
+     },
+     "match": {
+      "$ref": "#/components/schemas/GovernedMatchExplanationRead-Input"
+     },
+     "node": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GovernedNodeReferenceRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "origin": {
+      "$ref": "#/components/schemas/ContextItemOriginRead"
+     },
+     "provenance": {
+      "$ref": "#/components/schemas/GovernedProvenanceRead-Input"
+     },
+     "relationship": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GovernedRelationshipReferenceRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "retirement_reason": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GraphRetirementReason"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "state": {
+      "$ref": "#/components/schemas/GraphObjectState"
      }
     },
     "required": [
-     "budget_policy",
-     "selection_policy",
-     "context_builder_version"
+     "item_id",
+     "kind",
+     "node",
+     "relationship",
+     "state",
+     "retirement_reason",
+     "match",
+     "provenance",
+     "origin"
     ],
-    "title": "ContextBuilderConfigurationRead",
-    "type": "object"
-   },
-   "ContextBuilderResultRead": {
-    "properties": {
-     "configuration": {
-      "$ref": "#/components/schemas/ContextBuilderConfigurationRead"
-     },
-     "package": {
-      "$ref": "#/components/schemas/ContextPackageRead"
-     },
-     "project_id": {
-      "title": "Project Id",
-      "type": "integer"
-     }
-    },
-    "required": [
-     "project_id",
-     "configuration",
-     "package"
-    ],
-    "title": "ContextBuilderResultRead",
-    "type": "object"
-   },
-   "ContextMetadataEntryInput": {
-    "properties": {
-     "key": {
-      "title": "Key",
-      "type": "string"
-     },
-     "value": {
-      "title": "Value",
-      "type": "string"
-     }
-    },
-    "required": [
-     "key",
-     "value"
-    ],
-    "title": "ContextMetadataEntryInput",
+    "title": "ContextItemRead",
     "type": "object"
    },
    "ContextMetadataEntryRead": {
@@ -1479,8 +1427,8 @@
       "title": "Budget Policy Version",
       "type": "string"
      },
-     "context_builder_version": {
-      "title": "Context Builder Version",
+     "context_assembly_version": {
+      "title": "Context Assembly Version",
       "type": "string"
      },
      "entries": {
@@ -1490,7 +1438,18 @@
       "title": "Entries",
       "type": "array"
      },
-     "retrieval_policy_version": {
+     "graph_generation_number": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Graph Generation Number"
+     },
+     "retrieval_matching_policy_version": {
       "anyOf": [
        {
         "type": "string"
@@ -1499,7 +1458,18 @@
         "type": "null"
        }
       ],
-      "title": "Retrieval Policy Version"
+      "title": "Retrieval Matching Policy Version"
+     },
+     "retrieval_normalization_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Retrieval Normalization Version"
      },
      "selection_policy_version": {
       "title": "Selection Policy Version",
@@ -1507,11 +1477,13 @@
      }
     },
     "required": [
-     "context_builder_version",
+     "context_assembly_version",
      "assembled_at",
      "selection_policy_version",
      "budget_policy_version",
-     "retrieval_policy_version",
+     "retrieval_normalization_version",
+     "retrieval_matching_policy_version",
+     "graph_generation_number",
      "entries"
     ],
     "title": "ContextMetadataRead",
@@ -1535,30 +1507,30 @@
      "retrieval_summary": {
       "$ref": "#/components/schemas/RetrievalSummaryRead"
      },
-     "selected_attributes": {
+     "selected_assets": {
       "items": {
-       "$ref": "#/components/schemas/KnowledgeCandidateRead"
+       "$ref": "#/components/schemas/ContextItemRead"
       },
-      "title": "Selected Attributes",
+      "title": "Selected Assets",
       "type": "array"
      },
-     "selected_candidates": {
+     "selected_items": {
       "items": {
-       "$ref": "#/components/schemas/KnowledgeCandidateRead"
+       "$ref": "#/components/schemas/ContextItemRead"
       },
-      "title": "Selected Candidates",
+      "title": "Selected Items",
       "type": "array"
      },
-     "selected_entities": {
+     "selected_quantities": {
       "items": {
-       "$ref": "#/components/schemas/KnowledgeCandidateRead"
+       "$ref": "#/components/schemas/ContextItemRead"
       },
-      "title": "Selected Entities",
+      "title": "Selected Quantities",
       "type": "array"
      },
      "selected_relationships": {
       "items": {
-       "$ref": "#/components/schemas/KnowledgeCandidateRead"
+       "$ref": "#/components/schemas/ContextItemRead"
       },
       "title": "Selected Relationships",
       "type": "array"
@@ -1577,10 +1549,10 @@
     "required": [
      "project_id",
      "retrieval_summary",
-     "selected_entities",
+     "selected_assets",
+     "selected_quantities",
      "selected_relationships",
-     "selected_attributes",
-     "selected_candidates",
+     "selected_items",
      "coverage",
      "statistics",
      "warnings",
@@ -1590,23 +1562,10 @@
     "title": "ContextPackageRead",
     "type": "object"
    },
-   "ContextSelectionPolicyRead": {
-    "properties": {
-     "version": {
-      "title": "Version",
-      "type": "string"
-     }
-    },
-    "required": [
-     "version"
-    ],
-    "title": "ContextSelectionPolicyRead",
-    "type": "object"
-   },
    "ContextStatisticsRead": {
     "properties": {
-     "attribute_count": {
-      "title": "Attribute Count",
+     "asset_count": {
+      "title": "Asset Count",
       "type": "integer"
      },
      "budget_summary": {
@@ -1615,29 +1574,29 @@
      "coverage_summary": {
       "$ref": "#/components/schemas/CoverageReportRead"
      },
-     "discarded_candidate_count": {
-      "title": "Discarded Candidate Count",
+     "discarded_item_count": {
+      "title": "Discarded Item Count",
       "type": "integer"
      },
-     "entity_count": {
-      "title": "Entity Count",
+     "quantity_count": {
+      "title": "Quantity Count",
       "type": "integer"
      },
      "relationship_count": {
       "title": "Relationship Count",
       "type": "integer"
      },
-     "selected_candidate_count": {
-      "title": "Selected Candidate Count",
+     "selected_item_count": {
+      "title": "Selected Item Count",
       "type": "integer"
      }
     },
     "required": [
-     "selected_candidate_count",
-     "discarded_candidate_count",
-     "entity_count",
+     "selected_item_count",
+     "discarded_item_count",
+     "asset_count",
+     "quantity_count",
      "relationship_count",
-     "attribute_count",
      "coverage_summary",
      "budget_summary"
     ],
@@ -1645,11 +1604,12 @@
     "type": "object"
    },
    "ContextWarningCategory": {
+    "description": "What a context can honestly warn about.\n\n``MISSING_PROVENANCE`` is **gone** as of EPIC 31.3, and its absence\nis the point: a governed item cannot be constructed without\nprovenance, so a warning about missing provenance would describe a\nstate the platform can no longer produce. A warning that can never\nfire is worse than no warning - it reads as reassurance.\n\n``AMBIGUOUS_RETRIEVAL`` and ``UNSUPPORTED_CRITERIA`` replace it, and\nboth describe things that genuinely happen.",
     "enum": [
      "budget_exceeded",
-     "candidate_discarded",
-     "missing_provenance",
-     "missing_attributes",
+     "item_discarded",
+     "ambiguous_retrieval",
+     "missing_quantities",
      "missing_relationships",
      "partial_coverage"
     ],
@@ -1658,7 +1618,10 @@
    },
    "ContextWarningRead": {
     "properties": {
-     "candidate_id": {
+     "category": {
+      "$ref": "#/components/schemas/ContextWarningCategory"
+     },
+     "item_id": {
       "anyOf": [
        {
         "type": "string"
@@ -1667,10 +1630,7 @@
         "type": "null"
        }
       ],
-      "title": "Candidate Id"
-     },
-     "category": {
-      "$ref": "#/components/schemas/ContextWarningCategory"
+      "title": "Item Id"
      },
      "message": {
       "title": "Message",
@@ -1680,7 +1640,7 @@
     "required": [
      "category",
      "message",
-     "candidate_id"
+     "item_id"
     ],
     "title": "ContextWarningRead",
     "type": "object"
@@ -2316,10 +2276,10 @@
    },
    "CoverageCategory": {
     "enum": [
-     "entity_coverage",
+     "asset_coverage",
+     "quantity_coverage",
      "relationship_coverage",
-     "attribute_coverage",
-     "candidate_utilization",
+     "item_utilization",
      "context_completeness"
     ],
     "title": "CoverageCategory",
@@ -3693,29 +3653,44 @@
    },
    "EngineeringEvidenceReferenceRead": {
     "properties": {
-     "candidate_id": {
-      "title": "Candidate Id",
+     "document_id": {
+      "title": "Document Id",
+      "type": "integer"
+     },
+     "edge_ids": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Edge Ids",
+      "type": "array"
+     },
+     "item_id": {
+      "title": "Item Id",
       "type": "string"
      },
-     "graph_node_ids": {
+     "node_ids": {
       "items": {
        "type": "string"
       },
-      "title": "Graph Node Ids",
+      "title": "Node Ids",
       "type": "array"
      },
-     "graph_relationship_ids": {
-      "items": {
-       "type": "string"
-      },
-      "title": "Graph Relationship Ids",
-      "type": "array"
+     "review_id": {
+      "title": "Review Id",
+      "type": "integer"
+     },
+     "statement_key": {
+      "title": "Statement Key",
+      "type": "string"
      }
     },
     "required": [
-     "candidate_id",
-     "graph_node_ids",
-     "graph_relationship_ids"
+     "item_id",
+     "node_ids",
+     "edge_ids",
+     "statement_key",
+     "review_id",
+     "document_id"
     ],
     "title": "EngineeringEvidenceReferenceRead",
     "type": "object"
@@ -4521,7 +4496,7 @@
       ],
       "title": "Configured Model Identifier"
      },
-     "context_builder_version": {
+     "context_assembly_version": {
       "anyOf": [
        {
         "type": "string"
@@ -4530,7 +4505,7 @@
         "type": "null"
        }
       ],
-      "title": "Context Builder Version"
+      "title": "Context Assembly Version"
      },
      "engineering_response_version": {
       "title": "Engineering Response Version",
@@ -4607,7 +4582,7 @@
      "returned_model_identifier",
      "request_correlation_id",
      "prompt_package_version",
-     "context_builder_version",
+     "context_assembly_version",
      "prompt_builder_version",
      "package_version"
     ],
@@ -4846,7 +4821,7 @@
    },
    "EngineeringResponseVersionRead": {
     "properties": {
-     "context_builder_version": {
+     "context_assembly_version": {
       "anyOf": [
        {
         "type": "string"
@@ -4855,7 +4830,7 @@
         "type": "null"
        }
       ],
-      "title": "Context Builder Version"
+      "title": "Context Assembly Version"
      },
      "document_relevance_policy_version": {
       "anyOf": [
@@ -4929,7 +4904,7 @@
      "engineering_response_version",
      "response_policy_version",
      "prompt_builder_version",
-     "context_builder_version",
+     "context_assembly_version",
      "request_preparation_policy_version",
      "runtime_version",
      "package_version"
@@ -5431,6 +5406,7 @@
     "enum": [
      "insufficient_evidence",
      "partial_context",
+     "ambiguous_knowledge",
      "provider_warning",
      "unknown_content",
      "limited_response",
@@ -6566,6 +6542,677 @@
      "token_end"
     ],
     "title": "FactSupportRead",
+    "type": "object"
+   },
+   "GovernedAssetRetrievalResponse": {
+    "description": "What one designation resolved to.\n\n``assets`` and ``quantities`` are **separate results**, each with its\nown outcome and diagnostics, rather than one merged list: \"which\nassets does TR1 name?\" and \"what is asserted about them?\" are\ndifferent questions, and merging them would hide which of the two was\nambiguous.",
+    "properties": {
+     "assets": {
+      "$ref": "#/components/schemas/GovernedRetrievalResultRead"
+     },
+     "designation": {
+      "title": "Designation",
+      "type": "string"
+     },
+     "quantities": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GovernedRetrievalResultRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "designation",
+     "assets"
+    ],
+    "title": "GovernedAssetRetrievalResponse",
+    "type": "object"
+   },
+   "GovernedGraphVersionRead": {
+    "properties": {
+     "generation_created_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Generation Created At"
+     },
+     "generation_number": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Generation Number"
+     },
+     "promotion_contract_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Promotion Contract Version"
+     }
+    },
+    "required": [
+     "generation_number",
+     "generation_created_at",
+     "promotion_contract_version"
+    ],
+    "title": "GovernedGraphVersionRead",
+    "type": "object"
+   },
+   "GovernedMatchExplanationRead-Input": {
+    "description": "Why this item is in the context. A closed strategy vocabulary and\nthe governed field that carried it - never a relevance number.",
+    "properties": {
+     "matched_field": {
+      "title": "Matched Field",
+      "type": "string"
+     },
+     "matched_value": {
+      "title": "Matched Value",
+      "type": "string"
+     },
+     "normalized_query": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Normalized Query"
+     },
+     "strategy": {
+      "$ref": "#/components/schemas/GovernedMatchStrategy"
+     }
+    },
+    "required": [
+     "strategy",
+     "matched_field",
+     "matched_value",
+     "normalized_query"
+    ],
+    "title": "GovernedMatchExplanationRead",
+    "type": "object"
+   },
+   "GovernedMatchExplanationRead-Output": {
+    "description": "Why this governed object is in the result - a closed strategy, the\ngoverned field that carried it, and the value that was compared.",
+    "properties": {
+     "matched_field": {
+      "title": "Matched Field",
+      "type": "string"
+     },
+     "matched_value": {
+      "title": "Matched Value",
+      "type": "string"
+     },
+     "normalized_query": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Normalized Query"
+     },
+     "strategy": {
+      "$ref": "#/components/schemas/GovernedMatchStrategy"
+     }
+    },
+    "required": [
+     "strategy",
+     "matched_field",
+     "matched_value",
+     "normalized_query"
+    ],
+    "title": "GovernedMatchExplanationRead",
+    "type": "object"
+   },
+   "GovernedMatchOutcome": {
+    "description": "How many governed objects satisfied the query, before any limit.\n\nThe Engineering Engine reads this rather than counting results,\nbecause \"one\" and \"one of several\" are different engineering\nsituations and a caller that only counted a truncated page could not\ntell them apart.\n\nFor a list-shaped query (``RELATIONSHIPS``, ``DOCUMENT_KNOWLEDGE``)\n``MULTIPLE_MATCHES`` is the expected answer and says nothing about\nambiguity - see ``governed_structured_retrieval.md``.",
+    "enum": [
+     "no_match",
+     "unique_match",
+     "multiple_matches"
+    ],
+    "title": "GovernedMatchOutcome",
+    "type": "string"
+   },
+   "GovernedMatchStrategy": {
+    "description": "Why a governed object is in the result.\n\nExactly one per result, and it answers \"why did this match?\" without\ncross-referencing the query. Ordered by\n``governed_match_policy.STRATEGY_PRECEDENCE``: an object matched on\nits governed identity outranks one matched on a designation folded\ndown to its alphanumerics, because the first is a fact about the\ngraph and the second is a fact about two strings.",
+    "enum": [
+     "governed_identity",
+     "exact_designation",
+     "normalized_designation",
+     "normalized_value",
+     "canonical_designation",
+     "relationship_traversal",
+     "edge_kind",
+     "document_scope"
+    ],
+    "title": "GovernedMatchStrategy",
+    "type": "string"
+   },
+   "GovernedNodeReferenceRead": {
+    "properties": {
+     "kind": {
+      "$ref": "#/components/schemas/GraphNodeKind"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "node_id": {
+      "title": "Node Id",
+      "type": "string"
+     },
+     "normalized_value": {
+      "title": "Normalized Value",
+      "type": "string"
+     },
+     "unit": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Unit"
+     }
+    },
+    "required": [
+     "node_id",
+     "kind",
+     "label",
+     "normalized_value",
+     "unit"
+    ],
+    "title": "GovernedNodeReferenceRead",
+    "type": "object"
+   },
+   "GovernedProvenanceRead-Input": {
+    "description": "The full origin of one governed context item.\n\nEvery field is an **identity or a version**, never engineering\ncontent: the statement, the facts, the entities and the evidence\nstay in the pipeline, which remains their single account.",
+    "properties": {
+     "content_checksum": {
+      "title": "Content Checksum",
+      "type": "string"
+     },
+     "document_id": {
+      "title": "Document Id",
+      "type": "integer"
+     },
+     "fact_policy_version": {
+      "title": "Fact Policy Version",
+      "type": "string"
+     },
+     "project_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Project Id"
+     },
+     "resolution_policy_version": {
+      "title": "Resolution Policy Version",
+      "type": "string"
+     },
+     "review_id": {
+      "title": "Review Id",
+      "type": "integer"
+     },
+     "reviewed_at": {
+      "format": "date-time",
+      "title": "Reviewed At",
+      "type": "string"
+     },
+     "reviewer_display_name": {
+      "title": "Reviewer Display Name",
+      "type": "string"
+     },
+     "reviewer_user_id": {
+      "title": "Reviewer User Id",
+      "type": "integer"
+     },
+     "semantic_contract_version": {
+      "title": "Semantic Contract Version",
+      "type": "string"
+     },
+     "semantic_policy_version": {
+      "title": "Semantic Policy Version",
+      "type": "string"
+     },
+     "semantic_rule_id": {
+      "title": "Semantic Rule Id",
+      "type": "string"
+     },
+     "semantic_rule_version": {
+      "title": "Semantic Rule Version",
+      "type": "string"
+     },
+     "statement_key": {
+      "title": "Statement Key",
+      "type": "string"
+     },
+     "support_fingerprint": {
+      "title": "Support Fingerprint",
+      "type": "string"
+     }
+    },
+    "required": [
+     "statement_key",
+     "document_id",
+     "content_checksum",
+     "review_id",
+     "reviewer_user_id",
+     "reviewer_display_name",
+     "reviewed_at",
+     "semantic_rule_id",
+     "semantic_rule_version",
+     "semantic_contract_version",
+     "resolution_policy_version",
+     "fact_policy_version",
+     "semantic_policy_version",
+     "support_fingerprint",
+     "project_id"
+    ],
+    "title": "GovernedProvenanceRead",
+    "type": "object"
+   },
+   "GovernedProvenanceRead-Output": {
+    "description": "Where a returned piece of governed knowledge came from.\n\nMandatory on every result. An engineer follows ``statement_key`` to\nthe semantic statement, ``review_id`` to the judgement that approved\nit, and ``document_id`` to the drawing it was read out of - each of\nwhich already has its own endpoint.",
+    "properties": {
+     "content_checksum": {
+      "title": "Content Checksum",
+      "type": "string"
+     },
+     "document_id": {
+      "title": "Document Id",
+      "type": "integer"
+     },
+     "fact_policy_version": {
+      "title": "Fact Policy Version",
+      "type": "string"
+     },
+     "project_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Project Id"
+     },
+     "resolution_policy_version": {
+      "title": "Resolution Policy Version",
+      "type": "string"
+     },
+     "review_id": {
+      "title": "Review Id",
+      "type": "integer"
+     },
+     "reviewed_at": {
+      "format": "date-time",
+      "title": "Reviewed At",
+      "type": "string"
+     },
+     "reviewer_display_name": {
+      "title": "Reviewer Display Name",
+      "type": "string"
+     },
+     "reviewer_user_id": {
+      "title": "Reviewer User Id",
+      "type": "integer"
+     },
+     "semantic_contract_version": {
+      "title": "Semantic Contract Version",
+      "type": "string"
+     },
+     "semantic_policy_version": {
+      "title": "Semantic Policy Version",
+      "type": "string"
+     },
+     "semantic_rule_id": {
+      "title": "Semantic Rule Id",
+      "type": "string"
+     },
+     "semantic_rule_version": {
+      "title": "Semantic Rule Version",
+      "type": "string"
+     },
+     "statement_key": {
+      "title": "Statement Key",
+      "type": "string"
+     },
+     "support_fingerprint": {
+      "title": "Support Fingerprint",
+      "type": "string"
+     }
+    },
+    "required": [
+     "statement_key",
+     "document_id",
+     "content_checksum",
+     "review_id",
+     "reviewer_user_id",
+     "reviewer_display_name",
+     "reviewed_at",
+     "semantic_rule_id",
+     "semantic_rule_version",
+     "semantic_contract_version",
+     "resolution_policy_version",
+     "fact_policy_version",
+     "semantic_policy_version",
+     "support_fingerprint",
+     "project_id"
+    ],
+    "title": "GovernedProvenanceRead",
+    "type": "object"
+   },
+   "GovernedQuerySummaryRead": {
+    "properties": {
+     "matched_before_limit": {
+      "title": "Matched Before Limit",
+      "type": "integer"
+     },
+     "normalized_query": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Normalized Query"
+     },
+     "outcome": {
+      "$ref": "#/components/schemas/GovernedMatchOutcome"
+     },
+     "query_type": {
+      "$ref": "#/components/schemas/GovernedQueryType"
+     },
+     "returned_count": {
+      "title": "Returned Count",
+      "type": "integer"
+     },
+     "scope": {
+      "$ref": "#/components/schemas/RetrievalScope"
+     }
+    },
+    "required": [
+     "query_type",
+     "outcome",
+     "scope",
+     "normalized_query",
+     "matched_before_limit",
+     "returned_count"
+    ],
+    "title": "GovernedQuerySummaryRead",
+    "type": "object"
+   },
+   "GovernedQueryType": {
+    "description": "Which engineering question a query asks.\n\nEach member corresponds to a capability the governed graph actually\nhas. There is no ``ATTRIBUTE_SEARCH`` and no ``LEXICAL_SEARCH``: the\nfirst searched a property bag the governed graph deliberately does\nnot have, and the second scanned every string on every node - see\n``governed_structured_retrieval.md`` for what each of the legacy\nmodes became.",
+    "enum": [
+     "asset_by_designation",
+     "quantity_for_asset",
+     "relationships",
+     "document_knowledge",
+     "governed_identity"
+    ],
+    "title": "GovernedQueryType",
+    "type": "string"
+   },
+   "GovernedRelationshipReferenceRead": {
+    "properties": {
+     "edge_id": {
+      "title": "Edge Id",
+      "type": "string"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/GraphEdgeKind"
+     },
+     "object": {
+      "$ref": "#/components/schemas/GovernedNodeReferenceRead"
+     },
+     "subject": {
+      "$ref": "#/components/schemas/GovernedNodeReferenceRead"
+     }
+    },
+    "required": [
+     "edge_id",
+     "kind",
+     "subject",
+     "object"
+    ],
+    "title": "GovernedRelationshipReferenceRead",
+    "type": "object"
+   },
+   "GovernedResultKind": {
+    "description": "What one result *is*.\n\nMirrors the governed vocabulary rather than inventing a parallel one:\ntwo node kinds and one edge kind produce three result kinds, and a\nfourth would be a concept no promotion can create.",
+    "enum": [
+     "asset",
+     "quantity",
+     "relationship"
+    ],
+    "title": "GovernedResultKind",
+    "type": "string"
+   },
+   "GovernedRetrievalDiagnosticsRead": {
+    "description": "Deterministic diagnostics - counts, versions and closed enum values.\n\n``duration_seconds`` is the one field that varies run to run and is\ndeliberately not part of any identity.",
+    "properties": {
+     "ambiguous": {
+      "title": "Ambiguous",
+      "type": "boolean"
+     },
+     "candidates_examined": {
+      "title": "Candidates Examined",
+      "type": "integer"
+     },
+     "duration_seconds": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration Seconds"
+     },
+     "graph_version": {
+      "$ref": "#/components/schemas/GovernedGraphVersionRead"
+     },
+     "matched_count": {
+      "title": "Matched Count",
+      "type": "integer"
+     },
+     "matching_policy_version": {
+      "title": "Matching Policy Version",
+      "type": "string"
+     },
+     "no_match": {
+      "title": "No Match",
+      "type": "boolean"
+     },
+     "normalization_version": {
+      "title": "Normalization Version",
+      "type": "string"
+     },
+     "normalized_query": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Normalized Query"
+     },
+     "query_type": {
+      "$ref": "#/components/schemas/GovernedQueryType"
+     },
+     "returned_count": {
+      "title": "Returned Count",
+      "type": "integer"
+     },
+     "scope": {
+      "$ref": "#/components/schemas/RetrievalScope"
+     },
+     "strategies_attempted": {
+      "items": {
+       "$ref": "#/components/schemas/GovernedMatchStrategy"
+      },
+      "title": "Strategies Attempted",
+      "type": "array"
+     }
+    },
+    "required": [
+     "query_type",
+     "scope",
+     "normalized_query",
+     "strategies_attempted",
+     "candidates_examined",
+     "matched_count",
+     "returned_count",
+     "ambiguous",
+     "no_match",
+     "normalization_version",
+     "matching_policy_version",
+     "graph_version"
+    ],
+    "title": "GovernedRetrievalDiagnosticsRead",
+    "type": "object"
+   },
+   "GovernedRetrievalItemRead": {
+    "description": "One retrieved piece of governed knowledge.\n\n``state`` is on every item rather than only on retired ones: a\nreader must be able to tell current knowledge from a record of what\nthe platform used to assert without inferring it from the request.",
+    "properties": {
+     "kind": {
+      "$ref": "#/components/schemas/GovernedResultKind"
+     },
+     "match": {
+      "$ref": "#/components/schemas/GovernedMatchExplanationRead-Output"
+     },
+     "node": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GovernedNodeReferenceRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "provenance": {
+      "$ref": "#/components/schemas/GovernedProvenanceRead-Output"
+     },
+     "relationship": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GovernedRelationshipReferenceRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "result_id": {
+      "title": "Result Id",
+      "type": "string"
+     },
+     "retirement_reason": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/GraphRetirementReason"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "state": {
+      "$ref": "#/components/schemas/GraphObjectState"
+     }
+    },
+    "required": [
+     "result_id",
+     "kind",
+     "node",
+     "relationship",
+     "state",
+     "retirement_reason",
+     "match",
+     "provenance"
+    ],
+    "title": "GovernedRetrievalItemRead",
+    "type": "object"
+   },
+   "GovernedRetrievalResultRead": {
+    "description": "One governed retrieval answer.\n\n``outcome`` is computed before the limit is applied, so a truncated\npage can never present several governed answers as one certain one.",
+    "properties": {
+     "applied_limit": {
+      "title": "Applied Limit",
+      "type": "integer"
+     },
+     "diagnostics": {
+      "$ref": "#/components/schemas/GovernedRetrievalDiagnosticsRead"
+     },
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/GovernedRetrievalItemRead"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "outcome": {
+      "$ref": "#/components/schemas/GovernedMatchOutcome"
+     },
+     "retrieved_at": {
+      "format": "date-time",
+      "title": "Retrieved At",
+      "type": "string"
+     },
+     "total_before_limit": {
+      "title": "Total Before Limit",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "outcome",
+     "items",
+     "total_before_limit",
+     "applied_limit",
+     "diagnostics",
+     "retrieved_at"
+    ],
+    "title": "GovernedRetrievalResultRead",
     "type": "object"
    },
    "GraphEdgeKind": {
@@ -8828,7 +9475,7 @@
       "title": "Composition Policy Version",
       "type": "string"
      },
-     "context_builder_version": {
+     "context_assembly_version": {
       "anyOf": [
        {
         "type": "string"
@@ -8837,7 +9484,7 @@
         "type": "null"
        }
       ],
-      "title": "Context Builder Version"
+      "title": "Context Assembly Version"
      },
      "excluded_section_types": {
       "items": {
@@ -8886,7 +9533,7 @@
     },
     "required": [
      "project_id",
-     "context_builder_version",
+     "context_assembly_version",
      "prompt_builder_version",
      "composition_policy_version",
      "prompt_package_version",
@@ -9171,7 +9818,7 @@
       "title": "Adapter Version",
       "type": "string"
      },
-     "context_builder_version": {
+     "context_assembly_version": {
       "anyOf": [
        {
         "type": "string"
@@ -9180,7 +9827,7 @@
         "type": "null"
        }
       ],
-      "title": "Context Builder Version"
+      "title": "Context Assembly Version"
      },
      "prompt_builder_version": {
       "anyOf": [
@@ -9218,7 +9865,7 @@
      "adapter_version",
      "request_preparation_policy_version",
      "prompt_package_version",
-     "context_builder_version",
+     "context_assembly_version",
      "prompt_builder_version"
     ],
     "title": "LLMResponseMetadataRead",
@@ -10500,29 +11147,44 @@
    },
    "PromptEvidenceReferenceRead": {
     "properties": {
-     "candidate_id": {
-      "title": "Candidate Id",
+     "document_id": {
+      "title": "Document Id",
+      "type": "integer"
+     },
+     "edge_ids": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Edge Ids",
+      "type": "array"
+     },
+     "item_id": {
+      "title": "Item Id",
       "type": "string"
      },
-     "graph_node_ids": {
+     "node_ids": {
       "items": {
        "type": "string"
       },
-      "title": "Graph Node Ids",
+      "title": "Node Ids",
       "type": "array"
      },
-     "graph_relationship_ids": {
-      "items": {
-       "type": "string"
-      },
-      "title": "Graph Relationship Ids",
-      "type": "array"
+     "review_id": {
+      "title": "Review Id",
+      "type": "integer"
+     },
+     "statement_key": {
+      "title": "Statement Key",
+      "type": "string"
      }
     },
     "required": [
-     "candidate_id",
-     "graph_node_ids",
-     "graph_relationship_ids"
+     "item_id",
+     "node_ids",
+     "edge_ids",
+     "statement_key",
+     "review_id",
+     "document_id"
     ],
     "title": "PromptEvidenceReferenceRead",
     "type": "object"
@@ -10556,7 +11218,7 @@
       "title": "Composition Policy Version",
       "type": "string"
      },
-     "context_builder_version": {
+     "context_assembly_version": {
       "anyOf": [
        {
         "type": "string"
@@ -10565,7 +11227,7 @@
         "type": "null"
        }
       ],
-      "title": "Context Builder Version"
+      "title": "Context Assembly Version"
      },
      "package_version": {
       "title": "Package Version",
@@ -10579,7 +11241,7 @@
     "required": [
      "prompt_builder_version",
      "composition_policy_version",
-     "context_builder_version",
+     "context_assembly_version",
      "assembled_at",
      "package_version"
     ],
@@ -10801,7 +11463,7 @@
       "title": "Composition Policy Version",
       "type": "string"
      },
-     "context_builder_version": {
+     "context_assembly_version": {
       "anyOf": [
        {
         "type": "string"
@@ -10810,7 +11472,7 @@
         "type": "null"
        }
       ],
-      "title": "Context Builder Version"
+      "title": "Context Assembly Version"
      },
      "package_version": {
       "title": "Package Version",
@@ -10824,7 +11486,7 @@
     "required": [
      "prompt_builder_version",
      "composition_policy_version",
-     "context_builder_version",
+     "context_assembly_version",
      "package_version"
     ],
     "title": "PromptVersionRead",
@@ -11656,22 +12318,34 @@
     "title": "RetrievalReasonRead",
     "type": "object"
    },
+   "RetrievalScope": {
+    "description": "Which governed knowledge a query may see.\n\n``CURRENT_ONLY`` is the default everywhere and the only scope the\nEngineering Engine uses. Historical knowledge is what the platform\n*used* to assert; letting it answer a current engineering question\nwould be the silent staleness the whole lifecycle model exists to\nprevent, so reading it is always an explicit act.",
+    "enum": [
+     "current_only",
+     "current_and_historical"
+    ],
+    "title": "RetrievalScope",
+    "type": "string"
+   },
    "RetrievalSummaryRead": {
     "properties": {
-     "applied_limit": {
-      "title": "Applied Limit",
+     "queries": {
+      "items": {
+       "$ref": "#/components/schemas/GovernedQuerySummaryRead"
+      },
+      "title": "Queries",
+      "type": "array"
+     },
+     "retrieved_asset_count": {
+      "title": "Retrieved Asset Count",
       "type": "integer"
      },
-     "retrieved_attribute_count": {
-      "title": "Retrieved Attribute Count",
+     "retrieved_item_count": {
+      "title": "Retrieved Item Count",
       "type": "integer"
      },
-     "retrieved_candidate_count": {
-      "title": "Retrieved Candidate Count",
-      "type": "integer"
-     },
-     "retrieved_entity_count": {
-      "title": "Retrieved Entity Count",
+     "retrieved_quantity_count": {
+      "title": "Retrieved Quantity Count",
       "type": "integer"
      },
      "retrieved_relationship_count": {
@@ -11684,12 +12358,12 @@
      }
     },
     "required": [
-     "retrieved_candidate_count",
+     "retrieved_item_count",
      "total_before_limit",
-     "applied_limit",
-     "retrieved_entity_count",
+     "retrieved_asset_count",
+     "retrieved_quantity_count",
      "retrieved_relationship_count",
-     "retrieved_attribute_count"
+     "queries"
     ],
     "title": "RetrievalSummaryRead",
     "type": "object"
@@ -17991,58 +18665,6 @@
     ]
    }
   },
-  "/projects/{project_id}/context-builder/build": {
-   "post": {
-    "operationId": "build_context_package_projects__project_id__context_builder_build_post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "project_id",
-      "required": true,
-      "schema": {
-       "title": "Project Id",
-       "type": "integer"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/ContextBuildRequestBody"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/ContextBuilderResultRead"
-        }
-       }
-      },
-      "description": "Successful Response"
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      },
-      "description": "Validation Error"
-     }
-    },
-    "summary": "Assemble a bounded, provenance-aware ContextPackage from a KnowledgeCandidateCollection",
-    "tags": [
-     "Context Builder"
-    ]
-   }
-  },
   "/projects/{project_id}/conversation": {
    "post": {
     "operationId": "create_conversation_endpoint_projects__project_id__conversation_post",
@@ -18885,6 +19507,95 @@
     "summary": "Update an EngineeringSession's configuration (title/notes)",
     "tags": [
      "Engineering Session"
+    ]
+   }
+  },
+  "/projects/{project_id}/governed-retrieval/assets": {
+   "get": {
+    "operationId": "retrieve_governed_assets_projects__project_id__governed_retrieval_assets_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "project_id",
+      "required": true,
+      "schema": {
+       "title": "Project Id",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "The designation to resolve, exactly as an engineer would write it. Matched against the governed label and the pipeline's own normalized value, by exact, case-and-whitespace-folded and alphanumeric-only equality - never by substring and never by similarity.",
+      "in": "query",
+      "name": "designation",
+      "required": true,
+      "schema": {
+       "description": "The designation to resolve, exactly as an engineer would write it. Matched against the governed label and the pipeline's own normalized value, by exact, case-and-whitespace-folded and alphanumeric-only equality - never by substring and never by similarity.",
+       "title": "Designation",
+       "type": "string"
+      }
+     },
+     {
+      "description": "Also follow the governed relationships from each resolved asset, returning what is asserted about it.",
+      "in": "query",
+      "name": "include_quantities",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Also follow the governed relationships from each resolved asset, returning what is asserted about it.",
+       "title": "Include Quantities",
+       "type": "boolean"
+      }
+     },
+     {
+      "description": "By default only current governed knowledge answers. Set to read what the graph used to assert - which is never mixed into a current answer implicitly.",
+      "in": "query",
+      "name": "include_historical",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "By default only current governed knowledge answers. Set to read what the graph used to assert - which is never mixed into a current answer implicitly.",
+       "title": "Include Historical",
+       "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 20,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GovernedAssetRetrievalResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Resolve a designation against governed knowledge, with the reason each governed object matched and the review that authorised it",
+    "tags": [
+     "Governed Structured Retrieval"
     ]
    }
   },

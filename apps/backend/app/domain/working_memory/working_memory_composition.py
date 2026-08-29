@@ -153,15 +153,15 @@ def compose_working_memory_entries(
             engineering_response=response,
         )
 
-    seen_candidate_ids: set[str] = set()
+    seen_item_ids: set[str] = set()
     for response in recent_responses:
         for reference in response.references:
-            if reference.candidate_id in seen_candidate_ids:
+            if reference.item_id in seen_item_ids:
                 continue
-            seen_candidate_ids.add(reference.candidate_id)
+            seen_item_ids.add(reference.item_id)
             _append(
                 WorkingMemoryEntryType.ACTIVE_REFERENCE,
-                reference.candidate_id,
+                reference.item_id,
                 WorkingMemorySource.ENGINEERING_RESPONSE_REFERENCE,
             )
 

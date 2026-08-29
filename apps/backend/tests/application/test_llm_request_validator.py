@@ -22,21 +22,17 @@ from app.application.services.llm_request_validator import (
     MAX_MODEL_IDENTIFIER_LENGTH,
     LLMRequestValidator,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidateCollection,
-)
 from app.services import context_builder_service, prompt_builder_service
+
+from tests._governed_context import designation_result
 
 PROJECT_ID = 6
 NOW = datetime(2026, 1, 1, 7, 0, 0)
 
 
 def _prompt_package(project_id: int = PROJECT_ID):
-    collection = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
     context_result = context_builder_service.build_context_package(
-        project_id=project_id, candidates=collection, now=NOW
+        project_id=project_id, results=(designation_result("TR1", ()),), now=NOW
     )
     prompt_result = prompt_builder_service.build_prompt_package(
         project_id=project_id, context_package=context_result.package, now=NOW

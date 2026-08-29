@@ -7,7 +7,7 @@ abstractions; this module is the one place that knows which concrete
 workflow and which concrete handlers exist.
 
 ``build_engineering_engine`` is deliberately parameterized over every
-external dependency (the Graph Query repository, the Engineering Index
+external dependency (the governed knowledge reader, the Engineering Index
 repository, the document metadata port, the LLM provider registry,
 runtime configuration, the sleeper, the clock), so test composition is a
 one-line call with fakes and needs no monkeypatching.
@@ -51,10 +51,14 @@ from app.domain.prompt_builder.prompt_builder_models import PromptObjective
 from app.services.engineering_engine.comparison_step_handlers import (
     BuildComparisonContextStepHandler,
     BuildComparisonPromptStepHandler,
-    BuildComparisonRetrievalRequestsStepHandler,
     ComparisonResponseBuildStepHandler,
-    ExecuteLeftRetrievalStepHandler,
-    ExecuteRightRetrievalStepHandler,
+)
+from app.services.engineering_engine.governed_retrieval_step_handlers import (
+    BuildComparisonGovernedRetrievalPlansStepHandler,
+    BuildGovernedRetrievalPlanStepHandler,
+    ExecuteGovernedRetrievalStepHandler,
+    ExecuteLeftGovernedRetrievalStepHandler,
+    ExecuteRightGovernedRetrievalStepHandler,
 )
 from app.services.engineering_engine.document_lookup_step_handlers import (
     BuildDocumentRetrievalRequestStepHandler,
@@ -70,9 +74,7 @@ from app.services.engineering_engine.step_handler_registry import (
 from app.services.engineering_engine.step_handlers import (
     BuildContextStepHandler,
     BuildPromptStepHandler,
-    BuildRetrievalRequestStepHandler,
     EngineeringResponseBuildStepHandler,
-    ExecuteRetrievalStepHandler,
     PrepareConversationUpdateStepHandler,
     PrepareSessionUpdateStepHandler,
     RuntimeInvocationStepHandler,
@@ -99,7 +101,7 @@ def build_workflow_registry() -> WorkflowRegistry:
 
 def build_step_handler_registry(
     *,
-    graph_query_repository,
+    governed_knowledge_reader,
     provider_registry: LLMProviderRegistry,
     runtime_configuration: LLMRuntimeConfiguration,
     credential_present: bool,
@@ -126,11 +128,11 @@ def build_step_handler_registry(
     )
     registry.register(
         WorkflowStepType.BUILD_RETRIEVAL_REQUEST,
-        BuildRetrievalRequestStepHandler(),
+        BuildGovernedRetrievalPlanStepHandler(),
     )
     registry.register(
         WorkflowStepType.EXECUTE_RETRIEVAL,
-        ExecuteRetrievalStepHandler(graph_query_repository),
+        ExecuteGovernedRetrievalStepHandler(governed_knowledge_reader),
     )
     registry.register(
         WorkflowStepType.BUILD_CONTEXT, BuildContextStepHandler()
@@ -191,15 +193,15 @@ def build_step_handler_registry(
     # request and write the other's result.
     registry.register(
         WorkflowStepType.BUILD_COMPARISON_RETRIEVAL_REQUESTS,
-        BuildComparisonRetrievalRequestsStepHandler(),
+        BuildComparisonGovernedRetrievalPlansStepHandler(),
     )
     registry.register(
         WorkflowStepType.EXECUTE_LEFT_RETRIEVAL,
-        ExecuteLeftRetrievalStepHandler(graph_query_repository),
+        ExecuteLeftGovernedRetrievalStepHandler(governed_knowledge_reader),
     )
     registry.register(
         WorkflowStepType.EXECUTE_RIGHT_RETRIEVAL,
-        ExecuteRightRetrievalStepHandler(graph_query_repository),
+        ExecuteRightGovernedRetrievalStepHandler(governed_knowledge_reader),
     )
     registry.register(
         WorkflowStepType.BUILD_COMPARISON_CONTEXT,
@@ -238,7 +240,7 @@ def build_step_handler_registry(
 
 def build_engineering_engine(
     *,
-    graph_query_repository,
+    governed_knowledge_reader,
     provider_registry: LLMProviderRegistry,
     runtime_configuration: LLMRuntimeConfiguration,
     credential_present: bool,
@@ -252,7 +254,7 @@ def build_engineering_engine(
     return EngineeringEngineService(
         workflow_registry=build_workflow_registry(),
         step_handler_registry=build_step_handler_registry(
-            graph_query_repository=graph_query_repository,
+            governed_knowledge_reader=governed_knowledge_reader,
             provider_registry=provider_registry,
             runtime_configuration=runtime_configuration,
             credential_present=credential_present,

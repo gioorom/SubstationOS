@@ -27,7 +27,7 @@ def build_metadata(
     return PromptMetadata(
         prompt_builder_version=configuration.prompt_builder_version,
         composition_policy_version=configuration.composition_policy.version,
-        context_builder_version=context_package.metadata.context_builder_version,
+        context_assembly_version=context_package.metadata.context_assembly_version,
         assembled_at=now,
         package_version=PROMPT_PACKAGE_VERSION,
     )
@@ -41,6 +41,6 @@ def build_version(
     return PromptVersion(
         prompt_builder_version=configuration.prompt_builder_version,
         composition_policy_version=configuration.composition_policy.version,
-        context_builder_version=context_package.metadata.context_builder_version,
+        context_assembly_version=context_package.metadata.context_assembly_version,
         package_version=PROMPT_PACKAGE_VERSION,
     )

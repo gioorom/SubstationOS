@@ -27,9 +27,6 @@ from app.application.models.llm_request import (
 )
 from app.application.services.llm_invocation_service import invoke_llm
 from app.application.services.llm_provider_registry import LLMProviderRegistry
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidateCollection,
-)
 from app.infrastructure.llm.anthropic.anthropic_adapter import (
     ANTHROPIC_PROVIDER_ID,
     AnthropicAdapter,
@@ -40,16 +37,15 @@ from app.infrastructure.llm.base.fake_llm_provider_adapter import (
 )
 from app.services import context_builder_service, prompt_builder_service
 
+from tests._governed_context import designation_result
+
 PROJECT_ID = 12
 NOW = datetime(2026, 1, 1, 2, 0, 0)
 
 
 def _prompt_package(project_id: int = PROJECT_ID):
-    collection = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=20
-    )
     context_result = context_builder_service.build_context_package(
-        project_id=project_id, candidates=collection, now=NOW
+        project_id=project_id, results=(designation_result("TR1", ()),), now=NOW
     )
     prompt_result = prompt_builder_service.build_prompt_package(
         project_id=project_id, context_package=context_result.package, now=NOW

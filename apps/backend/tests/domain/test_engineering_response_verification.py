@@ -29,72 +29,38 @@ from app.domain.engineering_response.engineering_response_verification import (
     assess_verification,
     read_declared_outcome,
 )
-from app.domain.graph_builder.graph_builder_models import GraphEntityId
 from app.domain.prompt_builder.composition_policy import (
     VERIFICATION_VERDICT_TOKENS,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidate,
-    KnowledgeCandidateCollection,
-    KnowledgeCandidateKind,
-    KnowledgeCandidateReference,
-    KnowledgeCandidateScore,
-    KnowledgeCandidateScoreComponent,
-    ScoreComponentCategory,
-)
 from app.services import context_builder_service
+
+from tests._governed_context import (
+    asset_item,
+    designation_result,
+    results_for,
+)
 
 PROJECT_ID = 3
 NOW = datetime(2026, 1, 1, 9, 0, 0)
 
 
-def _candidate(canonical_id: str) -> KnowledgeCandidate:
-    entity_id = GraphEntityId(
-        project_id=PROJECT_ID, entity_type="RELAY", canonical_id=canonical_id
-    )
-
-    return KnowledgeCandidate(
-        candidate_id=f"{PROJECT_ID}:entity:{entity_id.value}",
-        project_id=PROJECT_ID,
-        candidate_kind=KnowledgeCandidateKind.ENTITY,
-        primary_reference=KnowledgeCandidateReference(
-            graph_entity_id=entity_id,
-            entity_type="RELAY",
-            canonical_id=canonical_id,
-        ),
-        matched_attributes=(),
-        matched_relationships=(),
-        related_entities=(),
-        source_fact_ids=(),
-        graph_node_ids=(entity_id.value,),
-        graph_relationship_ids=(),
-        graph_execution_ids=(1,),
-        score=KnowledgeCandidateScore(
-            total=50.0,
-            components=(
-                KnowledgeCandidateScoreComponent(
-                    category=ScoreComponentCategory.ENTITY_TYPE_MATCH,
-                    weight=50.0,
-                    detail="RELAY",
-                ),
-            ),
-        ),
-        reasons=(),
-        matches=(),
-        sort_key=(0.0, 0, "", ""),
-    )
-
-
 def _context_package(count: int):
-    candidates = tuple(_candidate(f"87T-{index}") for index in range(count))
+    """A governed context holding ``count`` approved protection
+    designations."""
 
     return context_builder_service.build_context_package(
         project_id=PROJECT_ID,
-        candidates=KnowledgeCandidateCollection(
-            candidates=candidates,
-            total_before_limit=count,
-            returned_count=count,
-            applied_limit=20,
+        results=results_for(
+            tuple(
+                asset_item(
+                    f"node-87t-{index}",
+                    f"87T-{index}",
+                    statement_key=f"statement-{index}",
+                    project_id=PROJECT_ID,
+                )
+                for index in range(count)
+            ),
+            project_id=PROJECT_ID,
         ),
         now=NOW,
     ).package
