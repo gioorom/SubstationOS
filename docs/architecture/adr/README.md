@@ -82,10 +82,10 @@ one.
 | [0004](0004-reviewed-facts-only-in-queryable-graph.md) | Reviewed Facts Only in the Queryable Project Knowledge Graph | Accepted |
 | [0005](0005-project-vs-canonical-library-document-scope.md) | Explicit PROJECT versus CANONICAL_LIBRARY Document Scope | Accepted |
 | [0006](0006-ai-as-interpretation-presentation-layer.md) | AI as Interpretation/Presentation Layer, Never Source of Engineering Truth | Accepted |
-| [0007](0007-project-knowledge-graph-persistence.md) | Project Knowledge Graph Persistence — Execution Semantics, Database-Agnostic Store, and Deferred Neo4j | Accepted |
+| [0007](0007-project-knowledge-graph-persistence.md) | Project Knowledge Graph Persistence — Execution Semantics, Database-Agnostic Store, and Deferred Neo4j | Superseded by ADR-0028 |
 | [0008](0008-database-migration-governance.md) | Database Migration Governance — Alembic Replaces `create_all()` | Accepted |
 | [0009](0009-legacy-knowledge-graph-isolation.md) | Legacy Knowledge Graph Isolation | Accepted |
-| [0010](0010-structured-retrieval-foundation.md) | Structured Retrieval Foundation | Accepted |
+| [0010](0010-structured-retrieval-foundation.md) | Structured Retrieval Foundation | Superseded by ADR-0026 |
 | [0011](0011-context-builder-foundation.md) | Context Builder Foundation | Accepted |
 | [0012](0012-prompt-builder-foundation.md) | Prompt Builder Foundation | Accepted |
 | [0013](0013-llm-provider-abstraction-layer.md) | LLM Provider Abstraction Layer | Accepted |
@@ -103,3 +103,4 @@ one.
 | [0025](0025-retire-the-legacy-knowledge-graph.md) | Retire the Legacy Knowledge Graph | Accepted |
 | [0026](0026-governed-structured-retrieval.md) | Governed Structured Retrieval | Accepted |
 | [0027](0027-governed-context-assembly.md) | Governed Context Assembly | Accepted |
+| [0028](0028-retire-the-canonical-facts-graph.md) | Retire the Canonical Facts Graph | Accepted |

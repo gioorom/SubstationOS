@@ -41,15 +41,37 @@ Documents → Document Identity → Document Ingestion → Canonical PDF Represe
 Canonical Text Segmentation → Engineering Evidence Extraction →
 Engineering Evidence Evaluation → Engineering Entity Resolution →
 Engineering Fact Construction → Engineering Semantic Interpretation →
-Engineering Index → Proposed Claims → Review Workflow →
-Canonicalization → Graph Builder → Project Knowledge Graph → Graph Query →
-Structured Retrieval → Context Builder → Prompt Builder →
-LLM Provider Abstraction Layer → LLM Invocation Runtime →
+Governed Human Review → Governed Knowledge Graph →
+Governed Structured Retrieval → Governed Context Assembly →
+Prompt Builder → LLM Provider Abstraction Layer → LLM Invocation Runtime →
 Engineering Response → Engineering Session → Conversation →
 Working Memory → Engineering Request Classification →
 Classification-to-Retrieval Bridge →
 Engineering Engine (workflow selection → plan → execution)
 ```
+
+
+**One authoritative path, since EPIC 31.4.**
+
+```
+Queryable engineering graph knowledge  =  Governed Knowledge Graph
+```
+
+The chain above is the only way engineering knowledge becomes queryable.
+The Canonical Facts branch that used to sit between Canonicalization and
+Context Builder - `Graph Builder → Project Knowledge Graph → Graph Query
+→ Structured Retrieval` - is **retired**
+([ADR-0028](adr/0028-retire-the-canonical-facts-graph.md)): 20 routes
+withdrawn, its packages deleted, its seven tables dropped by migration
+`f4a90c27b615`.
+
+**Proposed Claims, Review Workflow and Canonicalization survive** and
+still serve their own routes. They hold human-authored claims and the
+legacy review history over them - the *input* the retired projection was
+computed from, not a queryable graph. They no longer feed anything
+downstream: an approved legacy claim reaches no queryable engineering
+knowledge, which is [ADR-0004](adr/0004-reviewed-facts-only-in-queryable-graph.md)
+with nothing left behind it.
 
 **Milestone 23B.3 made this chain traversable from a raw sentence.**
 Until then the classifier decided which workflow a request wanted and the
@@ -413,10 +435,10 @@ across the whole pipeline).
 | Proposed Claims | Proposed Claims | Candidate assertions derived from the index, not yet reviewed | `app/domain/proposed_claims/**` |
 | Review Workflow | Review Workflow | Human review/approval state for a Proposed Claim | `app/domain/review_workflow/**` |
 | Canonicalization | Canonicalization | Normalizes an **approved** claim into a `CanonicalFact` against the Canonical Domain vocabulary | `app/domain/canonicalization/**` |
-| Graph Builder | Graph Builder | Translates a `CanonicalFact` into a deterministic `GraphOperationBatch` — a mutation *plan*, not yet applied | `app/domain/graph_builder/**` |
-| Project Knowledge Graph | Project Knowledge Graph | Executes a `GraphOperationBatch` atomically and holds current graph state | `app/domain/project_knowledge_graph/**` |
-| Graph Query | Graph Query | Deterministic, read-only queries over current graph state, through its own read port | `app/domain/graph_query/**` |
-| Structured Retrieval | Structured Retrieval | Ranked, explainable `KnowledgeCandidate`s from structured (non-NL) criteria, built exclusively from Graph Query's read model | `app/domain/structured_retrieval/**` |
+| Governed Human Review | Human Review | Append-only engineering judgement over a semantic statement: a decision, a reason, a reviewer, a support fingerprint. The **only** thing that authorises knowledge into the graph | `app/domain/human_review/**` |
+| Governed Knowledge Graph | Governed Knowledge Graph | The one runtime engineering knowledge graph - a rebuildable projection of semantic statements whose current review is `APPROVED` and applicable. Mandatory provenance on every node and edge; no property bag, no confidence score | `app/domain/governed_knowledge_graph/**`, [knowledge_graph.md](knowledge_graph.md) |
+| Governed Structured Retrieval | Governed Retrieval | Five typed queries over the governed graph, matched against typed governed fields through documented deterministic folds. Ranks by **match strategy**, never by a score; preserves `NO_MATCH`/`UNIQUE_MATCH`/`MULTIPLE_MATCHES`; reads through a port with no write method | `app/domain/governed_retrieval/**`, [governed_structured_retrieval.md](governed_structured_retrieval.md) |
+| ~~Graph Builder / Project Knowledge Graph / Graph Query / Structured Retrieval~~ | — | **Retired, EPIC 31.4.** The Canonical Facts graph-shaped projection and the retrieval over it. See [ADR-0028](adr/0028-retire-the-canonical-facts-graph.md); the historical behaviour is preserved in [structured_retrieval.md](structured_retrieval.md) | *deleted* |
 | Governed Context Assembly | Context Builder | A bounded, provenance-aware, budget-enforced `ContextPackage` assembled from `GovernedRetrievalResult`s (EPIC 31.3) - selection, aggregation, coverage, budget, warnings, statistics, metadata. Every item wraps a governed result, so provenance is structurally mandatory, ambiguity survives per query, and ordering carries no score. Also a `ComparisonContextPackage`: **two whole `ContextPackage`s**, each assembled from its own governed results, paired under named left/right fields and never merged - computing a difference is the comparison's answer, not its input | `app/domain/context_builder/**`, [governed_context_assembly.md](governed_context_assembly.md) |
 | Prompt Builder | Prompt Builder | A deterministic, provider-independent `PromptPackage` composed from a `ContextPackage` - fixed-order sections, versioned constraints/instructions, token estimates, statistics, self-validation. Since Milestone 23B.2 a `PromptObjective` (`DIRECT_ANSWER` / `ENGINEERING_EXPLANATION` / `ENGINEERING_VERIFICATION`) selects between fixed, versioned instruction and expected-output sets; truthfulness constraints never vary by objective, and no free-form or caller-supplied prompt text is ever accepted. Owns the closed verdict and comparison-outcome vocabularies an answer must declare (Milestones 24.1, 24.2) - the only machine-readable tokens this system asks a model for - and the `LEFT_KNOWLEDGE`/`RIGHT_KNOWLEDGE` sections that keep a comparison's two evidence groups typed apart | `app/domain/prompt_builder/**` |
 | LLM Provider Abstraction Layer | *(application/infrastructure capability, not a bounded context)* | A provider-neutral `LLMRequest` mapped from a `PromptPackage`, translated by a provider adapter (Anthropic first) into a local, never-sent prepared request - no invocation, no provider SDK dependency in the application layer | `app/application/**` (contracts, mapper, registry, service), `app/infrastructure/llm/**` (adapters) |
@@ -445,13 +467,12 @@ concern, not new engineering domain knowledge about substations - see
 ## Required conceptual distinction
 
 ```
-CanonicalFact = normalized approved engineering assertion
-GraphOperationBatch = deterministic mutation plan
-GraphExecution = audited application of a mutation plan
-Project Knowledge Graph = current project-scoped graph state
-Graph Query = deterministic read model
-Structured Retrieval = deterministic, structured-criteria ranking layer over Graph Query
-Context Builder = bounded, provenance-aware context assembly layer over Structured Retrieval's output
+CanonicalFact = normalized approved engineering assertion (a source record; feeds no graph since EPIC 31.4)
+SemanticStatement = deterministic engineering meaning assigned to a fact by a versioned rule
+Review = append-only engineering judgement over a semantic statement
+Governed Knowledge Graph = the one runtime engineering knowledge graph, a rebuildable projection of approved statements
+Governed Structured Retrieval = typed, deterministic, provenance-preserving retrieval over the governed graph
+Governed Context Assembly = bounded, provenance-aware context assembly over GovernedRetrievalResults
 Prompt Builder = deterministic, provider-independent prompt-composition layer over a ContextPackage
 LLM Provider Abstraction Layer = provider-neutral request contract + first (Anthropic) adapter over a PromptPackage - request preparation only, no invocation
 LLM Invocation Runtime = attempt/retry/deadline/cancellation-governed execution of exactly one real provider call, behind the same LLMProviderPort - implemented, disabled by default, never exercised with a real provider in the automated test suite

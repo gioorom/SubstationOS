@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from scripts.benchmarks.graph_performance_benchmark import (
     SMALL_DATASET,
-    run_batch_execution_benchmark,
     run_context_builder_benchmarks,
     run_conversation_benchmarks,
     run_engineering_response_benchmarks,
@@ -31,8 +30,6 @@ from scripts.benchmarks.graph_performance_benchmark import (
     run_llm_invocation_runtime_benchmarks,
     run_llm_provider_benchmarks,
     run_prompt_builder_benchmarks,
-    run_store_level_and_read_benchmarks,
-    run_structured_retrieval_benchmarks,
     run_working_memory_benchmarks,
 )
 
@@ -92,47 +89,6 @@ _EXPECTED_CONVERSATION_OPERATIONS = {
 _EXPECTED_WORKING_MEMORY_OPERATIONS = {
     "working_memory_build",
 }
-
-
-def test_store_level_and_read_benchmarks_run_on_the_small_dataset() -> None:
-    measurements = run_store_level_and_read_benchmarks(SMALL_DATASET)
-
-    operations = {measurement.operation for measurement in measurements}
-    assert operations == _EXPECTED_STORE_AND_READ_OPERATIONS
-
-    by_operation = {
-        measurement.operation: measurement for measurement in measurements
-    }
-    assert by_operation["node_upsert"].unit_count == SMALL_DATASET.node_count
-    assert (
-        by_operation["relationship_upsert"].unit_count
-        == SMALL_DATASET.relationship_count
-    )
-    assert by_operation["list_nodes"].unit_count == SMALL_DATASET.node_count
-    assert all(measurement.seconds >= 0 for measurement in measurements)
-
-
-def test_batch_execution_benchmark_runs_on_the_small_dataset() -> None:
-    measurements = run_batch_execution_benchmark(SMALL_DATASET)
-
-    assert len(measurements) == 1
-    measurement = measurements[0]
-
-    assert measurement.operation == "batch_execution"
-    # Every node CREATE_NODE, plus at least every relationship
-    # CREATE_RELATIONSHIP, must be present in the executed batch.
-    assert measurement.unit_count > (
-        SMALL_DATASET.node_count + SMALL_DATASET.relationship_count
-    )
-    assert measurement.seconds >= 0
-
-
-def test_structured_retrieval_benchmarks_run_on_the_small_dataset() -> None:
-    measurements = run_structured_retrieval_benchmarks(SMALL_DATASET)
-
-    operations = {measurement.operation for measurement in measurements}
-    assert operations == _EXPECTED_STRUCTURED_RETRIEVAL_OPERATIONS
-    assert all(measurement.seconds >= 0 for measurement in measurements)
 
 
 def test_context_builder_benchmarks_run_on_the_small_dataset() -> None:

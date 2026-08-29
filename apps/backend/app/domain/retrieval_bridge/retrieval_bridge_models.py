@@ -40,7 +40,7 @@ from enum import Enum
 from app.domain.engineering_intent.engineering_intent_models import (
     EngineeringIntentType,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
+from app.domain.retrieval_bridge.retrieval_mode import (
     RetrievalMode,
 )
 

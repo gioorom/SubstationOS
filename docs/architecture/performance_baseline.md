@@ -1,4 +1,24 @@
-# Performance Baseline — Project Knowledge Graph, Graph Query & Structured Retrieval
+# Performance Baseline — Governed Knowledge Graph, Governed Retrieval & the Composition Stack
+
+> ## ⚠ Sections marked *(retired)* measure software that no longer exists
+>
+> **EPIC 31.4** retired the Canonical Facts graph and the retrieval over
+> it, and with them three benchmark suites:
+> `run_store_level_and_read_benchmarks`, `run_batch_execution_benchmark`
+> and `run_structured_retrieval_benchmarks`.
+>
+> Their **numbers are retained** below, clearly marked, because they are
+> the baseline the governed replacement was measured against - deleting
+> them would delete the comparison that justified the migration. They
+> cannot be reproduced: the code is gone.
+>
+> The **current** suites are Governed Retrieval (below), Governed Context
+> Assembly, Prompt Builder, the LLM Provider layer, the Invocation
+> Runtime, Engineering Response, Session, Conversation and Working
+> Memory. Context Assembly and Prompt Builder now generate their input in
+> memory rather than reading a database, so they measure composition
+> rather than a read - see
+> [ADR-0028](adr/0028-retire-the-canonical-facts-graph.md).
 
 **Status:** Baseline measurement, established by Milestone 12 (Knowledge
 Platform Hardening), extended by Milestone 13 (Structured Retrieval
@@ -256,12 +276,13 @@ measured here comfortably meet current product needs. They are the
 natural starting point for a future, dedicated performance milestone
 if real usage ever demands it.
 
-## Governed Structured Retrieval (EPIC 31.2)
+## Governed Structured Retrieval (EPIC 31.2) — **current**
 
 `run_governed_retrieval_benchmarks` measures the five representative
 governed operations against a synthetic governed graph of the same size
-as the Canonical Facts dataset the legacy retrieval benchmarks use, so
-the two are comparable rather than merely both present:
+as the Canonical Facts dataset the legacy retrieval benchmarks used,
+so the two remain comparable - the legacy numbers are retained above and
+marked retired, because the comparison is what justified the migration:
 
 | Operation | What it does |
 |---|---|

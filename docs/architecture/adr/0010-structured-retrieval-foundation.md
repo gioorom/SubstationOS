@@ -2,7 +2,19 @@
 
 ## Status
 
-Accepted.
+**Superseded by [ADR-0026](0026-governed-structured-retrieval.md)
+(EPIC 31.2), and its implementation deleted by
+[ADR-0028](0028-retire-the-canonical-facts-graph.md) (EPIC 31.4).**
+
+The deterministic, no-embeddings, no-NL-interpretation principle this ADR
+established is **not** superseded - Governed Structured Retrieval keeps
+it, and strengthened it by replacing the weighted score with a documented
+match-strategy precedence. What is superseded is the substrate: this
+retrieval matched property bags on the Canonical Facts graph, which no
+longer exists.
+
+Retained as the record of why deterministic-first was chosen and why
+embeddings were deferred; those reasons still hold.
 
 ## Context
 

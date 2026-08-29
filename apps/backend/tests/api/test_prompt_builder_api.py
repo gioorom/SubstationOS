@@ -12,6 +12,8 @@ from app.services import context_builder_service
 
 from tests._governed_context import asset_item, results_for
 
+NOW = datetime(2026, 1, 1, 12, 0, 0)
+
 
 def _create_project(api_client: TestClient, code: str = "PB-001") -> dict:
     response = api_client.post(
@@ -81,46 +83,15 @@ def _approve_claim(
     return fact_response.json()
 
 
-def _build_and_execute_graph(api_client: TestClient, code: str) -> dict:
-    project = _create_project(api_client, code=code)
-    document = _upload_document(api_client, project["id"])
-
-    cable_entry = api_client.post(
-        "/engineering-index/entries",
-        json={
-            "document_id": document["id"],
-            "kind": "equipment",
-            "identifier": "C-295",
-        },
-    ).json()
-
-    _approve_claim(
-        api_client,
-        claim_type="relationship",
-        subject="Cable 295",
-        predicate="feeds",
-        object_="TR2",
-        entry_ids=[cable_entry["id"]],
-    )
-    _approve_claim(
-        api_client,
-        claim_type="attribute",
-        subject="TR2",
-        predicate="Rated Voltage",
-        object_="132kV",
-        entry_ids=[cable_entry["id"]],
-    )
-
-    batch = api_client.post(
-        f"/graph-builder/build/project/{project['id']}"
-    ).json()
-    executed = api_client.post(f"/graph-executions/batches/{batch['id']}")
-    assert executed.status_code == 200
-    assert executed.json()["execution"]["status"] == "succeeded"
-
-    return project
-
-NOW = datetime(2026, 1, 1, 12, 0, 0)
+#: EPIC 31.4 removed ``_build_and_execute_graph``.
+#:
+#: It created a project, uploaded a document, approved a claim,
+#: canonicalised it, built a Canonical Facts graph batch and executed it -
+#: so that legacy Structured Retrieval had something to find. None of that
+#: reaches these tests any more: since EPIC 31.3 the governed
+#: ``ContextPackage`` they need is assembled in process, and EPIC 31.4
+#: withdrew the four route groups the fixture drove. A project is all that
+#: is left to create, and ``_create_project`` already does it.
 
 
 def _context_package_json(project_id: int, *, count: int = 1) -> dict:
@@ -158,7 +129,7 @@ def _context_package_json(project_id: int, *, count: int = 1) -> dict:
 
 
 def test_build_endpoint_assembles_a_prompt_package(api_client: TestClient) -> None:
-    project = _build_and_execute_graph(api_client, code="PB-BUILD-001")
+    project = _create_project(api_client, code="PB-BUILD-001")
     package = _context_package_json(project["id"])
 
     response = api_client.post(
@@ -200,7 +171,7 @@ def test_build_endpoint_on_an_empty_context_package_is_a_valid_empty_prompt(
 def test_build_endpoint_rejects_a_mismatched_project_id(
     api_client: TestClient,
 ) -> None:
-    project = _build_and_execute_graph(api_client, code="PB-MISMATCH-001")
+    project = _create_project(api_client, code="PB-MISMATCH-001")
     other_project = _create_project(api_client, code="PB-MISMATCH-002")
     package = _context_package_json(project["id"])
 
@@ -229,7 +200,7 @@ def test_build_endpoint_rejects_an_invalid_project_id(
 def test_build_endpoint_preserves_evidence_references(
     api_client: TestClient,
 ) -> None:
-    project = _build_and_execute_graph(api_client, code="PB-EVIDENCE-001")
+    project = _create_project(api_client, code="PB-EVIDENCE-001")
     package = _context_package_json(project["id"])
 
     response = api_client.post(
@@ -244,7 +215,7 @@ def test_build_endpoint_preserves_evidence_references(
 
 
 def test_build_endpoint_response_is_deterministic(api_client: TestClient) -> None:
-    project = _build_and_execute_graph(api_client, code="PB-DETERM-001")
+    project = _create_project(api_client, code="PB-DETERM-001")
     package = _context_package_json(project["id"])
     payload = {"context_package": package}
 

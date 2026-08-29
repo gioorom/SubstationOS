@@ -35,9 +35,7 @@ from app.domain.retrieval_bridge.retrieval_bridge_policy import (
     RETRIEVAL_POLICY_BY_INTENT,
     SUPPORTED_INTENT_TYPES,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    RetrievalMode,
-)
+from app.domain.retrieval_bridge.retrieval_mode import RetrievalMode
 
 NOW = datetime(2026, 1, 1, 5, 0, 0)
 PROJECT_ID = 1

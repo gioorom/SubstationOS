@@ -3,18 +3,25 @@ Structural validation of a derived ``RetrievalConfiguration``, run before
 the bridge ever returns one. Never validates engineering correctness, and
 never judges whether the derived criteria were the "right" ones.
 
-Its most important rule is ``_mode_agreement_errors``: the engine's own
-retrieval step handler re-derives a ``RetrievalMode`` from which criteria
-fields are set, so a configuration whose declared mode disagrees with
-what the engine will derive would be quietly misleading - the bridge
-would report one thing and the engine do another. That disagreement is
-made structurally impossible here rather than left to convention.
+Its most important rule is ``_mode_agreement_errors``: the declared mode
+must agree with the criteria fields the configuration actually carries,
+so a prepared request cannot report one shape of retrieval and describe
+another.
 
-The bounds below deliberately mirror Structured Retrieval's own
-(``structured_retrieval_validator.py``). They are restated rather than
-imported because a configuration that violates them must be reported as
-a typed bridge failure the caller can read, not raised as a
-``StructuredRetrievalError`` several steps later inside the engine.
+**What that rule protects changed in EPIC 31.2, and the rule survived
+it.** It used to guard against the engine re-deriving a different mode
+from the same fields. The engine derives no mode any more - its governed
+planner reads the designation fields directly and issues typed governed
+queries - so the rule now protects the *caller*, who reads the declared
+mode on the prepared request and must not be told something the
+configuration contradicts. The refusals below are unchanged, and each
+one still states why.
+
+The bounds below are stated here rather than imported. Legacy Structured
+Retrieval, which once owned them, was retired by EPIC 31.4; and even
+before that, a configuration violating them had to be reported as a
+typed bridge failure the caller can read rather than raised several
+steps later inside the engine.
 """
 
 from __future__ import annotations
@@ -23,15 +30,20 @@ from app.domain.retrieval_bridge.retrieval_bridge_models import (
     RetrievalBridgeValidationResult,
     RetrievalConfiguration,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
+from app.domain.retrieval_bridge.retrieval_mode import (
     RetrievalMode,
 )
-from app.domain.structured_retrieval.structured_retrieval_validator import (
-    MAX_LEXICAL_TERM_COUNT,
-    MAX_LEXICAL_TERM_LENGTH,
-    MAX_RESULT_LIMIT,
-    MIN_RESULT_LIMIT,
-)
+#: The bounds a derived configuration must respect.
+#:
+#: **Stated here** since EPIC 31.4, which retired the package they were
+#: imported from. The module docstring above always described them as
+#: "restated rather than imported", and they now are: a configuration
+#: that violates one must be reported as a typed bridge failure the
+#: caller can read, which means the bridge has to own the numbers.
+MIN_RESULT_LIMIT = 1
+MAX_RESULT_LIMIT = 200
+MAX_LEXICAL_TERM_COUNT = 8
+MAX_LEXICAL_TERM_LENGTH = 64
 
 _SUPPORTED_NEIGHBORHOOD_DEPTH = 1
 

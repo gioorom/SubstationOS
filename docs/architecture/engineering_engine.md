@@ -164,7 +164,9 @@ here would duplicate it artificially.
 > **EPIC 31.2 changed what those two steps read, and nothing else.**
 > Retrieval now consumes the **Governed Knowledge Graph** through
 > `GovernedKnowledgeReader` - a port with no write method - rather than
-> the Canonical Facts projection through `GraphQueryRepository`. The
+> the Canonical Facts projection through `GraphQueryRepository` -
+> a projection **retired entirely by EPIC 31.4**
+> ([ADR-0028](adr/0028-retire-the-canonical-facts-graph.md)). The
 > step types, the artifact keys, the workflow definitions, the planner
 > and the executor were untouched: a step still builds a retrieval plan
 > and a step still executes it.

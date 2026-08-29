@@ -81,36 +81,15 @@ def _approve_claim(
     return fact_response.json()
 
 
-def _build_and_execute_graph(api_client: TestClient, code: str) -> dict:
-    project = _create_project(api_client, code=code)
-    document = _upload_document(api_client, project["id"])
-
-    cable_entry = api_client.post(
-        "/engineering-index/entries",
-        json={
-            "document_id": document["id"],
-            "kind": "equipment",
-            "identifier": "C-295",
-        },
-    ).json()
-
-    _approve_claim(
-        api_client,
-        claim_type="relationship",
-        subject="Cable 295",
-        predicate="feeds",
-        object_="TR2",
-        entry_ids=[cable_entry["id"]],
-    )
-
-    batch = api_client.post(
-        f"/graph-builder/build/project/{project['id']}"
-    ).json()
-    executed = api_client.post(f"/graph-executions/batches/{batch['id']}")
-    assert executed.status_code == 200
-    assert executed.json()["execution"]["status"] == "succeeded"
-
-    return project
+#: EPIC 31.4 removed ``_build_and_execute_graph``.
+#:
+#: It created a project, uploaded a document, approved a claim,
+#: canonicalised it, built a Canonical Facts graph batch and executed it -
+#: so that legacy Structured Retrieval had something to find. None of that
+#: reaches these tests any more: since EPIC 31.3 the governed
+#: ``ContextPackage`` they need is assembled in process, and EPIC 31.4
+#: withdrew the four route groups the fixture drove. A project is all that
+#: is left to create, and ``_create_project`` already does it.
 
 
 def _prompt_package(api_client: TestClient, project_id: int, **_ignored) -> dict:
@@ -156,7 +135,7 @@ def _prompt_package(api_client: TestClient, project_id: int, **_ignored) -> dict
 def test_prepare_request_endpoint_succeeds_with_explicit_provider_and_model(
     api_client: TestClient,
 ) -> None:
-    project = _build_and_execute_graph(api_client, code="LLM-BUILD-001")
+    project = _create_project(api_client, code="LLM-BUILD-001")
     prompt_package = _prompt_package(
         api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
     )
@@ -185,7 +164,7 @@ def test_prepare_request_endpoint_uses_configuration_when_selection_is_omitted(
     monkeypatch.setenv("LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("LLM_MODEL", "configured-model")
 
-    project = _build_and_execute_graph(api_client, code="LLM-CONFIG-001")
+    project = _create_project(api_client, code="LLM-CONFIG-001")
     prompt_package = _prompt_package(
         api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
     )
@@ -204,7 +183,7 @@ def test_prepare_request_endpoint_uses_configuration_when_selection_is_omitted(
 def test_prepare_request_endpoint_rejects_an_unknown_provider(
     api_client: TestClient,
 ) -> None:
-    project = _build_and_execute_graph(api_client, code="LLM-UNKNOWN-001")
+    project = _create_project(api_client, code="LLM-UNKNOWN-001")
     prompt_package = _prompt_package(
         api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
     )
@@ -226,7 +205,7 @@ def test_prepare_request_endpoint_rejects_a_missing_model(
 ) -> None:
     monkeypatch.delenv("LLM_MODEL", raising=False)
 
-    project = _build_and_execute_graph(api_client, code="LLM-MISSING-001")
+    project = _create_project(api_client, code="LLM-MISSING-001")
     prompt_package = _prompt_package(
         api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
     )
@@ -242,7 +221,7 @@ def test_prepare_request_endpoint_rejects_a_missing_model(
 def test_prepare_request_endpoint_response_contains_no_secret_fields(
     api_client: TestClient,
 ) -> None:
-    project = _build_and_execute_graph(api_client, code="LLM-SECRET-001")
+    project = _create_project(api_client, code="LLM-SECRET-001")
     prompt_package = _prompt_package(
         api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
     )
@@ -269,7 +248,7 @@ def test_prepare_request_endpoint_never_invokes_a_provider(
     # immediately and carries a prepared, never-sent request
     # representation, with no field describing an HTTP call or
     # response from Anthropic itself.
-    project = _build_and_execute_graph(api_client, code="LLM-NOINVOKE-001")
+    project = _create_project(api_client, code="LLM-NOINVOKE-001")
     prompt_package = _prompt_package(
         api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
     )
@@ -292,7 +271,7 @@ def test_prepare_request_endpoint_never_invokes_a_provider(
 def test_prepare_request_endpoint_response_is_deterministic(
     api_client: TestClient,
 ) -> None:
-    project = _build_and_execute_graph(api_client, code="LLM-DETERM-001")
+    project = _create_project(api_client, code="LLM-DETERM-001")
     prompt_package = _prompt_package(
         api_client, project["id"], mode="entity_type_search", entity_type="CABLE"
     )

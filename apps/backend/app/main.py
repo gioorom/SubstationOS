@@ -25,10 +25,8 @@ from app.models import (  # noqa: F401
     evidence_evaluation,
     identity,
     governed_knowledge_graph,
-    graph_builder,
     human_review,
     project,
-    project_knowledge_graph,
     proposed_claims,
     review_workflow,
 )
@@ -52,18 +50,14 @@ from app.routers import (
     engineering_request_preparation as engineering_request_preparation_router,
     engineering_response as engineering_response_router,
     engineering_session as engineering_session_router,
-    graph_builder as graph_builder_router,
     governed_knowledge_graph as governed_knowledge_graph_router,
     governed_retrieval as governed_retrieval_router,
-    graph_query as graph_query_router,
     human_review as human_review_router,
     llm_provider as llm_provider_router,
-    project_knowledge_graph as project_knowledge_graph_router,
     projects,
     prompt_builder as prompt_builder_router,
     proposed_claims as proposed_claims_router,
     review_workflow as review_workflow_router,
-    structured_retrieval as structured_retrieval_router,
     users as users_router,
     working_memory as working_memory_router,
 )
@@ -129,10 +123,6 @@ app.include_router(engineering_index_router.router)
 app.include_router(proposed_claims_router.router)
 app.include_router(review_workflow_router.router)
 app.include_router(canonicalization_router.router)
-app.include_router(graph_builder_router.router)
-app.include_router(project_knowledge_graph_router.router)
-app.include_router(graph_query_router.router)
-app.include_router(structured_retrieval_router.router)
 app.include_router(prompt_builder_router.router)
 app.include_router(llm_provider_router.router)
 app.include_router(engineering_response_router.router)

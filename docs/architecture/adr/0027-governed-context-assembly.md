@@ -2,7 +2,16 @@
 
 ## Status
 
-Accepted.
+Accepted. **The retirement readiness it recorded is acted on by
+[ADR-0028](0028-retire-the-canonical-facts-graph.md) (EPIC 31.4).**
+
+This ADR met the second of ADR-0026's two retirement conditions - no
+module the Engineering Engine reaches imports `structured_retrieval` or
+`graph_builder` - and recorded that the first was "entirely a product
+decision" about four legacy route groups. Those routes are now withdrawn
+and the lineage is deleted.
+
+Every decision recorded here stands unchanged.
 
 ## Context
 

@@ -180,3 +180,39 @@ retrieval onto a different substrate could easily have added some.
 - The application's own `DATABASE_URL` is not made environment-driven
   in this milestone (see above) - recorded as remaining technical
   debt, not fixed speculatively.
+
+## Retiring the Canonical Facts graph (EPIC 31.4)
+
+Migration `f4a90c27b615` drops seven tables:
+
+```
+graph_execution_fingerprints        graph_operations
+graph_execution_operation_results   graph_executions
+project_graph_relationships         graph_operation_batches
+project_graph_nodes
+```
+
+**Every row in them is derived** - a projection computed from
+`canonical_facts`, plus the instructions and execution records that
+produced it. The human-authored inputs (`canonical_facts`,
+`proposed_claims`, `review_candidates`, `review_history_events`) are
+**not** touched, and neither is any governed, semantic, review, document
+or audit table.
+
+### Before upgrading
+
+The projection cannot be rebuilt afterwards, because the code that built
+it is deleted too. An operator who wants the rows as a historical
+artefact exports them first; the migration's own docstring carries the
+SQL.
+
+### Rollback restores the schema, **not the rows**
+
+`downgrade()` recreates all seven tables with their original columns,
+indexes, constraints and foreign keys - **empty**. This is verified, not
+assumed: after a downgrade `project_graph_nodes` exists and holds zero
+rows.
+
+**A rollback returns the shape, never the contents.** An installation
+that may need the data takes the export above before upgrading.
+

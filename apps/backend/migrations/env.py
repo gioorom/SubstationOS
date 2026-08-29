@@ -27,11 +27,9 @@ from app.models import (  # noqa: F401
     engineering_index,
     evidence_evaluation,
     governed_knowledge_graph,
-    graph_builder,
     human_review,
     identity,
     project,
-    project_knowledge_graph,
     proposed_claims,
     review_workflow,
 )

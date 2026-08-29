@@ -11,7 +11,7 @@ from app.domain.retrieval_bridge.retrieval_bridge_models import (
     DesignationResolution,
     RetrievalBridgeFailureCode,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
+from app.domain.retrieval_bridge.retrieval_mode import (
     RetrievalMode,
 )
 from app.schemas.engineering_engine import (

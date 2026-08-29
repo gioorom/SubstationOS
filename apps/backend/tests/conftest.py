@@ -33,21 +33,13 @@ from app.routers import (
 )
 from app.routers import engineering_response as engineering_response_router_module
 from app.routers import engineering_session as engineering_session_router_module
-from app.routers import graph_builder as graph_builder_router_module
-from app.routers import graph_query as graph_query_router_module
 from app.routers import governed_knowledge_graph as governed_graph_router_module
 from app.routers import human_review as human_review_router_module
-from app.routers import (
-    project_knowledge_graph as project_knowledge_graph_router_module,
-)
 from app.routers import llm_provider as llm_provider_router_module
 from app.routers import projects as projects_router_module
 from app.routers import prompt_builder as prompt_builder_router_module
 from app.routers import proposed_claims as proposed_claims_router_module
 from app.routers import review_workflow as review_workflow_router_module
-from app.routers import (
-    structured_retrieval as structured_retrieval_router_module,
-)
 from app.routers import users as users_router_module
 from app.routers import working_memory as working_memory_router_module
 from app.routers.security import install_security
@@ -254,10 +246,6 @@ def secured_app(db_session: Session, session_factory: sessionmaker):
     test_app.include_router(proposed_claims_router_module.router)
     test_app.include_router(review_workflow_router_module.router)
     test_app.include_router(canonicalization_router_module.router)
-    test_app.include_router(graph_builder_router_module.router)
-    test_app.include_router(project_knowledge_graph_router_module.router)
-    test_app.include_router(graph_query_router_module.router)
-    test_app.include_router(structured_retrieval_router_module.router)
     test_app.include_router(prompt_builder_router_module.router)
     test_app.include_router(llm_provider_router_module.router)
     test_app.include_router(engineering_response_router_module.router)
@@ -314,18 +302,6 @@ def secured_app(db_session: Session, session_factory: sessionmaker):
     ] = _override_get_db
     test_app.dependency_overrides[
         canonicalization_router_module.get_db
-    ] = _override_get_db
-    test_app.dependency_overrides[
-        graph_builder_router_module.get_db
-    ] = _override_get_db
-    test_app.dependency_overrides[
-        project_knowledge_graph_router_module.get_db
-    ] = _override_get_db
-    test_app.dependency_overrides[
-        graph_query_router_module.get_db
-    ] = _override_get_db
-    test_app.dependency_overrides[
-        structured_retrieval_router_module.get_db
     ] = _override_get_db
     test_app.dependency_overrides[
         engineering_engine_router_module.get_db

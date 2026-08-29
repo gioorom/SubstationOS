@@ -29,76 +29,93 @@ The pipeline stays the producer of engineering knowledge. Human Review
 stays the record of engineering judgement. The graph is what those two
 imply, made queryable.
 
-## 2. The graph inventory, after EPIC 31.2
+## 2. The graph inventory, after EPIC 31.4
 
-The repository held **three** graph implementations. EPIC 31.1 retired
-one; EPIC 31.2 cut the second off from the answering stack.
+**There is one.** The repository held three graph implementations; EPIC
+31.1 retired the first, EPIC 31.4 retired the second, and the third is
+this one.
 
 | | Source lineage | Status |
 |---|---|---|
 | ~~`knowledge_graph.py` + `project_entities` / `entity_relations`~~ | AI extraction, written straight from upload | **Retired, EPIC 31.1.** Code deleted, tables dropped by migration `e28b91f4c073`. See [ADR-0025](adr/0025-retire-the-legacy-knowledge-graph.md). |
-| `graph_builder` + `project_knowledge_graph` + `graph_query` | Canonical Facts, from Proposed Claims | **Retained, but no longer read by the Engineering Engine (EPIC 31.2).** It still serves four of its own route groups, which is why it is still here. See [ADR-0026](adr/0026-governed-structured-retrieval.md) §9. |
-| **`governed_knowledge_graph`** | Semantic statements + Human Review | The authoritative engineering knowledge model, and since EPIC 31.2 **the only knowledge the Engineering Engine answers from**. |
+| ~~`graph_builder` + `project_knowledge_graph` + `graph_query` + legacy `structured_retrieval`~~ | Canonical Facts, from legacy-workflow claims | **Retired, EPIC 31.4.** 20 routes withdrawn, ~60 modules deleted, seven tables dropped by migration `f4a90c27b615`. See [ADR-0028](adr/0028-retire-the-canonical-facts-graph.md). |
+| **`governed_knowledge_graph`** | Semantic statements + Human Review | **The only runtime engineering knowledge graph.** Asserted structurally: `graph_contexts == ["governed_knowledge_graph"]`. |
 
-### What the retirement ended
+So:
 
-`ingest_document` wrote LLM-extracted entities into the queryable graph
-on **every upload** - no reviewer, no review date, no provenance beyond a
-filename, and a bare `confidence` float as the only trust signal.
+```
+Queryable engineering graph knowledge  =  Governed Knowledge Graph
+```
+
+### What was **not** retired, and why it is not a second graph
+
+`canonical_facts`, `proposed_claims`, `review_candidates` and
+`review_history_events` **survive**, with their own routes and their own
+tables.
+
+They hold **human-authored records**: a claim an engineer wrote, the
+candidate it became, the approval somebody gave it in the legacy
+`review_workflow`, and that review's history. They were the *input* the
+retired projection was computed from - not the projection.
+
+The invariant this section states is about **graph-shaped queryable
+engineering knowledge projections**, not about every relational table
+that relates two things. By that definition none of the following is a
+graph, and each is retained:
+
+| Not a graph | Why |
+|---|---|
+| `engineering_facts`, `engineering_semantics` | Pipeline artefacts. A fact relates two entities, but nothing queries them as a graph and no projection is built from them. |
+| `human_review`, `audit_events` | Records of judgement and of action. |
+| `canonical_facts`, `proposed_claims`, `review_candidates` | Human-authored claims and the legacy review history over them. |
+
+Deleting them would destroy engineering and audit information nothing
+else records. Retiring a projection is not a reason to delete its
+inputs.
+
+### What the two retirements ended
+
+**EPIC 31.1.** `ingest_document` wrote LLM-extracted entities into the
+queryable graph on **every upload** - no reviewer, no review date, no
+provenance beyond a filename, and a bare `confidence` float as the only
+trust signal.
 [ADR-0004](adr/0004-reviewed-facts-only-in-queryable-graph.md) recorded
 at Architecture Freeze v1.0 that this must not happen and that it was
 happening anyway; [ADR-0009](adr/0009-legacy-knowledge-graph-isolation.md)
 quarantined it. EPIC 31 built the replacement; EPIC 31.1 deleted the
-original.
+original, together with `services/entity_extractor.py`,
+`services/topology/**` and `services/ai/**`.
 
-Also removed with it, all proven unreachable: `services/entity_extractor.py`
-(a regex extractor), `services/topology/**` (a topology builder over the
-dropped tables) and `services/ai/**` - an entire second LLM client that
-predated the governed provider abstraction in
-`infrastructure/llm/anthropic`.
+**EPIC 31.4.** The Canonical Facts graph was a projection *computed
+from* approved claims: `graph_builder` turned them into operations, an
+execution wrote nodes and relationships carrying JSON property bags, and
+legacy Structured Retrieval matched on those bags. Its governance came
+from the legacy claim-review workflow over hand-entered claims - not
+from deterministic interpretation of a document that an engineer then
+approved.
 
-**Ingestion now writes no graph at all.** Uploading a document stores,
+It survived three milestones for reasons that were true at the time:
+
+| Milestone | Why it stayed |
+|---|---|
+| 31.1 | The Engineering Engine read it. Removing a live retrieval substrate to win a headline count would have broken six milestones of functionality. |
+| 31.2 | The engine stopped reading it, but four route groups still served it and one compatibility adapter still spoke its vocabulary. |
+| 31.3 | The adapter went. The routes remained - a product decision, not an engineering one. |
+
+EPIC 31.4 took that decision. The audit re-enumerated the live route
+table rather than trusting the earlier count and found **20 routes, not
+15**: one router served eight, six of them under
+`/projects/{id}/knowledge-graph/*` - one path prefix away from this
+graph's own `/knowledge-graph/*`. That near-collision is gone with them.
+
+**ADR-0004 now has nothing behind it.** A claim approved in the legacy
+workflow reaches no queryable graph at all - not "a different graph
+disagrees", but "there is nowhere else to ask". A test asserts exactly
+that.
+
+**Ingestion still writes no graph.** Uploading a document stores,
 identifies and canonicalises it. Knowledge enters the graph only through
-an explicit, capability-gated promotion, and an architecture test asserts
-the pipeline's downstream consumer is `None`.
-
-### Why the Canonical Facts lineage stays, after EPIC 31.2
-
-The reason changed, and it is a weaker one than before.
-
-Until EPIC 31.2 it stayed because the **Engineering Engine read it**.
-That is over: engineering retrieval now consumes the governed graph
-exclusively, through
-[governed_structured_retrieval.md](governed_structured_retrieval.md).
-The matching strategies were rewritten against typed governed fields, no
-property bag was carried forward in either direction, and the quality
-change was measured against a nine-scenario baseline before the
-substrate moved.
-
-It stays now because it is still a **served API capability** - four
-route groups (`/graph-builder`, `/graph-executions`,
-`/projects/{id}/graph` and `/projects/{id}/structured-retrieval`).
-Withdrawing served capabilities is a product decision, not something an
-engine change implies, and "remove only what is proven unused" still
-holds: these are proven used, by their own API.
-
-`tests/architecture/test_graph_consolidation.py` now asserts both halves
-of that - the engine no longer reads the lineage, and the lineage is
-still reachable through its own routes. The day those routes go, the
-second assertion fails and the repository says the lineage is dead.
-[ADR-0026](adr/0026-governed-structured-retrieval.md) §9 carries the
-full retirement gate, condition by condition.
-
-**EPIC 31.3 closed the second of ADR-0026's two conditions.** That ADR
-also recorded that `structured_retrieval`'s value objects referenced
-`graph_builder`, so retiring the lineage required migrating Context
-Builder first. Context Builder now consumes governed retrieval results
-directly ([governed_context_assembly.md](governed_context_assembly.md)),
-the compatibility adapter is deleted, and no module the Engineering
-Engine reaches imports `structured_retrieval` or `graph_builder`.
-
-So the technical work is complete and **the only remaining blocker is
-the product decision about those four route groups.**
+an explicit, capability-gated promotion.
 
 ## 3. What the graph may contain
 
@@ -392,10 +409,10 @@ retired and why, and the record stays readable.
 - **The graph is unversioned per project.** One generation covers the
   whole installation, so a rebuild triggered by one project's work
   renumbers globally.
-- **Two graph implementations coexist.** The legacy one is gone; the
-  Canonical Facts lineage remains **only** because four of its own route
-  groups still serve it - **not** because anything in the answering stack reads
-  it. §2 states what closing that requires.
+- ~~Two graph implementations coexist.~~ **Closed by EPIC 31.4**: the
+  Canonical Facts lineage is deleted and there is one runtime engineering
+  graph. See §2 and
+  [ADR-0028](adr/0028-retire-the-canonical-facts-graph.md).
 
 ---
 

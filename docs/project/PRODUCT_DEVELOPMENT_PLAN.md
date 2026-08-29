@@ -132,9 +132,9 @@ readiness declaration)
 | Engineering Index | Implemented — idempotent, project-scoped, document-traceable (Milestones 9, 9.1); **read side** (Document Retrieval, Milestone 23B.1) answers "which documents mention X?" as ranked `DocumentReference`s scored from a fixed documented weight table, with a batch document-metadata port; reads no document contents |
 | Review Workflow | Implemented — `ProposedClaim`/`ReviewCandidate` state machine; the ADR-0004 mandatory review gate is closed for this pipeline (Milestone 10) |
 | Canonicalization | Implemented — deterministic normalization of `APPROVED` claims into `CanonicalFact`s (Milestone 11) |
-| Project Knowledge Graph | Implemented — Graph Builder translates facts into operations, Graph Persistence executes them atomically and idempotently against a project-scoped SQL-backed store (Milestones 11.1, 11.2, ADR-0007); schema lifecycle is now Alembic-managed rather than `create_all()` (Milestone 12, ADR-0008); the legacy `ingest_document`/`ProjectEntity`/`EntityRelation` path is retained, isolated, and marked deprecated rather than merged or deleted (Milestone 12, ADR-0009) |
-| Graph Query | Implemented — deterministic, read-only queries (by id, by type, by attribute presence, 1-hop adjacency, statistics, orphan detection) over current graph state through its own read port (Milestone 11.3); NL interpretation, semantic ranking, and answer generation are not yet built (see [knowledge_pipeline_overview.md](../architecture/knowledge_pipeline_overview.md)) |
-| Structured Retrieval (Canonical Facts) | Implemented — deterministic, explainable `KnowledgeCandidate` ranking from structured criteria (entity lookup, entity type, attribute, relationship, lexical, combined) over Graph Query's read model, with fixed scoring weights and deterministic candidate identity (Milestone 13, ADR-0010); no embeddings, vector search, or NL interpretation. **No longer the Engineering Engine's retrieval (EPIC 31.2)** — still served by its own two endpoints, over a different lineage with a different governance story |
+| Project Knowledge Graph (Canonical Facts) | **Retired (EPIC 31.4, ADR-0028).** Graph Builder, Graph Persistence and their execution model are deleted; `project_graph_nodes`, `project_graph_relationships`, `graph_executions`, `graph_execution_operation_results`, `graph_execution_fingerprints`, `graph_operation_batches` and `graph_operations` are dropped by migration `f4a90c27b615`. ADR-0007 is superseded. The Alembic governance it introduced (Milestone 12, ADR-0008) survives and now carries the retirement |
+| Graph Query | **Retired (EPIC 31.4, ADR-0028).** Its only purpose was reading the Canonical Facts projection; seven of its routes are withdrawn. Listing and lookup are answered over governed knowledge by `GET /knowledge-graph/nodes` and `/knowledge-graph/edges`; **orphan detection has no successor** - the governed graph retires a node whose every edge retired, so an orphan is not a state it can be in |
+| Structured Retrieval (Canonical Facts) | **Retired (EPIC 31.4, ADR-0028).** Implementation deleted, both endpoints withdrawn; ADR-0010 is superseded by ADR-0026. Its deterministic-first principle survives in Governed Structured Retrieval; two capabilities do not, and are recorded as removals rather than migrations: **property-bag attribute search** (the governed graph has no property bag, ADR-0024) and **broad lexical matching** across attribute keys and values. `structured_retrieval.md` is retained, marked RETIRED, as the record of what the capability was |
 | Governed Structured Retrieval | Implemented — the Engineering Engine's retrieval since EPIC 31.2, and it consumes the Governed Knowledge Graph **exclusively** (ADR-0026). Five typed queries (asset by designation, quantity for an asset, relationships, document knowledge, governed identity) with explicit fields and no free text, no filter object and no query language. Matching is against typed governed fields only — the governed graph has no property bag, and none was carried forward in either direction — through three documented deterministic folds; **ranking is by match strategy, never by a score**, because a weight attached to engineering knowledge is the ungoverned trust signal ADR-0004 rejected. Every result names exactly one match strategy, the governed field that carried it, and mandatory provenance (statement, review, reviewer, rule and policy versions, support fingerprint, document). Ambiguity is preserved rather than resolved: `NO_MATCH`/`UNIQUE_MATCH`/`MULTIPLE_MATCHES` is computed before any limit, and two documents designating the same thing stay two answers. Historical knowledge never answers a current question unless a caller asks for it explicitly. Retrieval implements no governance of its own — it reads `state`, and the promotion contract is the only definition — and it reads through a port with **no write method**. Quality was measured against a nine-scenario baseline and a classified shadow comparison before the substrate moved |
 | Governed Context Assembly | Implemented — deterministic, bounded, provenance-aware `ContextPackage` assembly (selection, aggregation, coverage, budget enforcement, warnings, statistics, metadata) from `GovernedRetrievalResult`s (Milestone 14 / ADR-0011, migrated onto governed knowledge by EPIC 31.3 / ADR-0027). A `ContextItem` **wraps** a governed retrieval item rather than copying it, so provenance (statement, review, reviewer, support fingerprint, document) is structurally impossible to drop, ambiguity survives per query (`NO_MATCH`/`UNIQUE_MATCH`/`MULTIPLE_MATCHES`), and **ordering carries no score** — it is the governed match-strategy precedence and nothing else. Deduplication is by governed identity, never by label, so two documents designating the same thing stay two items. Truncation is always diagnosable: matched-before-limit, retrieved and selected counts are all reported. Performs no I/O and issues no query of its own, which is what keeps retrieval's project/document scope and authorization from being widened downstream; no persistence, no AI, no prompt generation; also a `ComparisonContextPackage` - two whole `ContextPackage`s, each assembled from its own governed results, paired under named left/right fields and never merged |
 | Prompt Builder | Implemented — deterministic, provider-independent `PromptPackage` composition (nine fixed-order sections, versioned constraints/instructions, approximate token estimates, statistics, self-validation) from a `ContextPackage` (Milestone 15, ADR-0012); a `PromptObjective` (Milestones 23B.2, 24.1, 24.2) selects between fixed, versioned instruction and expected-output sets (`DIRECT_ANSWER` / `ENGINEERING_EXPLANATION` / `ENGINEERING_VERIFICATION` / `ENGINEERING_COMPARISON`) - never free-form or caller-supplied prompt text - and truthfulness constraints never vary by objective; owns the closed verdict and comparison-outcome vocabularies an answer must declare, and the `LEFT_KNOWLEDGE`/`RIGHT_KNOWLEDGE` sections that keep a comparison's two evidence groups typed apart; no persistence, no AI, no provider serialization |
@@ -2550,6 +2550,80 @@ interruptions, and are ranges, not commitments.
   addressed, because adding one now would be guessing at a workload
   nobody has measured.
 - Dependencies: EPIC 30.1.2 (whose audit produced the list).
+
+**EPIC 31.4 — Legacy Retrieval Surface & Canonical Facts Retirement** - *Completed*
+- Objective: leave **one** runtime engineering knowledge graph. A pure
+  retirement milestone - no new product capability, and none was added.
+- **The headline: `graph_contexts == ["governed_knowledge_graph"]`.** The
+  Canonical Facts graph-shaped projection, the retrieval over it and the
+  twenty routes that served it are gone. Queryable engineering graph
+  knowledge is now, by construction, the Governed Knowledge Graph.
+- **The route inventory was 20, not 15.** The audit re-enumerated the
+  live route table rather than trusting EPIC 31.2's count, and found one
+  router serving eight routes of which only two carried a
+  `/graph-executions` path. Six of the others sat under
+  `/projects/{id}/knowledge-graph/*` - **one path prefix away from the
+  governed graph's own `/knowledge-graph/*`**. Nothing had confused them
+  (the frontend only ever called the governed routes), but the
+  arrangement was one careless integration away from doing so.
+- Withdrawn routes return **404**, following ADR-0025's precedent: no
+  `410` shim, because it preserves a URL whose only honest answer is that
+  the data behind it should never have been served. The routers are
+  deleted, not deregistered.
+- **`RetrievalMode` was moved, not aliased.** `retrieval_bridge` is live
+  and authoritative - it prepares requests for the *governed* engine -
+  and imported one enum plus four bounds from the retiring package. The
+  enum is now defined outright in
+  `app/domain/retrieval_bridge/retrieval_mode.py` and the bounds are
+  stated locally, which the bridge's own docstring had always claimed
+  without it being true. All eight live imports point at the bridge,
+  proven by inspection.
+- **`canonical_facts`, `proposed_claims` and `review_workflow` survive**,
+  with their routes and their data. They hold human-authored claims and
+  the legacy review history over them - the *input* the retired
+  projection was computed from, not a graph. The invariant is about
+  graph-shaped queryable knowledge projections, not about every
+  relational table that relates two things.
+- Migration `f4a90c27b615` drops seven tables, dependants first. Fresh
+  install reaches HEAD with 45 tables and none of the seven; a
+  representative pre-retirement database upgrades with governed graph,
+  semantic statements, reviews, documents, audit history and the retained
+  claim/review tables all intact. **Downgrade restores the schema shape,
+  empty** - verified, and stated in the migration, in ADR-0028 and in
+  `operational_reliability.md` rather than discovered mid-rollback.
+- **No legacy row was converted into governed knowledge and no review was
+  fabricated.** Every dropped row was derived; the unique input survives.
+  Loading the projection into the governed graph would have required
+  attributing approvals to engineers who never gave them.
+- **ADR-0004 now has nothing behind it.** A claim approved in the legacy
+  workflow reaches no queryable graph at all - not "a different graph
+  disagrees", but "there is nowhere else to ask". EPIC 31.2's shadow
+  comparison test was rewritten to assert that stronger fact rather than
+  deleted.
+- Capability removals with no successor, recorded honestly: property-bag
+  attribute search, broad lexical search, orphan detection, and building
+  or executing a graph from approved claims.
+- New architecture tests prove the invariant structurally: one runtime
+  graph context, no retired package in any of six layers, no runtime
+  import of the lineage, no retired route, no retired ORM table, and -
+  the one that could only be written now - **no pipeline or review module
+  writes any graph**, where before only the governed half could be
+  asserted.
+- Recorded in
+  [ADR-0028](../architecture/adr/0028-retire-the-canonical-facts-graph.md).
+  ADR-0007 and ADR-0010 are marked superseded; ADR-0025, ADR-0026 and
+  ADR-0027 keep their decisions and gain a note that their deferred
+  condition is now discharged.
+- A pre-existing defect surfaced during the search sweep and was fixed in
+  passing: the LLM invocation smoke-test script built its prompt with
+  `project_id = 0`, which Context Assembly has always rejected - it could
+  never have reached a provider.
+- Known limits: existing installations lose the projection rows on
+  upgrade (documented, with an export); `scripts/benchmarks` still
+  imports one governed fixture from `tests/**`, contrary to its own
+  docstring - pre-existing, unrelated to the lineage, and recorded as
+  debt rather than fixed here.
+- Dependencies: EPIC 31.3 (which met the second retirement condition).
 
 **EPIC 31.3 — Governed Context Assembly** - *Completed*
 - Objective: remove the last compatibility boundary between governed

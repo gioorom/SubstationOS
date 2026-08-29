@@ -2,7 +2,19 @@
 
 ## Status
 
-Accepted.
+Accepted. **The retirement gate in §9 is satisfied by
+[ADR-0028](0028-retire-the-canonical-facts-graph.md) (EPIC 31.4).**
+
+Every decision recorded here stands: Governed Structured Retrieval is the
+Engineering Engine's retrieval, unchanged by the retirement. What has
+changed is §9's answer - the three failing gate conditions were a single
+blocker (four route groups still served the lineage), that blocker was a
+product decision, and the decision was taken. The temporary adapter §8
+introduced was retired by
+[ADR-0027](0027-governed-context-assembly.md).
+
+Retained as the record of why retrieval quality was measured before the
+substrate moved, and of what the gate required.
 
 ## Context
 

@@ -1,31 +1,45 @@
 """
-Architecture tests for the graph consolidation (EPIC 31.1).
+Architecture tests for the graph consolidation (EPIC 31.1 → 31.4).
 
-These are the standing proof that the legacy Knowledge Graph is gone and
-does not come back. Every assertion is structural - on the filesystem,
-the AST or the live route table - and each one would otherwise be
-invisible the day somebody restores a file from history.
+These are the standing proof that **one** runtime engineering knowledge
+graph exists and no second one comes back. Every assertion is structural
+- on the filesystem, the AST, the live route table or the ORM metadata -
+and each one would otherwise be invisible the day somebody restores a
+file from history.
 
 ---
 
 ## What "one graph" means here, precisely
 
-After EPIC 31.1 there is exactly **one governed engineering knowledge
-graph**: `governed_knowledge_graph`, fed only by approved semantic
-statements.
+A **runtime engineering knowledge graph** is a bounded context that
+stores graph-shaped engineering knowledge (nodes and relationships
+between engineering concepts) and serves it to a runtime consumer.
 
-The Canonical Facts lineage (`graph_builder`, `project_knowledge_graph`,
-`graph_query`) is **retained and still read at runtime** by Structured
-Retrieval and the Engineering Engine. It is not a second governed
-knowledge graph - it is the retrieval substrate of the LLM answering
-stack, fed from a different lineage - but it *is* a second graph
-implementation, and pretending otherwise in a test would be a lie.
+After EPIC 31.4 there is exactly one: `governed_knowledge_graph`, fed
+only by governed promotion from approved semantic statements.
 
-So these tests assert what is true: the legacy path is gone, nothing
-imports it, and the Canonical Facts lineage is present-and-accounted-for
-rather than silently tolerated. `knowledge_graph.md` §2 and ADR-0025
-state what closing that last gap requires.
+Deliberately **not** counted, and each for a stated reason:
+
+| Not a graph | Why |
+|---|---|
+| `engineering_facts`, `engineering_semantics` | Pipeline artefacts. A fact relates two entities, but nothing queries them as a graph and no projection is built from them. |
+| `human_review`, `audit_events` | Records of judgement and of action. |
+| `canonical_facts`, `proposed_claims`, `review_candidates` | Human-authored claims and the legacy review history over them. They are the *input* the retired projection was computed from, not a projection. |
+| historical migrations, ADRs, archived docs | History. A migration that names a dropped table is doing its job. |
+
+## The three retirements, and what each ended
+
+| EPIC | Retired | Was fed by |
+|---|---|---|
+| 31.1 | `project_entities`, `entity_relations` | LLM extraction on upload, no review gate |
+| 31.4 | `graph_builder`, `project_knowledge_graph`, `graph_query`, legacy `structured_retrieval` | Canonical Facts, from legacy-workflow claims |
+| — | `governed_knowledge_graph` **survives** | Approved semantic statements |
+
+EPIC 31.2 moved the Engineering Engine onto governed retrieval and 31.3
+removed the last compatibility adapter; those two made 31.4 possible
+without changing what the platform could answer.
 """
+
 
 from __future__ import annotations
 
@@ -63,6 +77,70 @@ RETIRED_IMPORTS = (
 
 #: The two ORM classes that went with them.
 RETIRED_SYMBOLS = ("ProjectEntity", "EntityRelation")
+
+
+#: Every module EPIC 31.4 deleted: the Canonical Facts graph lineage and
+#: the legacy retrieval that read it. Named per layer, so restoring any
+#: single one fails a test that says which.
+RETIRED_LINEAGE_PATHS = tuple(
+    APP_ROOT / layer / name
+    for layer in ("domain", "infrastructure")
+    for name in ("graph_builder", "graph_query", "project_knowledge_graph")
+) + (
+    APP_ROOT / "domain" / "structured_retrieval",
+    APP_ROOT / "models" / "graph_builder.py",
+    APP_ROOT / "models" / "project_knowledge_graph.py",
+    APP_ROOT / "routers" / "graph_builder.py",
+    APP_ROOT / "routers" / "graph_query.py",
+    APP_ROOT / "routers" / "project_knowledge_graph.py",
+    APP_ROOT / "routers" / "structured_retrieval.py",
+    APP_ROOT / "schemas" / "graph_builder.py",
+    APP_ROOT / "schemas" / "graph_query.py",
+    APP_ROOT / "schemas" / "project_knowledge_graph.py",
+    APP_ROOT / "schemas" / "structured_retrieval.py",
+    APP_ROOT / "services" / "graph_builder_service.py",
+    APP_ROOT / "services" / "graph_execution_service.py",
+    APP_ROOT / "services" / "graph_query_service.py",
+    APP_ROOT / "services" / "structured_retrieval_service.py",
+)
+
+
+#: The import paths that no longer resolve.
+RETIRED_LINEAGE_IMPORTS = (
+    "app.domain.graph_builder",
+    "app.domain.graph_query",
+    "app.domain.project_knowledge_graph",
+    "app.domain.structured_retrieval",
+    "app.infrastructure.graph_builder",
+    "app.infrastructure.graph_query",
+    "app.infrastructure.project_knowledge_graph",
+    "app.models.graph_builder",
+    "app.models.project_knowledge_graph",
+    "app.routers.graph_builder",
+    "app.routers.graph_query",
+    "app.routers.project_knowledge_graph",
+    "app.routers.structured_retrieval",
+    "app.schemas.graph_builder",
+    "app.schemas.graph_query",
+    "app.schemas.project_knowledge_graph",
+    "app.schemas.structured_retrieval",
+    "app.services.graph_builder_service",
+    "app.services.graph_execution_service",
+    "app.services.graph_query_service",
+    "app.services.structured_retrieval_service",
+)
+
+
+#: The seven tables migration ``f4a90c27b615`` drops.
+RETIRED_GRAPH_TABLES = (
+    "graph_operation_batches",
+    "graph_operations",
+    "graph_executions",
+    "graph_execution_operation_results",
+    "graph_execution_fingerprints",
+    "project_graph_nodes",
+    "project_graph_relationships",
+)
 
 
 def _modules(directory: Path) -> list[Path]:
@@ -257,17 +335,16 @@ def test_only_the_promotion_service_writes_the_governed_graph() -> None:
     assert writers == ["knowledge_promotion_service.py"]
 
 
-# --- Exactly one governed knowledge graph -------------------------------
+# --- Exactly one runtime engineering graph ------------------------------
 
 
-def test_there_is_exactly_one_governed_graph_context() -> None:
+def test_there_is_exactly_one_runtime_engineering_graph_context() -> None:
     """
-    One bounded context whose job is governed engineering knowledge.
+    **The invariant this whole milestone series exists to reach.**
 
-    `project_knowledge_graph` is deliberately **not** counted as one: it
-    is the Canonical Facts retrieval substrate the Engineering Engine
-    reads, retained by this milestone and documented as such. The test
-    below pins that it is still exactly that, and nothing more.
+    One bounded context whose job is graph-shaped engineering knowledge.
+    Asserted on the domain packages that actually exist, so restoring a
+    retired one fails here rather than being noticed later.
     """
 
     graph_contexts = sorted(
@@ -278,90 +355,140 @@ def test_there_is_exactly_one_governed_graph_context() -> None:
         and "__pycache__" not in path.name
     )
 
-    assert graph_contexts == [
-        "governed_knowledge_graph",
-        "graph_builder",
-        "graph_query",
-        "project_knowledge_graph",
+    assert graph_contexts == ["governed_knowledge_graph"]
+
+
+def test_no_retired_lineage_package_survives_anywhere_in_runtime() -> None:
+    """Domain, infrastructure, models, schemas, services and routers -
+    all six layers, because a retired context that kept one layer would
+    be a context somebody could rebuild the rest of."""
+
+    survivors = [
+        str(path.relative_to(BACKEND_ROOT))
+        for path in RETIRED_LINEAGE_PATHS
+        if path.exists()
     ]
 
+    assert survivors == []
 
-def test_the_engineering_engine_no_longer_reads_the_retained_lineage() -> (
-    None
-):
+
+def test_no_runtime_module_imports_the_retired_lineage() -> None:
     """
-    **EPIC 31.2 changed this test's subject, and that is the headline.**
+    Import-level proof, not a filename check.
 
-    Until this milestone the Canonical Facts lineage was retained
-    *because the Engineering Engine read it*, and this file asserted
-    exactly that. It no longer does: engineering retrieval comes from the
-    Governed Knowledge Graph, and the engine's two composition roots name
-    the governed reader and no graph-query repository at all.
-
-    What the assertion became is the same signal pointed the other way -
-    if the engine ever reacquires a legacy graph dependency, this fails
-    and says why.
-    """
-
-    for path in (
-        APP_ROOT / "services" / "engineering_engine" / "composition.py",
-        APP_ROOT / "routers" / "engineering_engine.py",
-    ):
-        source = _code(path)
-
-        assert "governed_knowledge_reader" in source, path.name
-        assert "GraphQueryRepository" not in source, path.name
-
-
-def test_the_retained_lineage_is_still_reachable_through_its_own_api() -> (
-    None
-):
-    """
-    Why `project_knowledge_graph` is still here after EPIC 31.2, stated
-    rather than assumed.
-
-    Nothing in the engineering answering stack reads it any more. It
-    remains because it is still a **live API capability** - four route
-    groups (`/graph-builder`, `/graph-executions`, `/projects/{id}/graph`
-    and `/projects/{id}/structured-retrieval`) serve it, and removing a
-    served capability is a product decision rather than a cleanup.
-
-    ADR-0026 records the objective condition that permits retirement:
-    those routes going away. The day they do, this test fails and says
-    the lineage has become genuinely dead.
-    """
-
-    routes = {route.path for route in _api_routes()}
-
-    assert any(path.startswith("/graph-builder") for path in routes)
-    assert any("/structured-retrieval" in path for path in routes)
-
-    repository = (
-        APP_ROOT
-        / "infrastructure"
-        / "graph_query"
-        / "sqlalchemy_graph_query_repository.py"
-    ).read_text(encoding="utf-8")
-
-    assert "ProjectGraphNodeRecord" in repository
-
-
-def test_the_two_lineages_do_not_share_a_repository() -> None:
-    """
-    No module reads both graphs. A single reader would be the "conditional
-    logic depending on graph implementation" this milestone forbids.
+    ``retrieval_bridge`` is the module this would have caught: it
+    imported ``RetrievalMode`` from legacy Structured Retrieval right up
+    until EPIC 31.4 moved the enum into the bridge, which is its real
+    owner now.
     """
 
     offenders: list[str] = []
 
-    for module in _modules(APP_ROOT / "services") + _modules(
-        APP_ROOT / "routers"
+    for module in _modules(APP_ROOT):
+        for imported in _imports(module):
+            if any(
+                imported == item or imported.startswith(f"{item}.")
+                for item in RETIRED_LINEAGE_IMPORTS
+            ):
+                offenders.append(f"{module.name} imports {imported}")
+
+    assert offenders == []
+
+
+def test_no_route_serves_the_retired_lineage() -> None:
+    """
+    Against the live route table.
+
+    ``/projects/{id}/knowledge-graph/*`` is named explicitly: it was the
+    Canonical Facts projection wearing a path one character away from the
+    governed ``/knowledge-graph/*`` routes, which survive.
+    """
+
+    paths = {route.path for route in _api_routes()}
+    tags = {tag for route in _api_routes() for tag in (route.tags or [])}
+
+    for retired_tag in (
+        "Graph Builder",
+        "Graph Query",
+        "Project Knowledge Graph",
+        "Structured Retrieval",
     ):
-        if (
-            "governed_knowledge_graph" in _code(module)
-            and "project_knowledge_graph" in _code(module)
-        ):
-            offenders.append(module.name)
+        assert retired_tag not in tags, retired_tag
+
+    for path in paths:
+        assert not path.startswith("/graph-builder"), path
+        assert not path.startswith("/graph-executions"), path
+        assert not path.startswith("/graph-operation-batches"), path
+        assert not path.startswith(
+            "/projects/{project_id}/graph/"
+        ), path
+        assert not path.startswith(
+            "/projects/{project_id}/knowledge-graph"
+        ), path
+        assert "structured-retrieval" not in path, path
+
+    # The governed successors are still served.
+    assert "/knowledge-graph/nodes" in paths
+    assert "/projects/{project_id}/governed-retrieval/assets" in paths
+
+
+def test_the_retired_graph_tables_are_not_in_the_orm_metadata() -> None:
+    """
+    The mapper is the authority on what a fresh database gets. A table
+    still registered here would be recreated by `create_all` in the test
+    fixtures even though the migration drops it.
+    """
+
+    from app.database.database import Base
+
+    for table in RETIRED_GRAPH_TABLES:
+        assert table not in Base.metadata.tables, table
+
+    # The governed projection, and the human-authored inputs the retired
+    # one was computed from, all survive.
+    for table in (
+        "governed_graph_nodes",
+        "governed_graph_edges",
+        "governed_graph_generations",
+        "canonical_facts",
+        "proposed_claims",
+        "review_candidates",
+    ):
+        assert table in Base.metadata.tables, table
+
+
+def test_no_governed_module_reaches_the_retired_lineage() -> None:
+    """
+    Named contexts rather than a directory sweep, so the failure message
+    says which governed boundary was crossed.
+    """
+
+    governed = (
+        "governed_knowledge_graph",
+        "governed_retrieval",
+        "context_builder",
+        "prompt_builder",
+        "engineering_response",
+        "retrieval_bridge",
+    )
+
+    offenders: list[str] = []
+
+    for context in governed:
+        for module in _modules(APP_ROOT / "domain" / context):
+            for imported in _imports(module):
+                if any(
+                    imported.startswith(item)
+                    for item in RETIRED_LINEAGE_IMPORTS
+                ):
+                    offenders.append(f"{context}/{module.name}: {imported}")
+
+    for module in _modules(APP_ROOT / "services" / "engineering_engine"):
+        for imported in _imports(module):
+            if any(
+                imported.startswith(item) for item in RETIRED_LINEAGE_IMPORTS
+            ):
+                offenders.append(f"engineering_engine/{module.name}")
 
     assert offenders == []
 
@@ -374,3 +501,69 @@ def test_no_duplicate_governed_graph_repository_exists() -> None:
     )
 
     assert implementations == ["sqlalchemy_governed_graph_repository.py"]
+
+
+# --- No alternate path into queryable knowledge -------------------------
+
+
+def test_only_governed_promotion_authors_queryable_knowledge() -> None:
+    """
+    **ADR-0004's rule, with nothing left behind it.**
+
+    One application service may write the governed projection. Every
+    other way engineering content enters this platform - an upload, a
+    pipeline stage, an LLM answer, a legacy review approval, a retrieval,
+    a context assembly - reaches no queryable graph at all, because there
+    is no longer a second graph for it to reach.
+
+    Repository persistence methods are storage, not authority: the check
+    is on the *services* layer, which is where an application decides
+    that knowledge may be published.
+    """
+
+    authors = sorted(
+        module.name
+        for module in _modules(APP_ROOT / "services")
+        if "upsert_edge" in _code(module) or "upsert_node" in _code(module)
+    )
+
+    assert authors == ["knowledge_promotion_service.py"]
+
+
+def test_no_pipeline_or_review_module_writes_any_graph() -> None:
+    """
+    The producers of engineering content must not learn that a queryable
+    projection exists. Before EPIC 31.4 this could only be asserted for
+    the governed graph, because a second one was reachable; now it is the
+    whole statement.
+    """
+
+    producers = (
+        "document_ingestion",
+        "canonicalization",
+        "engineering_evidence",
+        "engineering_entities",
+        "engineering_facts",
+        "engineering_semantics",
+        "human_review",
+        "review_workflow",
+        "proposed_claims",
+    )
+
+    offenders: list[str] = []
+
+    for context in producers:
+        directory = APP_ROOT / "domain" / context
+
+        if not directory.exists():
+            continue
+
+        for module in _modules(directory):
+            for imported in _imports(module):
+                if "governed_knowledge_graph" in imported or any(
+                    imported.startswith(item)
+                    for item in RETIRED_LINEAGE_IMPORTS
+                ):
+                    offenders.append(f"{context}/{module.name}: {imported}")
+
+    assert offenders == []

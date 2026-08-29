@@ -25,8 +25,8 @@ following is missing:
   ``docs/architecture/llm_provider_abstraction.md``).
 
 Sends exactly one synthetic, non-project prompt (an empty
-``KnowledgeCandidateCollection`` composed through the real Context
-Builder and Prompt Builder, the same construction
+``GovernedRetrievalResult`` composed through the real Governed Context
+Assembly and Prompt Builder, the same construction
 ``tests/application/test_llm_invocation_service.py`` uses for its own
 fake-adapter tests) - no real project data ever leaves the process
 through this script. Prints only safe, already-normalized fields
@@ -52,8 +52,16 @@ from app.application.config.llm_configuration import (
 from app.application.models.llm_invocation import LLMInvocationStatus
 from app.application.services.llm_invocation_service import invoke_llm
 from app.application.services.llm_provider_registry import LLMProviderRegistry
-from app.domain.structured_retrieval.structured_retrieval_models import (
-    KnowledgeCandidateCollection,
+from app.domain.governed_retrieval.governed_retrieval_factory import (
+    GovernedRetrievalQueryFactory,
+)
+from app.domain.governed_retrieval.governed_retrieval_models import (
+    GovernedGraphVersion,
+    GovernedRetrievalDiagnostics,
+    GovernedRetrievalResult,
+)
+from app.domain.governed_retrieval.governed_retrieval_vocabulary import (
+    GovernedMatchOutcome,
 )
 from app.infrastructure.llm.anthropic.anthropic_adapter import (
     ANTHROPIC_PROVIDER_ID,
@@ -62,7 +70,16 @@ from app.infrastructure.llm.anthropic.anthropic_adapter import (
 from app.infrastructure.llm.anthropic.anthropic_client import build_anthropic_client
 from app.services import context_builder_service, prompt_builder_service
 
-_SMOKE_TEST_PROJECT_ID = 0
+#: The project id this script's synthetic prompt is built under.
+#:
+#: **Not a real project**, and it reads no project data: the governed
+#: result below matched nothing, so the prompt carries no engineering
+#: content at all. It is ``1`` rather than ``0`` because Context Assembly
+#: requires a positive project id - a pre-existing defect this script
+#: carried (with ``0`` it raised ``InvalidProjectIdError`` before ever
+#: reaching a provider), found by EPIC 31.4's search sweep and fixed
+#: here because the same edit had to repoint the script anyway.
+_SMOKE_TEST_PROJECT_ID = 1
 
 
 def _parse_args() -> argparse.Namespace:
@@ -84,12 +101,54 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _synthetic_prompt_package(now: datetime):
-    empty_candidates = KnowledgeCandidateCollection(
-        candidates=(), total_before_limit=0, returned_count=0, applied_limit=1
+def _empty_governed_result(now: datetime) -> GovernedRetrievalResult:
+    """
+    A governed designation query that matched nothing.
+
+    An empty governed result rather than a fabricated one on purpose:
+    this script sends a prompt to a real provider, and the prompt must
+    carry **no engineering content** - not even synthetic content that
+    could be mistaken for a real project's knowledge in a provider log.
+    """
+
+    query = GovernedRetrievalQueryFactory.asset_by_designation(
+        designation="SMOKE-TEST", project_id=_SMOKE_TEST_PROJECT_ID, limit=1
     )
+
+    return GovernedRetrievalResult(
+        query=query,
+        outcome=GovernedMatchOutcome.NO_MATCH,
+        items=(),
+        total_before_limit=0,
+        applied_limit=1,
+        diagnostics=GovernedRetrievalDiagnostics(
+            query_type=query.query_type,
+            scope=query.scope,
+            normalized_query="smoke-test",
+            strategies_attempted=(),
+            candidates_examined=0,
+            matched_count=0,
+            returned_count=0,
+            ambiguous=False,
+            no_match=True,
+            normalization_version="1.0",
+            matching_policy_version="1.0",
+            graph_version=GovernedGraphVersion(
+                generation_number=None,
+                generation_created_at=None,
+                promotion_contract_version=None,
+            ),
+            duration_seconds=None,
+        ),
+        retrieved_at=now,
+    )
+
+
+def _synthetic_prompt_package(now: datetime):
     context_result = context_builder_service.build_context_package(
-        project_id=_SMOKE_TEST_PROJECT_ID, candidates=empty_candidates, now=now
+        project_id=_SMOKE_TEST_PROJECT_ID,
+        results=(_empty_governed_result(now),),
+        now=now,
     )
     prompt_result = prompt_builder_service.build_prompt_package(
         project_id=_SMOKE_TEST_PROJECT_ID,

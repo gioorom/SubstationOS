@@ -1,32 +1,43 @@
-# Structured Retrieval (Canonical Facts)
+# Structured Retrieval (Canonical Facts) — RETIRED
 
-**Status:** As-built reference, Milestone 13 (Structured Retrieval
-Foundation). Describes the `structured_retrieval` bounded context as
-implemented - for the decision record (why deterministic-first, why
-embeddings are deferred), see
-[ADR-0010](adr/0010-structured-retrieval-foundation.md). For where this
-context sits in the wider pipeline, see
+> # ⚠ RETIRED / HISTORICAL (EPIC 31.4)
+>
+> **This describes software that no longer exists.** Nothing below is a
+> current architecture reference.
+>
+> | | |
+> |---|---|
+> | Runtime implementation | **Deleted.** `app/domain/structured_retrieval/**` and `app/services/structured_retrieval_service.py` are gone. |
+> | Public API | **Withdrawn.** `POST /projects/{id}/structured-retrieval/plan` and `.../search` return `404`. |
+> | Substrate | The **Canonical Facts graph projection**, itself retired - its seven tables were dropped by migration `f4a90c27b615`. |
+> | Current implementation | **[governed_structured_retrieval.md](governed_structured_retrieval.md)** - Governed Structured Retrieval, over the Governed Knowledge Graph. |
+> | Decision record | [ADR-0028](adr/0028-retire-the-canonical-facts-graph.md); [ADR-0010](adr/0010-structured-retrieval-foundation.md) is superseded by [ADR-0026](adr/0026-governed-structured-retrieval.md). |
+>
+> **Retained deliberately**, not left behind. Two things here are still
+> worth reading:
+>
+> - **why deterministic-first was chosen**, and why embeddings, vector
+>   search and NL interpretation were refused. Governed Structured
+>   Retrieval keeps that principle and strengthened it.
+> - **what the capability actually was**, so that the two capabilities
+>   EPIC 31.4 removed outright - property-bag attribute search, and
+>   broad lexical matching across attribute keys and values - can be
+>   understood by whoever asks where they went.
+>
+> Two things below were **replaced rather than carried forward**: the
+> **scoring policy** (governed retrieval ranks by documented match
+> strategy, never by a weighted total) and **property-bag matching**
+> (the governed graph deliberately has no property bag - ADR-0024).
+>
+> Everything after this banner is preserved as written when the system
+> was live. It is not maintained.
+
+---
+
+**Original status:** As-built reference, Milestone 13 (Structured
+Retrieval Foundation). For where this context sat in the pipeline of the
+time, see
 [knowledge_pipeline_overview.md](knowledge_pipeline_overview.md).
-
-> ## ⚠ No longer the Engineering Engine's retrieval (EPIC 31.2)
->
-> This context reads the **Canonical Facts** graph projection. Since
-> EPIC 31.2 the Engineering Engine does not: engineering retrieval comes
-> from the Governed Knowledge Graph through
-> [governed_structured_retrieval.md](governed_structured_retrieval.md),
-> and the engine wires a `GovernedKnowledgeReader` rather than a
-> `GraphQueryRepository`.
->
-> What is described below remains **accurate and live** for its own two
-> endpoints, which are still served. It is not deprecated and it is not
-> dead code - it is a different lineage with a different governance
-> story, and [ADR-0026](adr/0026-governed-structured-retrieval.md) §9
-> records the objective condition under which it retires.
->
-> Two things below no longer describe the Engineering Engine at all:
-> the **scoring policy** (governed retrieval ranks by match strategy,
-> never by a weighted total) and **property-bag matching** (the governed
-> graph has none).
 
 ## Pipeline
 

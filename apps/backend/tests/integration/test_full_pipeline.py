@@ -115,83 +115,41 @@ def test_full_pipeline_reaches_a_governed_engineering_response(
     fact = fact_response.json()["fact"]
     assert fact["claim_type"] == "relationship"
 
-    # 6. Graph Builder -> GraphOperationBatch
-    batch = api_client.post(
-        f"/graph-builder/build/project/{project['id']}"
-    ).json()
-    assert batch["project_id"] == project["id"]
+    # 6-9. The Canonical Facts graph lineage - **retired by EPIC 31.4**.
+    #
+    # These four stages used to stand here: Graph Builder produced a
+    # `GraphOperationBatch` from the canonical fact, Graph Execution wrote
+    # it into `project_graph_nodes`/`project_graph_relationships`, Graph
+    # Query read it back, and legacy Structured Retrieval matched on its
+    # property bags. All twenty routes are withdrawn and the seven tables
+    # are dropped.
+    #
+    # What survives above is the part that was always human-authored: the
+    # proposed claim, the review candidate, the approval, and the
+    # canonical fact. What is gone is the graph-shaped projection computed
+    # from them - and, with it, the second queryable engineering knowledge
+    # store.
+    #
+    # The chain from here on is the governed one, and it is the only one.
 
-    # 7. Graph Execution -> Project Knowledge Graph state
-    execution_response = api_client.post(
-        f"/graph-executions/batches/{batch['id']}"
-    )
-    assert execution_response.status_code == 200
-    execution = execution_response.json()["execution"]
-    assert execution["status"] == "succeeded"
+    for method, path, body in (
+        ("post", f"/graph-builder/build/project/{project['id']}", None),
+        ("get", f"/projects/{project['id']}/graph/entities", None),
+        (
+            "post",
+            f"/projects/{project['id']}/structured-retrieval/search",
+            {"mode": "entity_lookup", "canonical_entity_id": "CABLE:C-295"},
+        ),
+        (
+            "get",
+            f"/projects/{project['id']}/knowledge-graph/nodes",
+            None,
+        ),
+    ):
+        call = getattr(api_client, method)
+        retired = call(path) if body is None else call(path, json=body)
 
-    # 8. Graph Query - the persisted state is readable through the
-    # deterministic read model.
-    graph_query_response = api_client.get(
-        f"/projects/{project['id']}/graph/entities"
-    )
-    assert graph_query_response.status_code == 200
-    assert len(graph_query_response.json()) == 2
-
-    # 9. Structured Retrieval - the same governed state, reached
-    # through structured criteria, with score, reasons, matches, and
-    # honest provenance (this project's own GraphExecution id).
-    retrieval_response = api_client.post(
-        f"/projects/{project['id']}/structured-retrieval/search",
-        json={
-            "mode": "entity_lookup",
-            "canonical_entity_id": "CABLE:C-295",
-            "include_neighborhood": True,
-            "neighborhood_depth": 1,
-        },
-    )
-    assert retrieval_response.status_code == 200
-    result = retrieval_response.json()
-
-    assert result["candidates"]["returned_count"] == 1
-    candidate = result["candidates"]["candidates"][0]
-
-    assert candidate["primary_reference"]["canonical_id"] == "C-295"
-    assert candidate["primary_reference"]["entity_type"] == "CABLE"
-    assert candidate["score"]["total"] == 100.0
-    assert candidate["score"]["components"][0]["category"] == (
-        "exact_canonical_id_match"
-    )
-    assert candidate["reasons"]
-    assert candidate["matches"] == [
-        {
-            "criterion_kind": "canonical_entity_id",
-            "criterion_value": "CABLE:C-295",
-        }
-    ]
-    assert candidate["graph_execution_ids"] == [execution["id"]]
-    assert any(
-        neighbor["canonical_id"] == "TR-02"
-        for neighbor in candidate["related_entities"]
-    )
-
-    assert result["metadata"]["neighborhood_enrichment_applied"] is True
-    assert result["metadata"]["candidate_count_before_dedup"] >= 1
-    assert result["plan"]["required_operations"] == ["entity_by_id"]
-
-    # Deterministic: the same request against the same graph state
-    # always produces the same candidate identifiers and scores.
-    repeat_response = api_client.post(
-        f"/projects/{project['id']}/structured-retrieval/search",
-        json={
-            "mode": "entity_lookup",
-            "canonical_entity_id": "CABLE:C-295",
-            "include_neighborhood": True,
-            "neighborhood_depth": 1,
-        },
-    )
-    repeat_candidate = repeat_response.json()["candidates"]["candidates"][0]
-    assert repeat_candidate["candidate_id"] == candidate["candidate_id"]
-    assert repeat_candidate["score"]["total"] == candidate["score"]["total"]
+        assert retired.status_code == 404, path
 
     # 10. Governed Context Assembly - the governed results assembled into
     # a bounded, provenance-aware ContextPackage.

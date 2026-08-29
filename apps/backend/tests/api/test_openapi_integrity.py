@@ -140,13 +140,11 @@ def test_every_active_router_contributes_at_least_one_route() -> None:
         "Proposed Claims",
         "Review Workflow",
         "Canonicalization",
-        "Graph Builder",
-        "Project Knowledge Graph",
-        "Graph Query",
-        "Structured Retrieval",
         "Prompt Builder",
         "LLM Provider",
         "Governed Knowledge Graph",
+        "Governed Structured Retrieval",
+        "Engineering Engine",
     }
 
     missing = expected_tags - tags_seen
@@ -175,17 +173,22 @@ def test_the_legacy_knowledge_graph_router_no_longer_exists() -> None:
 
     # The three retired reads. `/projects/{id}/knowledge-graph/nodes` and
     # its siblings survive: those belong to the Canonical Facts lineage
-    # (Milestone 11.2), which this milestone deliberately retained.
+    # EPIC 31.4 withdrew the Canonical Facts lineage too, so the
+    # `/projects/{id}/knowledge-graph/*` paths it served are gone as
+    # well - they were the confusing near-twin of the governed
+    # `/knowledge-graph/*` routes, which survive.
     assert "/projects/{project_id}/entities" not in paths
     assert "/projects/{project_id}/knowledge-graph" not in paths
+    assert not any(
+        path.startswith("/projects/{project_id}/knowledge-graph")
+        for path in paths
+    )
 
 
 def test_governed_graph_routes_are_not_deprecated() -> None:
     governed_tags = {
-        "Project Knowledge Graph",
-        "Graph Query",
-        "Graph Builder",
-        "Structured Retrieval",
+        "Governed Knowledge Graph",
+        "Governed Structured Retrieval",
         "Prompt Builder",
         "LLM Provider",
     }
@@ -223,10 +226,8 @@ def test_governed_knowledge_pipeline_routes_declare_response_models() -> (
         "Proposed Claims",
         "Review Workflow",
         "Canonicalization",
-        "Graph Builder",
-        "Project Knowledge Graph",
-        "Graph Query",
-        "Structured Retrieval",
+        "Governed Knowledge Graph",
+        "Governed Structured Retrieval",
         "Prompt Builder",
         "LLM Provider",
     }

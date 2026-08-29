@@ -2,7 +2,18 @@
 
 ## Status
 
-Accepted.
+**Superseded by [ADR-0028](0028-retire-the-canonical-facts-graph.md)
+(EPIC 31.4).** The Project Knowledge Graph persistence this ADR designed
+- `project_graph_nodes`, `project_graph_relationships`, the execution
+model and the database-agnostic store - has been deleted, and its seven
+tables dropped by migration `f4a90c27b615`. Retained as the record of how
+graph persistence was designed when it was the platform's only queryable
+engineering knowledge, and of why Neo4j was deferred rather than adopted.
+
+The Governed Knowledge Graph
+([ADR-0024](0024-governed-knowledge-graph-as-projection.md)) is the
+current projection, and it reached the same conclusion about Neo4j
+independently.
 
 ## Context
 

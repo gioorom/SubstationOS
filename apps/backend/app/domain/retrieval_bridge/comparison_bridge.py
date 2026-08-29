@@ -62,7 +62,7 @@ from app.domain.retrieval_bridge.retrieval_bridge_policy import (
 from app.domain.retrieval_bridge.retrieval_bridge_validation import (
     validate_configuration,
 )
-from app.domain.structured_retrieval.structured_retrieval_models import (
+from app.domain.retrieval_bridge.retrieval_mode import (
     RetrievalMode,
 )
 

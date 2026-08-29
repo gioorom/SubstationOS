@@ -684,60 +684,72 @@ def _legacy_project_with_knowledge(api_client: TestClient) -> tuple[int, str]:
         "/canonical-facts", json={"review_candidate_id": approved["id"]}
     )
 
-    batch = api_client.post(
-        f"/graph-builder/build/project/{project['id']}"
-    ).json()
-    api_client.post(f"/graph-executions/batches/{batch['id']}")
+    # EPIC 31.4: the two calls that used to stand here -
+    # ``POST /graph-builder/build/project/{id}`` and
+    # ``POST /graph-executions/batches/{id}`` - built and executed the
+    # Canonical Facts graph projection. Both routes are withdrawn, and
+    # the projection is dropped. What survives is exactly the input: a
+    # human-authored claim, approved in the legacy review workflow, and
+    # canonicalised. It reaches no queryable graph, which is what the
+    # test below now proves.
 
     return (project["id"], "C-295")
 
 
-def _legacy_search(api_client: TestClient, project_id: int, **body):
-    response = api_client.post(
-        f"/projects/{project_id}/structured-retrieval/search", json=body
-    )
+def _legacy_retrieval_is_gone(api_client: TestClient, project_id: int) -> None:
+    """The retired legacy surfaces answer 404, not data."""
 
-    assert response.status_code == 200
+    for method, path, body in (
+        (
+            "post",
+            f"/projects/{project_id}/structured-retrieval/search",
+            {"mode": "entity_lookup", "canonical_entity_id": "CABLE:C-295"},
+        ),
+        ("post", f"/graph-builder/build/project/{project_id}", None),
+        ("get", f"/projects/{project_id}/graph/entities", None),
+    ):
+        call = getattr(api_client, method)
+        response = call(path) if body is None else call(path, json=body)
 
-    return response.json()
+        assert response.status_code == 404, path
 
 
-def test_shadow_legacy_finds_knowledge_the_governed_graph_does_not(
+def test_a_legacy_approval_now_reaches_no_queryable_graph_at_all(
     api_client: TestClient,
 ) -> None:
     """
-    ``EXPECTED_GOVERNANCE_DIFFERENCE``.
+    ``EXPECTED_GOVERNANCE_DIFFERENCE``, completed by EPIC 31.4.
 
-    The Canonical Facts lineage answers, because somebody entered a
-    claim and approved it in the *legacy* review workflow. Governed
-    retrieval does not, because no engineer approved a **semantic
-    statement the deterministic pipeline derived from a document** -
-    which is what governed knowledge means.
+    EPIC 31.2 recorded this difference as an asymmetry: a claim approved
+    in the *legacy* review workflow answered legacy retrieval, and did
+    not answer governed retrieval, because no engineer had approved a
+    **semantic statement the deterministic pipeline derived from a
+    document**.
 
-    This is the difference the architecture exists to create. It is
-    recorded here so that nobody later reads the empty governed result
-    as a regression.
+    EPIC 31.4 removed the other half. The legacy projection is dropped
+    and its routes are withdrawn, so a legacy approval now reaches **no
+    queryable engineering knowledge anywhere**. The assertion is
+    therefore stronger than the one it replaces: not "the governed graph
+    disagrees" but "there is nothing else left to ask".
+
+    This is ADR-0004's rule, finally with no exception behind it.
     """
 
     difference = DifferenceClass.EXPECTED_GOVERNANCE_DIFFERENCE
     project_id, designation = _legacy_project_with_knowledge(api_client)
 
-    legacy = _legacy_search(
-        api_client,
-        project_id,
-        mode="entity_lookup",
-        canonical_entity_id=f"CABLE:{designation}",
-    )
+    # The legacy answer is not merely different now - it is unreachable.
+    _legacy_retrieval_is_gone(api_client, project_id)
+
     governed = _retrieve(api_client, designation, project_id=project_id)[
         "assets"
     ]
 
-    assert legacy["candidates"]["returned_count"] == 1
     assert governed["outcome"] == "no_match"
     assert difference is DifferenceClass.EXPECTED_GOVERNANCE_DIFFERENCE
 
 
-def test_shadow_governed_results_carry_provenance_legacy_never_had(
+def test_governed_results_carry_provenance_legacy_never_had(
     api_client: TestClient, project: int, governed
 ) -> None:
     """
@@ -762,11 +774,12 @@ def test_shadow_governed_results_carry_provenance_legacy_never_had(
     assert difference is DifferenceClass.NEW_CORRECT_BEHAVIOUR
 
 
-def test_shadow_attribute_search_has_no_governed_counterpart(
+def test_attribute_search_has_no_governed_counterpart(
     api_client: TestClient,
 ) -> None:
     """
-    ``LEGACY_BEHAVIOUR_NOT_SUPPORTED``.
+    ``LEGACY_BEHAVIOUR_NOT_SUPPORTED``, and recorded as a real capability
+    removal rather than a migration.
 
     Legacy retrieval could search a node's **property bag** by attribute
     name and value. The governed graph deliberately has none
@@ -775,23 +788,15 @@ def test_shadow_attribute_search_has_no_governed_counterpart(
     "what is TR1's rated power?" is a relationship traversal, and it is
     a better answer - but "find every node with an attribute called X"
     is genuinely gone, and no governed query reproduces it.
+
+    Since EPIC 31.4 the legacy half cannot be exercised at all, so what
+    is asserted is the surviving half: the governed contract offers no
+    attribute parameter, and does not silently accept one.
     """
 
     difference = DifferenceClass.LEGACY_BEHAVIOUR_NOT_SUPPORTED
     project_id, _ = _legacy_project_with_knowledge(api_client)
 
-    legacy = _legacy_search(
-        api_client,
-        project_id,
-        mode="attribute_search",
-        attribute_name="anything",
-    )
-
-    assert legacy["request"]["mode"] == "attribute_search"
-
-    # The governed API offers no attribute parameter at all - the
-    # capability is absent from the contract rather than accepted and
-    # silently ignored.
     response = api_client.get(
         f"/projects/{project_id}/governed-retrieval/assets",
         params={"designation": "TR1", "attribute_name": "anything"},
@@ -802,7 +807,7 @@ def test_shadow_attribute_search_has_no_governed_counterpart(
     assert difference is DifferenceClass.LEGACY_BEHAVIOUR_NOT_SUPPORTED
 
 
-def test_shadow_lexical_search_narrows_to_designations(
+def test_lexical_search_narrowed_to_designations(
     api_client: TestClient, project: int, governed
 ) -> None:
     """

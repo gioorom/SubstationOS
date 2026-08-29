@@ -2,7 +2,18 @@
 
 ## Status
 
-Accepted.
+Accepted. **Its deferred half is completed by
+[ADR-0028](0028-retire-the-canonical-facts-graph.md) (EPIC 31.4).**
+
+This ADR retired the legacy AI-written Knowledge Graph and deliberately
+*retained* the Canonical Facts lineage, because it was proven in use by
+Structured Retrieval and the Engineering Engine (§3, and "Remaining
+work"). That retention was correct at the time and is now discharged:
+the lineage has no consumer, and ADR-0028 deletes it.
+
+Every decision recorded here still stands, including the 404-not-410
+precedent ADR-0028 follows. Retained unchanged as the record of why the
+Canonical Facts lineage survived this milestone.
 
 ## Context
 

@@ -69,6 +69,137 @@ would be a breaking response change this milestone did not need to make.
 
 See [ADR-0025](adr/0025-retire-the-legacy-knowledge-graph.md).
 
+## Removed endpoints (EPIC 31.3)
+
+One route was **withdrawn**:
+
+```
+POST /projects/{project_id}/context-builder/build   removed
+```
+
+Its only possible input was a legacy `KnowledgeCandidateCollection`, and
+after EPIC 31.3 a `ContextPackage` is a governed artefact whose every
+item asserts a statement key, a review id and a named reviewer.
+Accepting one in a request body would let any authenticated caller mint a
+context that *looks* reviewed. **Provenance a caller asserts is not
+provenance.**
+
+There is no replacement request body. Assembling a governed context is
+what `POST /projects/{project_id}/engineering-engine/execute` does, from
+retrieval it runs itself under its own scope and authorization.
+
+See [ADR-0027](adr/0027-governed-context-assembly.md) §9.
+
+## Removed endpoints (EPIC 31.4)
+
+**Twenty routes were withdrawn**, in four groups. All return `404` - the
+routers are deleted, not deregistered and not shimmed.
+
+They served the **Canonical Facts graph**: a graph-shaped projection
+computed from approved legacy-workflow claims, which EPIC 31.4 retired
+together with its seven database tables (migration `f4a90c27b615`).
+
+### `/graph-builder/*` — 3 routes
+
+```
+POST /graph-builder/build/project/{project_id}    removed
+POST /graph-builder/build/document/{document_id}  removed
+GET  /graph-builder/batch/{batch_id}              removed
+```
+
+**No successor.** Building a mutation plan from approved claims was the
+first step of the retired projection. Knowledge now reaches the graph
+only through governed promotion of an approved semantic statement
+(`POST /knowledge-graph/promotions`), which is a different act over
+different artefacts - not a replacement.
+
+### Project Knowledge Graph — 8 routes
+
+```
+POST /graph-executions/batches/{batch_id}                                    removed
+GET  /graph-executions/{execution_id}                                        removed
+GET  /graph-operation-batches/{batch_id}/executions                          removed
+GET  /projects/{project_id}/knowledge-graph/nodes                            removed
+GET  /projects/{project_id}/knowledge-graph/nodes/{graph_entity_id}          removed
+GET  /projects/{project_id}/knowledge-graph/nodes/{graph_entity_id}/incoming removed
+GET  /projects/{project_id}/knowledge-graph/nodes/{graph_entity_id}/outgoing removed
+GET  /projects/{project_id}/knowledge-graph/relationships                    removed
+```
+
+> ### ⚠ These are **not** the governed graph routes
+>
+> The last five sat under `/projects/{id}/knowledge-graph/*`. The
+> Governed Knowledge Graph serves `/knowledge-graph/*`, with **no
+> project prefix**.
+>
+> ```
+> GET /projects/{id}/knowledge-graph/nodes   ← retired, ungoverned projection
+> GET /knowledge-graph/nodes                 ← current, governed knowledge
+> ```
+>
+> The difference between governed and ungoverned engineering knowledge
+> was one path prefix. Nothing had confused them - the frontend only ever
+> called the governed routes - but the arrangement was one careless
+> integration away from doing so. It is now impossible rather than
+> merely unlikely.
+
+**Partial successor.** `GET /knowledge-graph/nodes`,
+`/knowledge-graph/nodes/{node_id}` (which returns the node's
+relationships) and `/knowledge-graph/edges` answer the same *engineering*
+questions over governed knowledge. Executing a batch has **no successor**
+- see above.
+
+### `/projects/{id}/graph/*` (Graph Query) — 7 routes
+
+```
+GET /projects/{project_id}/graph/entities                  removed
+GET /projects/{project_id}/graph/entities/{entity_id}      removed
+GET /projects/{project_id}/graph/entity-types/{type}       removed
+GET /projects/{project_id}/graph/neighborhood/{entity_id}   removed
+GET /projects/{project_id}/graph/orphans                   removed
+GET /projects/{project_id}/graph/relationships             removed
+GET /projects/{project_id}/graph/statistics                removed
+```
+
+**Partial successor.** `GET /knowledge-graph/nodes` (with `kind`,
+`project_id`, `document_id`, `search`) and `/knowledge-graph/edges` cover
+listing and lookup; `/knowledge-graph/status` covers counts.
+**Orphan detection has no successor**: the governed graph retires a node
+whose every edge retired, so an orphan is not a state it can be in.
+
+### `/projects/{id}/structured-retrieval/*` — 2 routes
+
+```
+POST /projects/{project_id}/structured-retrieval/plan     removed
+POST /projects/{project_id}/structured-retrieval/search   removed
+```
+
+**Partial successor.**
+`GET /projects/{project_id}/governed-retrieval/assets` resolves a
+designation against governed knowledge, with provenance, ambiguity and a
+documented match strategy.
+
+Two capabilities were removed with **no successor**, and are recorded as
+capability removals rather than migrations:
+
+- **attribute / property-bag search** - "find every node with an
+  attribute called X". The governed graph has no property bag
+  ([ADR-0024](adr/0024-governed-knowledge-graph-as-projection.md)) and no
+  governed query reproduces this;
+- **broad lexical search** across canonical ids, entity types, attribute
+  keys and every string attribute value. Governed matching compares a
+  designation against the governed label and the pipeline's normalized
+  value.
+
+### What was **not** removed
+
+`/canonical-facts/*`, `/proposed-claims/*` and `/review-candidates/*` all
+still serve. They hold human-authored claims and the legacy review
+history over them - the *input* the retired projection was computed from,
+not a queryable graph.
+
+See [ADR-0028](adr/0028-retire-the-canonical-facts-graph.md).
+
 ## The rule
 
 **Every public endpoint exposes a governed application schema.** Never an
