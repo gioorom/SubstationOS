@@ -225,11 +225,20 @@ def test_no_semantic_predicate_exists_in_the_vocabulary() -> None:
     """
     ``HAS_RATED_POWER`` would claim the quantity is the equipment's rated
     power. Nothing in this pipeline establishes that.
+
+    ``HAS_LOCATION_ASPECT`` (EPIC 32.P1) is structural for the same
+    reason: it says the document wrote ``+E01`` inside ``+E01-QA1``, not
+    that the equipment is located there. The semantic reading is
+    ``IS_LOCATED_IN``, and it lives one layer up behind a reviewed rule -
+    which is why ``BELONGS_TO`` remains forbidden here.
     """
 
     declared = {member.name for member in FactPredicate}
 
-    assert declared == {"HAS_ASSOCIATED_QUANTITY"}
+    assert declared == {
+        "HAS_ASSOCIATED_QUANTITY",
+        "HAS_LOCATION_ASPECT",
+    }
     for forbidden in (
         "HAS_RATED_POWER",
         "HAS_VOLTAGE",

@@ -813,8 +813,12 @@ def test_the_vocabulary_is_served_rather_than_duplicated(
     assert set(body["node_kinds"]) == {
         "engineering_asset",
         "engineering_quantity",
+        "structural_location",
     }
-    assert set(body["edge_kinds"]) == {"has_rated_power"}
+    assert set(body["edge_kinds"]) == {
+        "has_rated_power",
+        "is_located_in",
+    }
     assert body["promotion_contract_version"]
 
 

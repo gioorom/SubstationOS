@@ -70,3 +70,23 @@ NUMBER = re.compile(r"^[0-9]+(?:[.,][0-9]+)*$")
 NUMBER_WITH_UNIT = re.compile(
     r"^(?P<number>[0-9]+(?:[.,][0-9]+)*)(?P<unit>[A-Za-zÂ²³µΩ]+[²³]?)$"
 )
+
+
+# A **compound** IEC 81346 reference designation: a location aspect
+# followed by a product aspect, written as one token - ``+E01-QA1``.
+#
+# Deliberately narrower than ``DESIGNATION_IEC_81346`` above, in the one
+# way that matters: the first segment must carry ``+``. IEC 81346-1
+# assigns ``+`` to the **location** aspect and ``-`` to the **product**
+# aspect, so ``+E01-QA1`` names a product within a location while
+# ``-QA1-XB2`` names a product within a *product*. Those are different
+# engineering statements, and only the first is what this milestone
+# interprets - see ``evidence_rules.LOCATION_ASPECT_RULE``.
+#
+# The groups are named because the extractor needs the location segment's
+# **character length** to narrow provenance onto the characters that
+# actually produced the observation.
+DESIGNATION_IEC_81346_COMPOUND = re.compile(
+    r"^(?P<location>\+[A-Z]{1,3}[0-9]{1,3})"
+    r"(?P<product>-[A-Z]{1,3}[0-9]{1,3})$"
+)

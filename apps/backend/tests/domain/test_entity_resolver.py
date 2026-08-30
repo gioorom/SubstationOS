@@ -319,6 +319,7 @@ def test_an_entity_carries_no_equipment_classification() -> None:
     assert set(EntityType) == {
         EntityType.EQUIPMENT_DESIGNATION,
         EntityType.ENGINEERING_QUANTITY,
+        EntityType.STRUCTURAL_LOCATION,
     }
 
 

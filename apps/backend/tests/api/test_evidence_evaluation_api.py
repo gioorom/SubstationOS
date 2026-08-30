@@ -49,12 +49,12 @@ def test_the_report_carries_exact_metrics(api_client: TestClient) -> None:
 
     metrics = _evaluate(api_client).json()["report"]["metrics"]
 
-    assert metrics["true_positives"] == 17
+    assert metrics["true_positives"] == 18
     assert metrics["false_positives"] == 0
     assert metrics["false_negatives"] == 1
     assert metrics["precision"] == "1.000000"
-    assert metrics["recall"] == "0.944444"
-    assert metrics["f1"] == "0.971429"
+    assert metrics["recall"] == "0.947368"
+    assert metrics["f1"] == "0.972973"
 
 
 def test_the_report_breaks_metrics_down_by_type_and_rule(
@@ -90,7 +90,7 @@ def test_the_report_records_every_rule_version(
     }
 
     assert versions["designation_generic"] == "1.0"
-    assert len(versions) == 5
+    assert len(versions) == 6
 
 
 def test_the_failing_item_is_named_in_the_report(
@@ -200,7 +200,7 @@ def test_a_comparison_reports_the_metric_deltas(
     deltas = {entry["name"]: entry for entry in body["metric_deltas"]}
 
     assert set(deltas) == {"precision", "recall", "f1"}
-    assert deltas["recall"]["baseline"] == "0.944444"
+    assert deltas["recall"]["baseline"] == "0.947368"
     assert deltas["recall"]["delta"] == "0.000000"
     assert deltas["recall"]["decreased"] is False
 

@@ -464,8 +464,12 @@ def test_the_vocabulary_admits_only_governed_concepts() -> None:
     assert sorted(members("GraphNodeKind")) == [
         "ENGINEERING_ASSET",
         "ENGINEERING_QUANTITY",
+        "STRUCTURAL_LOCATION",
     ]
-    assert members("GraphEdgeKind") == ["HAS_RATED_POWER"]
+    assert members("GraphEdgeKind") == [
+        "HAS_RATED_POWER",
+        "IS_LOCATED_IN",
+    ]
 
 
 # --- No query language --------------------------------------------------

@@ -263,7 +263,7 @@ def test_the_reference_corpus_records_the_current_measured_baseline(
     The baseline this milestone measured, pinned so a rule change that
     moves it has to move this number deliberately.
 
-    17 of 18 annotations are matched exactly - text, value, status and
+    18 of 19 annotations are matched exactly - text, value, status and
     full provenance. The single miss is ``TR-1`` in
     ``designation_variants``, a **known and deliberately annotated
     recall gap**: the designation patterns do not recognise
@@ -271,6 +271,12 @@ def test_the_reference_corpus_records_the_current_measured_baseline(
     call it a designation. It is in the corpus so the gap is measured
     rather than forgotten, and so the milestone that closes it can show
     recall rising.
+
+    EPIC 32.P1 moved this from 17/18 by annotating the ``+E01`` location
+    aspect inside ``+E01-QA1`` on ``bay_data_sheet``. The new rule is
+    measured on the same terms as every other: exact text, exact status,
+    and a character range covering the four characters it read - not the
+    whole token it was found in.
     """
 
     corpus = repository.load(REFERENCE_CORPUS)
@@ -290,7 +296,7 @@ def test_the_reference_corpus_records_the_current_measured_baseline(
         false_positives += metrics.false_positives
         false_negatives += metrics.false_negatives
 
-    assert (true_positives, false_positives, false_negatives) == (17, 0, 1)
+    assert (true_positives, false_positives, false_negatives) == (18, 0, 1)
 
 
 def test_the_known_recall_gap_is_the_only_miss(

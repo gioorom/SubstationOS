@@ -51,17 +51,31 @@ property.** It records that a rule was satisfied - nothing more.
 
 ## The predicate vocabulary
 
-Exactly one member, in one module:
+Two members, in one module:
 
 ```
 HAS_ASSOCIATED_QUANTITY
+HAS_LOCATION_ASPECT
 ```
+
+Both are **structural**, which is the whole point of this vocabulary.
+`HAS_ASSOCIATED_QUANTITY` says two entities appeared together under a
+declared rule. `HAS_LOCATION_ASPECT` (EPIC 32.P1) says a compound
+IEC 81346 reference designation was written **containing** that location
+aspect - the `+E01` inside `+E01-QA1`. Neither says what the association
+*means*; that is assigned one layer up by a reviewed semantic rule
+(`HAS_RATED_POWER`, `IS_LOCATED_IN`).
 
 Deliberately absent: `HAS_VOLTAGE`, `HAS_CURRENT`, `HAS_POWER`,
 `HAS_CABLE_SECTION`, `CONNECTED_TO`, `PROTECTS`, `FEEDS`, `BELONGS_TO`,
 `IS_A`. The first four are property roles this layer cannot prove; the
 last five are topology and classification, which are not its subject
 matter at all.
+
+`BELONGS_TO` is the instructive one. It is what `HAS_LOCATION_ASPECT`
+would have been called if this layer were allowed to say what a
+containment *means* - and it is exactly the name an architecture test
+forbids here.
 
 The quantity's evidence type - voltage, current, power, cable section -
 stays reachable through the fact's **support**, so a later milestone has
@@ -77,6 +91,25 @@ declares a predicate.
 A designation entity and a quantity entity are associated when
 contributing observations of both occur on the **same document line** -
 same page, same block, same line index.
+
+### `compound_reference_designation` 1.0
+
+A designation entity and a structural-location entity are associated
+when contributing observations of both were produced from the **same
+token**, which happens only for a compound IEC 81346 reference
+designation such as `+E01-QA1`.
+
+Scope `TOKEN`, cardinality `ONE_SUBJECT_ONE_OBJECT`. This is the
+narrowest scope in the catalogue and the strongest co-occurrence this
+pipeline can record: the two observations did not merely appear near each
+other, they came from the same characters.
+
+That is why the objection below - which rules out a paragraph rule -
+does not apply to it. There is no window whose width depends on how the
+parser blocked a page; the unit is one token.
+
+A designation on the *same line* as `+E01-QA1` receives no location
+fact. It was not written inside it, and a line is not a place.
 
 ### Why no paragraph rule
 

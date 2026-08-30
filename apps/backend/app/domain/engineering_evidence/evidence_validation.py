@@ -29,6 +29,18 @@ from app.domain.engineering_evidence.evidence_models import (
 from app.domain.engineering_evidence.evidence_rules import RULES_BY_ID
 from app.domain.engineering_evidence.evidence_units import find_unit
 
+#: The evidence types whose value is a designation-like string.
+#:
+#: A location aspect is written exactly as a designation is - ``+E01`` -
+#: so it carries the same typed value. What distinguishes it is the
+#: evidence type, which is the field that says what was claimed.
+_DESIGNATION_TYPES = frozenset(
+    {
+        EvidenceType.DESIGNATION,
+        EvidenceType.LOCATION_ASPECT,
+    }
+)
+
 _QUANTITY_TYPES = frozenset(
     {
         EvidenceType.VOLTAGE_VALUE,
@@ -143,7 +155,7 @@ def _validate_value(
     able to read a guess as a measurement.
     """
 
-    if item.evidence_type is EvidenceType.DESIGNATION:
+    if item.evidence_type in _DESIGNATION_TYPES:
         if item.designation is None or item.quantity is not None:
             return EvidenceFailure(
                 code=EvidenceFailureCode.EVIDENCE_VALIDATION_FAILURE,

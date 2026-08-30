@@ -36,6 +36,7 @@ from app.domain.engineering_semantics.semantic_models import (
 )
 from app.domain.engineering_semantics.semantic_rules import (
     POWER_VALUE_EVIDENCE_TYPE,
+    IS_LOCATED_IN_RULE,
     RATED_POWER_RULE,
     SEMANTIC_RULES,
 )
@@ -316,7 +317,7 @@ def test_a_statement_carries_no_value_or_unit() -> None:
 def test_only_has_rated_power_is_declared() -> None:
     declared = {member.name for member in SemanticStatementType}
 
-    assert declared == {"HAS_RATED_POWER"}
+    assert declared == {"HAS_RATED_POWER", "IS_LOCATED_IN"}
     for forbidden in (
         "HAS_NOMINAL_VOLTAGE",
         "HAS_NOMINAL_CURRENT",
@@ -332,9 +333,12 @@ def test_only_has_rated_power_is_declared() -> None:
         assert forbidden not in declared
 
 
-def test_the_catalogue_holds_exactly_one_rule() -> None:
-    assert len(SEMANTIC_RULES) == 1
-    assert SEMANTIC_RULES[0] is RATED_POWER_RULE
+def test_the_catalogue_holds_exactly_the_declared_rules() -> None:
+    """One rule per meaning this platform can assign, and no other. The
+    catalogue is the whole of what the interpreter runs, so a rule that
+    is not here does not exist."""
+
+    assert list(SEMANTIC_RULES) == [RATED_POWER_RULE, IS_LOCATED_IN_RULE]
 
 
 def test_the_declared_evidence_type_matches_the_evidence_vocabulary(

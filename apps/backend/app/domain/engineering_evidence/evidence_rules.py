@@ -30,6 +30,7 @@ from enum import Enum
 
 from app.domain.engineering_evidence.evidence_models import EvidenceType
 from app.domain.engineering_evidence.evidence_patterns import (
+    DESIGNATION_IEC_81346_COMPOUND,
     DESIGNATION_PATTERNS,
 )
 
@@ -44,9 +45,10 @@ class RuleKind(str, Enum):
     """
     How a rule consumes tokens.
 
-    Two kinds are enough for this catalogue, and adding a third should be
-    a deliberate act: each kind is a shape of provenance the extractor
-    knows how to record exactly.
+    Each kind is a shape of provenance the extractor knows how to record
+    exactly, and adding one is a deliberate act for that reason: a kind
+    nobody taught the extractor to locate would produce evidence
+    pointing at the wrong characters.
     """
 
     # One token, matched whole: "T1".
@@ -54,6 +56,12 @@ class RuleKind(str, Enum):
     # A numeric token optionally followed by a unit token: "20 kV", or
     # one token carrying both: "20kV".
     QUANTITY = "quantity"
+    # A declared **segment** of one token: the location aspect of a
+    # compound IEC 81346 reference designation. Its own kind because the
+    # provenance shape differs from the other two - the observation
+    # covers part of a token, so the extractor must narrow the character
+    # range rather than take the token's own.
+    LOCATION_ASPECT = "location_aspect"
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +137,20 @@ CABLE_SECTION_RULE = ExtractionRule(
     ),
 )
 
+LOCATION_ASPECT_RULE = ExtractionRule(
+    rule_id="location_aspect_iec_81346",
+    rule_version="1.0",
+    evidence_type=EvidenceType.LOCATION_ASPECT,
+    kind=RuleKind.LOCATION_ASPECT,
+    description=(
+        "The location-aspect segment of a compound IEC 81346 reference "
+        "designation written as one token: the '+E01' of '+E01-QA1'. "
+        "Records only that a location aspect was written there - not "
+        "that the equipment is located in it, which is a meaning a "
+        "semantic rule assigns and an engineer reviews."
+    ),
+)
+
 # The catalogue, in execution order. Quantity rules are indistinguishable
 # from one another at match time - the unit decides which one applies -
 # so their order is irrelevant; the designation rule runs first only so
@@ -139,6 +161,7 @@ EXTRACTION_RULES: tuple[ExtractionRule, ...] = (
     CURRENT_RULE,
     POWER_RULE,
     CABLE_SECTION_RULE,
+    LOCATION_ASPECT_RULE,
 )
 
 RULES_BY_ID: dict[str, ExtractionRule] = {
@@ -204,3 +227,29 @@ def matches_designation(text: str) -> bool:
     """
 
     return any(pattern.match(text) for pattern in DESIGNATION_PATTERNS)
+
+
+def match_location_aspect(text: str) -> tuple[str, int] | None:
+    """
+    The location-aspect rule's matching policy.
+
+    Returns the location segment and how many characters follow it, or
+    ``None`` when the token is not a compound IEC 81346 reference
+    designation carrying a location aspect.
+
+    The trailing length is returned rather than computed by the caller
+    because it is what narrows the observation's character provenance
+    onto ``+E01`` - and provenance that the extractor derived for itself
+    is exactly the kind that quietly becomes approximate.
+
+    ``-QA1-XB2`` returns ``None``. It is a product within a product,
+    which is a different engineering statement that no rule here
+    interprets.
+    """
+
+    match = DESIGNATION_IEC_81346_COMPOUND.match(text)
+
+    if match is None:
+        return None
+
+    return match.group("location"), len(match.group("product"))

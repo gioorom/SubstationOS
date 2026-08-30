@@ -264,14 +264,21 @@ describe("the pipeline order matches the backend's ordering rule", () => {
     ]);
   });
 
-  it("declares exactly one semantic statement type", () => {
-    // Milestone 30.1 ships `has_rated_power` and nothing else. A second
-    // member here would mean the UI is offering meaning the backend
-    // never assigns.
-    expect(SEMANTIC_STATEMENT_TYPES).toEqual(["has_rated_power"]);
+  it("declares exactly the backend's semantic statement types", () => {
+    // Milestone 30.1 shipped `has_rated_power`; EPIC 32.P1 added
+    // `is_located_in`. A member here that the backend does not assign
+    // would mean the UI is offering meaning nothing produces - which is
+    // why this list is pinned rather than merely type-checked.
+    expect(SEMANTIC_STATEMENT_TYPES).toEqual([
+      "has_rated_power",
+      "is_located_in",
+    ]);
   });
 
-  it("declares exactly one fact predicate", () => {
-    expect(FACT_PREDICATES).toEqual(["has_associated_quantity"]);
+  it("declares exactly the backend's fact predicates", () => {
+    expect(FACT_PREDICATES).toEqual([
+      "has_associated_quantity",
+      "has_location_aspect",
+    ]);
   });
 });

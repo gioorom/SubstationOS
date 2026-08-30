@@ -7,10 +7,20 @@ false positives and which are false negatives.
 
 ## The matching rule
 
-Items are paired by **location** - page, paragraph, line and token range.
-Location is the only thing that can pair them: two observations at the
-same place are candidates to be the same observation, and two at
-different places are not, however similar their text.
+Items are paired by **location** - page, paragraph, line and token range
+- and then, within a location, by evidence type. Location is what can
+pair them at all: two observations at the same place are candidates to be
+the same observation, and two at different places are not, however
+similar their text.
+
+The second step exists because one token may carry more than one claim.
+``+E01-QA1`` is a designation, and the ``+E01`` inside it is a location
+aspect (EPIC 32.P1); both are recorded at that token, and each is judged
+against its own annotation. Where a location holds exactly one annotation
+and one observation that disagree about type, they stay paired and the
+disagreement is reported as such - a rule that recorded a voltage where a
+current was annotated should be told that, not told it missed one thing
+and invented another.
 
 A pair is a **true positive** only when everything agrees:
 
@@ -70,30 +80,112 @@ def evaluate_document(
     reports shows only real changes.
     """
 
-    expected_by_location = {
-        _location_of(item.provenance): item for item in document.expected
-    }
-    actual_by_location = {
-        _location_of(item.provenance): item for item in extracted
-    }
+    expected_by_location: dict[_Location, list[ExpectedObservation]] = {}
+    actual_by_location: dict[_Location, list[EngineeringEvidence]] = {}
+
+    for item in document.expected:
+        expected_by_location.setdefault(
+            _location_of(item.provenance), []
+        ).append(item)
+
+    for item in extracted:
+        actual_by_location.setdefault(
+            _location_of(item.provenance), []
+        ).append(item)
 
     results: list[EvidenceEvaluationResult] = []
 
     for location in sorted(
         set(expected_by_location) | set(actual_by_location)
     ):
-        expectation = expected_by_location.get(location)
-        actual = actual_by_location.get(location)
-
-        results.extend(
-            _classify(location, expectation, actual, provenance_policy)
-        )
+        for expectation, actual in _pair(
+            expected_by_location.get(location, []),
+            actual_by_location.get(location, []),
+        ):
+            results.extend(
+                _classify(location, expectation, actual, provenance_policy)
+            )
 
     return DocumentEvaluation(
         document_ref=document.document_ref,
         title=document.title,
         results=tuple(results),
     )
+
+
+def _pair(
+    expectations: list[ExpectedObservation],
+    actuals: list[EngineeringEvidence],
+) -> list[tuple[ExpectedObservation | None, EngineeringEvidence | None]]:
+    """
+    Which annotation is being compared with which observation, within one
+    location.
+
+    A location usually holds one of each and this is then a single pair.
+    It holds two when one token carries two claims - ``+E01-QA1`` is a
+    designation, and the ``+E01`` inside it is a location aspect - and
+    they must be judged separately: reporting one of them would let a
+    rule that produced neither look half right.
+
+    Paired **by evidence type first**, because that is what makes two
+    items at one place the same claim. What is left over is paired only
+    when exactly one annotation and exactly one observation remain, which
+    is the case where the extractor recorded the wrong type at the right
+    place - and that disagreement is worth naming, so it stays a pair and
+    ``_disagreement`` reports ``EVIDENCE_TYPE``. Anything still unpaired
+    after that is unpaired, which it is.
+
+    Ordered by evidence type so two runs over one document produce
+    identical reports.
+    """
+
+    remaining_expected = list(expectations)
+    remaining_actual = list(actuals)
+    pairs: list[
+        tuple[ExpectedObservation | None, EngineeringEvidence | None]
+    ] = []
+
+    for expectation in list(remaining_expected):
+        match = next(
+            (
+                item
+                for item in remaining_actual
+                if item.evidence_type is expectation.evidence_type
+            ),
+            None,
+        )
+
+        if match is None:
+            continue
+
+        remaining_expected.remove(expectation)
+        remaining_actual.remove(match)
+        pairs.append((expectation, match))
+
+    if len(remaining_expected) == 1 and len(remaining_actual) == 1:
+        pairs.append((remaining_expected[0], remaining_actual[0]))
+        remaining_expected.clear()
+        remaining_actual.clear()
+
+    pairs.extend((expectation, None) for expectation in remaining_expected)
+    pairs.extend((None, actual) for actual in remaining_actual)
+
+    return sorted(pairs, key=_pair_order)
+
+
+def _pair_order(
+    pair: tuple[ExpectedObservation | None, EngineeringEvidence | None],
+) -> str:
+    """The evidence type of whichever side is present - a total order over
+    pairs that does not depend on which side happened to be missing."""
+
+    expectation, actual = pair
+
+    if expectation is not None:
+        return expectation.evidence_type.value
+
+    assert actual is not None
+    return actual.evidence_type.value
 
 
 def _classify(

@@ -271,6 +271,7 @@ export const EVIDENCE_TYPES = [
   "current_value",
   "power_value",
   "cable_section_value",
+  "location_aspect",
 ] as const;
 
 export type EvidenceType = (typeof EVIDENCE_TYPES)[number];
@@ -281,6 +282,7 @@ export const EVIDENCE_TYPE_LABELS: Record<EvidenceType, string> = {
   current_value: "Corrente",
   power_value: "Potenza",
   cable_section_value: "Sezione cavo",
+  location_aspect: "Aspetto di ubicazione",
 };
 
 export const EVIDENCE_STATUSES = [
@@ -380,6 +382,7 @@ export interface EvidenceExtractionResult {
 export const ENTITY_TYPES = [
   "equipment_designation",
   "engineering_quantity",
+  "structural_location",
 ] as const;
 
 export type EngineeringEntityType = (typeof ENTITY_TYPES)[number];
@@ -387,6 +390,7 @@ export type EngineeringEntityType = (typeof ENTITY_TYPES)[number];
 export const ENTITY_TYPE_LABELS: Record<EngineeringEntityType, string> = {
   equipment_designation: "Sigla apparecchiatura",
   engineering_quantity: "Grandezza",
+  structural_location: "Ubicazione",
 };
 
 export const ENTITY_STATUSES = ["resolved", "ambiguous"] as const;
@@ -458,12 +462,18 @@ export interface EntityResolutionResult {
  * One member, and it means what it says: two entities appeared together
  * under a declared structural rule. It is **not** a rated property.
  */
-export const FACT_PREDICATES = ["has_associated_quantity"] as const;
+export const FACT_PREDICATES = [
+  "has_associated_quantity",
+  "has_location_aspect",
+] as const;
 
 export type FactPredicate = (typeof FACT_PREDICATES)[number];
 
 export const FACT_PREDICATE_LABELS: Record<FactPredicate, string> = {
   has_associated_quantity: "grandezza associata",
+  // Strutturale, non semantico: dice che la sigla composta contiene
+  // quell'aspetto di ubicazione, non che l'apparecchiatura vi si trovi.
+  has_location_aspect: "contiene aspetto di ubicazione",
 };
 
 export const FACT_STATUSES = ["constructed", "ambiguous"] as const;
@@ -565,7 +575,10 @@ export interface FactConstructionResult {
  * may be rated, test, insulation or busbar voltage, and the association
  * does not say which.
  */
-export const SEMANTIC_STATEMENT_TYPES = ["has_rated_power"] as const;
+export const SEMANTIC_STATEMENT_TYPES = [
+  "has_rated_power",
+  "is_located_in",
+] as const;
 
 export type SemanticStatementType =
   (typeof SEMANTIC_STATEMENT_TYPES)[number];
@@ -575,6 +588,7 @@ export const SEMANTIC_STATEMENT_LABELS: Record<
   string
 > = {
   has_rated_power: "ha potenza nominale",
+  is_located_in: "si trova in",
 };
 
 export const SEMANTIC_STATEMENT_STATUSES = [

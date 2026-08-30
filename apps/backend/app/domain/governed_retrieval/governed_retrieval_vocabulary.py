@@ -1,7 +1,7 @@
 """
 The closed vocabulary of Governed Structured Retrieval (EPIC 31.2).
 
-Five query types, eight match strategies, two scopes, three result kinds
+Five query types, eight match strategies, two scopes, four result kinds
 and three outcomes. Every one of them is a member of a closed enum
 because a retrieval whose whole value is that an engineer can read *why*
 an answer came back must not be able to produce a reason nobody planned.
@@ -111,13 +111,24 @@ class GovernedResultKind(str, Enum):
     What one result *is*.
 
     Mirrors the governed vocabulary rather than inventing a parallel one:
-    two node kinds and one edge kind produce three result kinds, and a
-    fourth would be a concept no promotion can create.
+    every node kind produces a result kind and every edge kind produces
+    ``RELATIONSHIP``, so a member with no governed counterpart would be a
+    concept no promotion can create.
+
+    Relationships of **different edge kinds share one result kind**. A
+    result says what it is - a governed relationship - and its
+    ``edge_kind`` says which one; splitting the vocabulary per edge kind
+    would make every future relationship a change to this enum and to
+    every consumer that switches on it.
     """
 
     ASSET = "asset"
     QUANTITY = "quantity"
     RELATIONSHIP = "relationship"
+
+    #: A governed structural location - ``+E01``. From a
+    #: ``STRUCTURAL_LOCATION`` node.
+    STRUCTURAL_LOCATION = "structural_location"
 
 
 class GovernedMatchOutcome(str, Enum):

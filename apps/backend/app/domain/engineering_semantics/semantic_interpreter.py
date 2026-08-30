@@ -4,9 +4,10 @@ facts into interpreted meaning.
 
 ```
 EngineeringFactSet
-   -> keep the facts whose predicate the rule reads
-   -> keep those whose object is a quantity of the required kind
-   -> group by subject; apply the rule's cardinality policy
+   -> for each rule in the catalogue:
+       -> keep the facts whose predicate the rule reads
+       -> keep those whose object carries the required evidence type
+       -> group by subject; apply the rule's cardinality policy
    -> EngineeringSemanticSet
 ```
 
@@ -51,7 +52,7 @@ from app.domain.engineering_semantics.semantic_policy import (
     SEMANTIC_POLICY_VERSION,
 )
 from app.domain.engineering_semantics.semantic_rules import (
-    RATED_POWER_RULE,
+    SEMANTIC_RULES,
     SemanticRule,
     rule_applies_to,
     satisfies_evidence_requirement,
@@ -77,7 +78,45 @@ def interpret_facts(
     an equal semantic set, every time.
     """
 
-    rule = RATED_POWER_RULE
+    statements: list[EngineeringSemanticStatement] = []
+    diagnostics: list[SemanticInterpretationDiagnostic] = []
+
+    # Each rule is applied to the whole fact set independently, in the
+    # catalogue's declared order. No rule reads another rule's
+    # statements: composing two meanings into a third is inference, and
+    # this layer assigns meaning to facts rather than reasoning over
+    # meanings.
+    for rule in SEMANTIC_RULES:
+        rule_statements, rule_diagnostics = _apply(fact_set, rule)
+        statements.extend(rule_statements)
+        diagnostics.extend(rule_diagnostics)
+
+    return EngineeringSemanticSet(
+        document_id=fact_set.document_id,
+        project_id=fact_set.project_id,
+        content_checksum=fact_set.content_checksum,
+        resolution_policy_version=fact_set.resolution_policy_version,
+        fact_policy_version=fact_set.fact_policy_version,
+        semantic_policy_version=semantic_policy_version,
+        statements=tuple(statements),
+        diagnostics=tuple(diagnostics),
+    )
+
+
+def _apply(
+    fact_set: EngineeringFactSet, rule: SemanticRule
+) -> tuple[
+    list[EngineeringSemanticStatement],
+    list[SemanticInterpretationDiagnostic],
+]:
+    """
+    One rule, over one fact set.
+
+    Grouped by subject, because every cardinality policy in this
+    catalogue is a statement about how many objects one subject may
+    carry.
+    """
+
     candidates: dict[str, list[EngineeringFact]] = {}
 
     for fact in fact_set.facts:
@@ -99,7 +138,7 @@ def interpret_facts(
     diagnostics: list[SemanticInterpretationDiagnostic] = []
 
     for subject_key, facts in candidates.items():
-        if len(facts) > rule.max_supporting_quantities:
+        if len(facts) > rule.max_supporting_objects:
             diagnostics.append(
                 SemanticInterpretationDiagnostic(
                     reason=(
@@ -115,16 +154,7 @@ def interpret_facts(
 
         statements.append(_statement(fact_set, rule, facts[0]))
 
-    return EngineeringSemanticSet(
-        document_id=fact_set.document_id,
-        project_id=fact_set.project_id,
-        content_checksum=fact_set.content_checksum,
-        resolution_policy_version=fact_set.resolution_policy_version,
-        fact_policy_version=fact_set.fact_policy_version,
-        semantic_policy_version=semantic_policy_version,
-        statements=tuple(statements),
-        diagnostics=tuple(diagnostics),
-    )
+    return statements, diagnostics
 
 
 def _object_evidence_types(fact: EngineeringFact) -> tuple[str, ...]:

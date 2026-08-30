@@ -366,7 +366,8 @@ def test_the_statement_vocabulary_is_closed_and_declared_once() -> None:
     )
 
     assert [member.name for member in SemanticStatementType] == [
-        "HAS_RATED_POWER"
+        "HAS_RATED_POWER",
+        "IS_LOCATED_IN",
     ]
 
     declaring: list[str] = []

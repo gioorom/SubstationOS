@@ -33,6 +33,16 @@ ingestion's. The value is asserted equal to ``EvidenceType.POWER_VALUE``
 by test, so the two cannot drift apart while the production dependency
 stays absent.
 
+## Why the location rule is not a proximity rule
+
+`IS_LOCATED_IN` is the first rule here whose object is not a quantity,
+and the first that could be mistaken for topology. It is not. Its
+supporting fact is `HAS_LOCATION_ASPECT`, which is produced only from a
+**single token** - the two entities came from the same characters, not
+from the same line, page or drawing. There is no window to widen and no
+threshold to tune, which is precisely what makes the standard's reading
+of the syntax the whole of the claim.
+
 ## Why power, and why only power
 
 A `kVA` figure written beside a designation is a rating far more reliably
@@ -62,6 +72,11 @@ from app.domain.engineering_semantics.semantic_statement_types import (
 # ``EvidenceType.POWER_VALUE.value`` by test.
 POWER_VALUE_EVIDENCE_TYPE = "power_value"
 
+# The evidence type a location aspect carries on a fact's support.
+# Declared as a string for the same reason, and asserted equal to
+# ``EvidenceType.LOCATION_ASPECT.value`` by test.
+LOCATION_ASPECT_EVIDENCE_TYPE = "location_aspect"
+
 
 @dataclass(frozen=True, slots=True)
 class SemanticRule:
@@ -74,11 +89,15 @@ class SemanticRule:
     and a bump creates a new semantic set rather than reinterpreting the
     old one.
 
-    ``max_supporting_quantities`` is the validation policy in data form.
-    One: a subject associated with two power quantities receives no
-    statement, because a fact carries entity keys rather than values -
-    this layer cannot see whether the two figures agree, and reading them
-    would mean reaching into entities, which is not its business.
+    ``max_supporting_objects`` is the validation policy in data form.
+    One, for both rules that ship: a subject associated with two power
+    quantities receives no statement, because a fact carries entity keys
+    rather than values - this layer cannot see whether the two figures
+    agree, and reading them would mean reaching into entities, which is
+    not its business. A subject written with two different location
+    aspects is refused for a stricter reason: the document contradicted
+    itself about where the equipment is, and choosing a side is not
+    interpretation.
     """
 
     rule_id: str
@@ -86,7 +105,7 @@ class SemanticRule:
     supported_predicate: FactPredicate
     required_evidence_types: tuple[str, ...]
     statement_type: SemanticStatementType
-    max_supporting_quantities: int
+    max_supporting_objects: int
     description: str
 
 
@@ -96,7 +115,7 @@ RATED_POWER_RULE = SemanticRule(
     supported_predicate=FactPredicate.HAS_ASSOCIATED_QUANTITY,
     required_evidence_types=(POWER_VALUE_EVIDENCE_TYPE,),
     statement_type=SemanticStatementType.HAS_RATED_POWER,
-    max_supporting_quantities=1,
+    max_supporting_objects=1,
     description=(
         "A designation associated with exactly one power quantity has "
         "that quantity as its rated power. Two or more associated power "
@@ -105,7 +124,27 @@ RATED_POWER_RULE = SemanticRule(
     ),
 )
 
-SEMANTIC_RULES: tuple[SemanticRule, ...] = (RATED_POWER_RULE,)
+IS_LOCATED_IN_RULE = SemanticRule(
+    rule_id="location_from_compound_reference_designation",
+    rule_version="1.0",
+    supported_predicate=FactPredicate.HAS_LOCATION_ASPECT,
+    required_evidence_types=(LOCATION_ASPECT_EVIDENCE_TYPE,),
+    statement_type=SemanticStatementType.IS_LOCATED_IN,
+    max_supporting_objects=1,
+    description=(
+        "A designation written as a compound IEC 81346 reference "
+        "designation is located in the location its '+' aspect names. "
+        "The meaning is the standard's: '+E01-QA1' designates an object "
+        "in the context of location '+E01'. Two different location "
+        "aspects for one subject produce no statement - the document "
+        "disagreed with itself, and this rule does not choose."
+    ),
+)
+
+SEMANTIC_RULES: tuple[SemanticRule, ...] = (
+    RATED_POWER_RULE,
+    IS_LOCATED_IN_RULE,
+)
 
 RULES_BY_ID: dict[str, SemanticRule] = {
     rule.rule_id: rule for rule in SEMANTIC_RULES

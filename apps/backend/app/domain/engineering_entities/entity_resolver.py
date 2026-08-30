@@ -46,6 +46,7 @@ from app.domain.engineering_entities.entity_policy import (
 )
 from app.domain.engineering_entities.entity_resolution_rules import (
     DESIGNATION_GROUPING_RULE,
+    LOCATION_ASPECT_GROUPING_RULE,
     QUANTITY_IDENTITY_RULE,
     ResolutionRule,
     designation_grouping_key,
@@ -91,8 +92,19 @@ def resolve_entities(
     """
 
     entities: list[EngineeringEntity] = []
-    entities.extend(_resolve_designations(evidence_set))
+    entities.extend(
+        _resolve_designation_valued(
+            evidence_set, EvidenceType.DESIGNATION, DESIGNATION_GROUPING_RULE
+        )
+    )
     entities.extend(_resolve_quantities(evidence_set))
+    entities.extend(
+        _resolve_designation_valued(
+            evidence_set,
+            EvidenceType.LOCATION_ASPECT,
+            LOCATION_ASPECT_GROUPING_RULE,
+        )
+    )
 
     return EngineeringEntitySet(
         document_id=evidence_set.document_id,
@@ -104,20 +116,34 @@ def resolve_entities(
     )
 
 
-def _resolve_designations(
+def _resolve_designation_valued(
     evidence_set: EngineeringEvidenceSet,
+    evidence_type: EvidenceType,
+    rule: ResolutionRule,
 ) -> list[EngineeringEntity]:
     """
     Observations sharing the declared grouping key become one entity.
 
     Grouped in **first-appearance order**, so an entity set renders the
     same way twice and a diff between two sets shows only real changes.
+
+    One function for both designation-valued kinds because they group by
+    the same declared key. That is not a convenience: a designation and
+    a location aspect are the same kind of thing to a resolver - a
+    written symbol - and giving them separate grouping logic would be an
+    invitation for the two to drift apart. What differs is the rule, and
+    the rule is a parameter.
+
+    **The two never mix.** The evidence type selects the observations and
+    the rule id is part of every entity key, so ``+E01`` observed as a
+    location aspect and ``+E01`` observed as a bare designation resolve
+    to two entities, which is correct: they are different claims.
     """
 
     groups: dict[tuple[str, str, str], list[EngineeringEvidence]] = {}
 
     for item in evidence_set.evidence:
-        if item.evidence_type is not EvidenceType.DESIGNATION:
+        if item.evidence_type is not evidence_type:
             continue
 
         if item.designation is None:
@@ -136,7 +162,7 @@ def _resolve_designations(
     return [
         _entity(
             evidence_set,
-            DESIGNATION_GROUPING_RULE,
+            rule,
             items,
             discriminator="|".join(key),
             designation=items[0].designation,

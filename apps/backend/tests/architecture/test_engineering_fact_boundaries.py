@@ -364,7 +364,8 @@ def test_the_predicate_vocabulary_is_closed_and_declared_once() -> None:
     from app.domain.engineering_facts.fact_predicates import FactPredicate
 
     assert [member.name for member in FactPredicate] == [
-        "HAS_ASSOCIATED_QUANTITY"
+        "HAS_ASSOCIATED_QUANTITY",
+        "HAS_LOCATION_ASPECT",
     ]
 
     declaring: list[str] = []

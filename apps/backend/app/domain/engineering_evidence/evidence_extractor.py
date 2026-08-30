@@ -71,9 +71,11 @@ from app.domain.engineering_evidence.evidence_quantities import (
 )
 from app.domain.engineering_evidence.evidence_rules import (
     DESIGNATION_RULE,
+    LOCATION_ASPECT_RULE,
     QUANTITY_RULE_BY_TYPE,
     ExtractionRule,
     TrimmedToken,
+    match_location_aspect,
     matches_designation,
     strip_boundary_punctuation,
 )
@@ -173,6 +175,19 @@ def _extract_from_line(
         if designation is not None:
             found.append(designation)
 
+            # The same token may carry a second, narrower observation.
+            # Emitted **beside** the designation rather than instead of
+            # it: ``+E01-QA1`` is a designation that was written, and
+            # ``+E01`` is a location aspect that was written inside it.
+            # Both are true, and the evidence keys differ because the
+            # rule and the evidence type are part of the key.
+            location = _match_location_aspect(
+                canonical_text, section, paragraph, line, tokens, index
+            )
+
+            if location is not None:
+                found.append(location)
+
         index += 1
 
     return found
@@ -211,6 +226,62 @@ def _match_designation(
         rule=DESIGNATION_RULE,
         status=EvidenceStatus.OBSERVED,
         designation=DesignationValue(normalized=candidate.text.upper()),
+    )
+
+
+def _match_location_aspect(
+    canonical_text: CanonicalTextDocument,
+    section: CanonicalTextSection,
+    paragraph: CanonicalTextParagraph,
+    line: CanonicalTextLine,
+    tokens: tuple[CanonicalTextToken, ...],
+    index: int,
+) -> EngineeringEvidence | None:
+    """
+    The location-aspect rule, applied to one token.
+
+    The only observation in this context that covers **part** of a
+    token, and the whole of the care here is in saying so exactly: the
+    trim's ``right`` offset is widened by the length of the product
+    segment, so ``_provenance`` narrows the character range onto
+    ``+E01`` and the item's ``source_text`` is ``+E01``. An auditor who
+    follows this evidence back to the document lands on the four
+    characters that produced it, not on the whole token.
+
+    Consumes no token: the caller has already recorded the designation
+    and advances past it either way.
+    """
+
+    token = tokens[index]
+    candidate = strip_boundary_punctuation(token.text)
+
+    if not candidate.text:
+        return None
+
+    matched = match_location_aspect(candidate.text)
+
+    if matched is None:
+        return None
+
+    location_text, product_length = matched
+
+    return _build(
+        canonical_text=canonical_text,
+        section=section,
+        paragraph=paragraph,
+        line=line,
+        tokens=tokens[index : index + 1],
+        trims=(
+            TrimmedToken(
+                text=location_text,
+                left=candidate.left,
+                right=candidate.right + product_length,
+            ),
+        ),
+        token_start=index,
+        rule=LOCATION_ASPECT_RULE,
+        status=EvidenceStatus.OBSERVED,
+        designation=DesignationValue(normalized=location_text.upper()),
     )
 
 

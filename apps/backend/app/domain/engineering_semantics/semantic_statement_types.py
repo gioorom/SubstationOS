@@ -1,8 +1,10 @@
 """
-The semantic statement vocabulary (Milestone 30.1) - the **one closed
-list** of engineering meanings this system can assign.
+The semantic statement vocabulary (Milestone 30.1, extended by EPIC
+32.P1) - the **one closed list** of engineering meanings this system can
+assign.
 
-Exactly one member. That is the design, not a placeholder.
+Two members. Each arrived with the evidence that justifies it, and
+neither was added in anticipation of a milestone that wanted it.
 
 ## Why this layer exists at all
 
@@ -25,7 +27,13 @@ for no other reason.
 
 `HAS_NOMINAL_VOLTAGE`, `HAS_NOMINAL_CURRENT`, `HAS_CABLE_SECTION`,
 `CONNECTED_TO`, `PROTECTS`, `SUPPLIES`, `IS_TRANSFORMER`, `IS_BREAKER`,
-`BELONGS_TO`, `IS_PRIMARY_EQUIPMENT`.
+`IS_PRIMARY_EQUIPMENT`.
+
+`CONNECTED_TO` is the one worth naming twice. `IS_LOCATED_IN` may look
+like a step towards it and is not: two objects sharing a location are in
+the same place, which is not a circuit. Connectivity needs evidence that
+says two objects are joined, and no rule in this repository observes
+that.
 
 The voltage and current ones look like the natural next step and are not:
 a voltage beside a designation may be a rated voltage, a test voltage, an
@@ -56,3 +64,20 @@ class SemanticStatementType(str, Enum):
     # power." Assigned only where the supporting fact's object is a
     # power observation and exactly one such quantity is associated.
     HAS_RATED_POWER = "has_rated_power"
+
+    # "This equipment is located in this structural location." Assigned
+    # only where the supporting fact is a `HAS_LOCATION_ASPECT` reading
+    # of one compound IEC 81346 reference designation.
+    #
+    # The meaning comes from the standard, not from this platform:
+    # IEC 81346-1 assigns ``+`` to the location aspect, so ``+E01-QA1``
+    # designates the object ``-QA1`` **in the context of location
+    # ``+E01``**. That is a documented, published reading of a syntax the
+    # document chose to use - not a guess about what two nearby strings
+    # might have to do with each other.
+    #
+    # It says nothing about what kind of location ``+E01`` is, nothing
+    # about what is connected to what, and nothing about whether two
+    # objects in one location are electrically related. Those are
+    # different claims needing different evidence.
+    IS_LOCATED_IN = "is_located_in"

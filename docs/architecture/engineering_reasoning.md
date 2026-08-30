@@ -232,8 +232,15 @@ package is a caller-supplied claim about what governed knowledge says.
 
 ## 11. Current scope
 
-One rule: `governed_quantity_consistency` v1.0, over `HAS_RATED_POWER` -
-the only relationship kind governed semantics currently produces.
+One rule: `governed_quantity_consistency` v1.0, over `HAS_RATED_POWER`.
+
+> **Unchanged by EPIC 32.P1.** That milestone added a second governed
+> relationship - `IS_LOCATED_IN`, between an asset and a structural
+> location - so `HAS_RATED_POWER` is no longer the only relationship kind
+> governed semantics produces. **No reasoning rule reads the new one**,
+> and this context was not modified. Relationship reasoning is EPIC
+> 32.2's subject; see below for the conditions it must meet.
+
 
 This is not a rule engine, a DSL or a plug-in registry. One rule, one
 version, one identity. The quantity kind is a named constant
@@ -263,3 +270,37 @@ Both are reasonable products. Both cross AF-REASON-003.
 
 Either needs its own ADR and, almost certainly, its own explicitly
 **ungoverned** surface - never a write into the governed graph.
+
+### The second pressure: relationship reasoning
+
+EPIC 32.2 stopped with `BLOCKED_BY_ONTOLOGY` because the governed graph
+was **depth-1 bipartite** - every edge ran from an asset to a quantity,
+so no two-hop path could exist under any data. EPIC 32.P1 removed that
+blocker by adding `IS_LOCATED_IN`
+([ADR-0030](adr/0030-governed-structural-relationship-semantics.md)).
+
+A path now exists:
+
+```
++E01-QA1 --IS_LOCATED_IN--> +E01 <--IS_LOCATED_IN-- +E01-QB1
+```
+
+**It is traversable and it means nothing on its own.** Two devices are
+in the same place; a substation location routinely holds equipment from
+several unrelated circuits. Graph reachability is not engineering
+meaning, and the day a rule reads that path it must justify its
+conclusion on engineering grounds, under its own rule id and version.
+
+Four constraints a relationship rule inherits from the ontology as it
+stands:
+
+- **No direction.** Nothing in the governed vocabulary encodes electrical
+  direction. Edge orientation records which endpoint is the subject of a
+  reviewed statement, and reading power flow from it would be inventing
+  it.
+- **No state.** Nothing says whether anything is energised, closed or in
+  service.
+- **No connectivity.** Containment is not a circuit.
+- **No complete world.** The graph is a partial projection of what
+  reviewers approved, so a missing edge is insufficient knowledge - never
+  a negative conclusion.

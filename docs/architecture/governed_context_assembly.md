@@ -420,8 +420,10 @@ makes them a measurement of assembly rather than of a read.
 
 ## 19. Known limits
 
-- **Two node kinds and one edge kind**, inherited from the governed
-  graph. See [knowledge_graph.md](knowledge_graph.md) §3.
+- **Three node kinds and two edge kinds**, inherited from the governed
+  graph. See [knowledge_graph.md](knowledge_graph.md) §3. Assembly
+  required no change to carry the structural relationship added by EPIC
+  32.P1: it selects governed items and reinterprets none of them.
 - **No cross-document entity resolution.** Two `TR1`s stay two items.
 - **Project visibility is filtering, not enforcement**, inherited from
   EPIC 30.3.

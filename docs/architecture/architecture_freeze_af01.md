@@ -85,6 +85,24 @@ retrieval_bridge → canonicalization, engineering_intent
 
 ## 5. Authoritative Knowledge Path
 
+> **Vocabulary growth under EPIC 32.P1.** The path below is unchanged;
+> what it carries grew. The first governed relationship between two
+> **structural** objects — `IS_LOCATED_IN`, from the location aspect of a
+> compound IEC 81346 reference designation — travels every stage shown
+> here, and added no stage, no writer and no bypass. Promotion required
+> no code change at all: it is a pure function of the vocabulary tables,
+> so a relationship that obeys them is admitted by the rules already in
+> place.
+>
+> This is the first change to the **shape** of the governed graph since
+> this freeze was written, and §22 already classifies it as ordinary
+> evolution: *"a new governed node or edge kind whose rule exists"*. No
+> invariant was weakened, bypassed, renamed away or reinterpreted, and
+> AF-DEP-001 gained no new direction — the new capability lives in
+> contexts the freeze already maps. See
+> [ADR-0030](adr/0030-governed-structural-relationship-semantics.md).
+
+
 ```
 Document
     ↓  document_ingestion, document_identity
@@ -406,7 +424,8 @@ string `structured_retrieval` is not banned, because
 | Project-level authorization is filtering, not enforcement | **No** — orthogonal to the knowledge invariants; any authenticated engineer may read any project, unchanged since EPIC 30.3 |
 | `analysis.entities_found` always `0` | **No** — a response field surviving its cause |
 | `scripts/benchmarks` imports one governed fixture from `tests/**` | **No** — a benchmark, contrary to its own docstring; not runtime |
-| No cross-document entity resolution | **No** — an explicit stated limit; AF-AMB-001 depends on it being absent |
+| No cross-document entity resolution | **No** — an explicit stated limit; AF-AMB-001 depends on it being absent. EPIC 32.P1 did not change it: two documents writing `+E01` are two governed locations |
+| Governed graph now has two-hop asset-to-asset paths | **No** — EPIC 32.P1's `IS_LOCATED_IN` makes `asset → location ← asset` traversable. Reachability is not meaning, and no rule reads it; see ADR-0030 |
 | Rebuild is synchronous and unbounded | **No** — operational |
 | Governed graph is unversioned per project | **No** — one global generation |
 

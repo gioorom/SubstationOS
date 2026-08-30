@@ -449,9 +449,12 @@ platform-wide change to authorization, not a retrieval change.
 
 ## 16. Known limits
 
-- **Two node kinds and one edge kind**, because that is what governed
+- **Three node kinds and two edge kinds**, because that is what governed
   semantics produces. Retrieval inherits the catalogue and invents
-  nothing.
+  nothing. `IS_LOCATED_IN` (EPIC 32.P1) is retrieved by the existing
+  typed `RelationshipQuery`; no new query type was needed, and
+  `GovernedResultKind` gained one member so a structural location can be
+  reported as what it is.
 - **No cross-document entity resolution** — see §10. Outside this
   bounded responsibility by design.
 - **No attribute-bag search**, and no governed replacement for it. §11

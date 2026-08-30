@@ -57,8 +57,10 @@ from app.domain.engineering_entities.entity_models import (
     EvidenceReference,
 )
 from app.domain.engineering_facts.fact_construction_rules import (
-    SAME_LINE_ASSOCIATION_RULE,
+    CONSTRUCTION_RULES,
+    CardinalityPolicy,
     FactConstructionRule,
+    StructuralScope,
 )
 from app.domain.engineering_facts.fact_models import (
     AmbiguityReason,
@@ -74,7 +76,11 @@ from app.domain.engineering_facts.fact_policy import (
     FACT_POLICY_VERSION,
 )
 
-_Line = tuple[int, int, int]
+#: The structural unit an index is keyed by. A line is three numbers; a
+#: token is those three plus its own start and end, which is why one
+#: variable-length tuple types both rather than two aliases that would
+#: have to be kept in step.
+_Unit = tuple[int, ...]
 
 # An entity's own status decides the fact's, exactly as an evidence
 # status decided the entity's. Grouping never adds certainty: a fact
@@ -97,31 +103,76 @@ def construct_facts(
     produce an equal fact set, every time.
     """
 
-    rule = SAME_LINE_ASSOCIATION_RULE
-    subjects = _by_line(entity_set, rule.subject_type)
-    objects = _by_line(entity_set, rule.object_type)
+    facts: list[EngineeringFact] = []
+    diagnostics: list[FactConstructionDiagnostic] = []
+
+    # The catalogue is applied in its declared order, and each rule is
+    # applied independently. A rule never sees another rule's facts:
+    # composing two associations into a third is inference, and it
+    # belongs to a reasoning layer that reads governed knowledge, not to
+    # a constructor that reads entities.
+    for rule in CONSTRUCTION_RULES:
+        rule_facts, rule_diagnostics = _apply(entity_set, rule)
+        facts.extend(rule_facts)
+        diagnostics.extend(rule_diagnostics)
+
+    return EngineeringFactSet(
+        document_id=entity_set.document_id,
+        project_id=entity_set.project_id,
+        content_checksum=entity_set.content_checksum,
+        resolution_policy_version=entity_set.resolution_policy_version,
+        fact_policy_version=fact_policy_version,
+        facts=tuple(facts),
+        diagnostics=tuple(diagnostics),
+    )
+
+
+def _apply(
+    entity_set: EngineeringEntitySet, rule: FactConstructionRule
+) -> tuple[list[EngineeringFact], list[FactConstructionDiagnostic]]:
+    """
+    One rule, over one entity set.
+
+    The cardinality policy decides what an over-full unit means, and the
+    two policies mean different things by it. On a line, two designations
+    and a quantity is a **real ambiguity worth reporting** - the document
+    said something and this system could not tell what. Within a token
+    the same shape cannot arise from any document, so there is nothing to
+    report and no diagnostic is produced: a diagnostic for an impossible
+    state would be noise that outlived everyone who could explain it.
+    """
+
+    subjects = _by_unit(entity_set, rule.subject_type, rule.scope)
+    objects = _by_unit(entity_set, rule.object_type, rule.scope)
 
     support: dict[tuple[str, str], list[FactSupport]] = {}
     pairs: dict[tuple[str, str], tuple] = {}
     diagnostics: list[FactConstructionDiagnostic] = []
 
-    for line in sorted(set(subjects) & set(objects)):
-        line_subjects = subjects[line]
-        line_objects = objects[line]
+    for unit in sorted(set(subjects) & set(objects)):
+        unit_subjects = subjects[unit]
+        unit_objects = objects[unit]
 
-        if len(line_subjects) > 1:
-            # Which designation the quantity belongs to cannot be
-            # determined. Guessing would put a rating on the wrong
-            # equipment - invisible in a graph, expensive in a
-            # substation.
-            diagnostics.append(
-                _diagnostic(line, line_subjects, line_objects)
-            )
+        if len(unit_subjects) > 1:
+            # Which subject the object belongs to cannot be determined.
+            # Guessing would put a rating on the wrong equipment -
+            # invisible in a graph, expensive in a substation.
+            if rule.scope is StructuralScope.LINE:
+                diagnostics.append(
+                    _diagnostic(unit, unit_subjects, unit_objects)
+                )
+
             continue
 
-        subject, subject_references = next(iter(line_subjects.values()))
+        if (
+            rule.cardinality is CardinalityPolicy.ONE_SUBJECT_ONE_OBJECT
+            and len(unit_objects) != 1
+        ):
+            continue
 
-        for obj, object_references in line_objects.values():
+        subject, subject_references = next(iter(unit_subjects.values()))
+
+        for obj, object_references in unit_objects.values():
             pair = (subject.entity_key, obj.entity_key)
             pairs.setdefault(pair, (subject, obj))
             support.setdefault(pair, []).extend(
@@ -135,37 +186,25 @@ def construct_facts(
                 ]
             )
 
-    facts = tuple(
-        _fact(
-            entity_set,
-            rule,
-            subject,
-            obj,
-            tuple(support[pair]),
-        )
+    facts = [
+        _fact(entity_set, rule, subject, obj, tuple(support[pair]))
         for pair, (subject, obj) in pairs.items()
-    )
+    ]
 
-    return EngineeringFactSet(
-        document_id=entity_set.document_id,
-        project_id=entity_set.project_id,
-        content_checksum=entity_set.content_checksum,
-        resolution_policy_version=entity_set.resolution_policy_version,
-        fact_policy_version=fact_policy_version,
-        facts=facts,
-        diagnostics=tuple(diagnostics),
-    )
+    return facts, diagnostics
 
 
-def _by_line(
-    entity_set: EngineeringEntitySet, entity_type: EntityType
+def _by_unit(
+    entity_set: EngineeringEntitySet,
+    entity_type: EntityType,
+    scope: StructuralScope,
 ) -> dict[
-    _Line,
+    _Unit,
     dict[str, tuple[EngineeringEntity, list[EvidenceReference]]],
 ]:
     """
-    Every entity of a type, indexed by each line its observations occur
-    on, and then by entity.
+    Every entity of a type, indexed by each structural unit its
+    observations occur in, and then by entity.
 
     Indexed **by entity rather than by observation** on purpose. A
     designation written twice on one line - ``Trasformatore TR1, sigla
@@ -179,24 +218,43 @@ def _by_line(
     """
 
     index: dict[
-        _Line,
+        _Unit,
         dict[str, tuple[EngineeringEntity, list[EvidenceReference]]],
     ] = {}
 
     for entity in entity_set.of_type(entity_type):
         for reference in entity.evidence:
-            line = (
-                reference.page_number,
-                reference.paragraph_index,
-                reference.line_index,
-            )
-            on_line = index.setdefault(line, {})
-            _, references = on_line.setdefault(
+            unit = _unit_key(reference, scope)
+            in_unit = index.setdefault(unit, {})
+            _, references = in_unit.setdefault(
                 entity.entity_key, (entity, [])
             )
             references.append(reference)
 
     return index
+
+
+def _unit_key(reference: EvidenceReference, scope: StructuralScope) -> _Unit:
+    """
+    Which structural unit one observation occupies.
+
+    Both keys are read straight off the reference, which recorded them at
+    extraction time. Nothing is recomputed and nothing is approximated -
+    a unit key derived by this module would be a second opinion about
+    where an observation was, and the first one is the only one entitled
+    to an opinion.
+    """
+
+    line = (
+        reference.page_number,
+        reference.paragraph_index,
+        reference.line_index,
+    )
+
+    if scope is StructuralScope.LINE:
+        return line
+
+    return line + (reference.token_start, reference.token_end)
 
 
 def _fact(
@@ -250,11 +308,11 @@ def _support(
 
 
 def _diagnostic(
-    line: _Line,
+    line: _Unit,
     subjects: dict,
     objects: dict,
 ) -> FactConstructionDiagnostic:
-    page, paragraph, line_index = line
+    page, paragraph, line_index = line[:3]
 
     return FactConstructionDiagnostic(
         reason=AmbiguityReason.MULTIPLE_SUBJECTS,

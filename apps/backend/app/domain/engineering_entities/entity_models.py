@@ -72,6 +72,16 @@ class EntityType(str, Enum):
     # A quantity observed in a document. Says nothing about what it is a
     # property *of*.
     ENGINEERING_QUANTITY = "engineering_quantity"
+    # A location aspect observed inside a compound IEC 81346 reference
+    # designation - the ``+E01`` of ``+E01-QA1``.
+    #
+    # Deliberately **not** ``BAY``, ``PANEL`` or ``ROOM``. IEC 81346
+    # assigns ``+`` to the location aspect and says nothing about what
+    # kind of location it is; deciding that ``+E01`` names a bay is the
+    # same classification this catalogue refuses everywhere else. It is
+    # a structural object the documents place equipment *in*, and that
+    # is all it claims to be.
+    STRUCTURAL_LOCATION = "structural_location"
 
 
 class EntityStatus(str, Enum):

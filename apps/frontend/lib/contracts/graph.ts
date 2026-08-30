@@ -18,14 +18,19 @@ import type { PageMetadata } from "./pagination";
 /**
  * Two node kinds, because governed semantics produces two entity types.
  *
- * No `voltage`, `protection`, `connection`, `function` or `location`:
- * each would be inventing engineering ontology, and the semantics
- * context refuses to interpret voltage upstream for exactly that reason.
+ * No `voltage`, `protection`, `connection` or `function`: each would be
+ * inventing engineering ontology, and the semantics context refuses to
+ * interpret voltage upstream for exactly that reason.
  * See `knowledge_graph.md` for what each would need first.
+ *
+ * `structural_location` (EPIC 32.P1) is a place equipment is written
+ * *inside* - the `+E01` of `+E01-QA1` - and not a classification of
+ * that place.
  */
 export const GRAPH_NODE_KINDS = [
   "engineering_asset",
   "engineering_quantity",
+  "structural_location",
 ] as const;
 
 export type GraphNodeKind = (typeof GRAPH_NODE_KINDS)[number];
@@ -33,14 +38,21 @@ export type GraphNodeKind = (typeof GRAPH_NODE_KINDS)[number];
 export const GRAPH_NODE_KIND_LABELS: Record<GraphNodeKind, string> = {
   engineering_asset: "Apparecchiatura",
   engineering_quantity: "Grandezza",
+  // "Ubicazione" and not "Scomparto": IEC 81346 assegna "+" all'aspetto
+  // di ubicazione senza dire di che tipo di luogo si tratti.
+  structural_location: "Ubicazione",
 };
 
-export const GRAPH_EDGE_KINDS = ["has_rated_power"] as const;
+export const GRAPH_EDGE_KINDS = [
+  "has_rated_power",
+  "is_located_in",
+] as const;
 
 export type GraphEdgeKind = (typeof GRAPH_EDGE_KINDS)[number];
 
 export const GRAPH_EDGE_KIND_LABELS: Record<GraphEdgeKind, string> = {
   has_rated_power: "ha potenza nominale",
+  is_located_in: "si trova in",
 };
 
 /**

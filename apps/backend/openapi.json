@@ -5767,7 +5767,8 @@
     "description": "The deliberately minimal catalogue this milestone supports.\n\nThere is **no** transformer, breaker, current transformer, voltage\ntransformer, relay or cable here. Deciding that ``T1`` names a\ntransformer is a classification, and a classification needs a rule\nsomebody reviewed and a vocabulary somebody governs. Naming those\nclasses now would let the shape of the model imply knowledge the\nsystem does not have.",
     "enum": [
      "equipment_designation",
-     "engineering_quantity"
+     "engineering_quantity",
+     "structural_location"
     ],
     "title": "EntityType",
     "type": "string"
@@ -6344,7 +6345,8 @@
      "voltage_value",
      "current_value",
      "power_value",
-     "cable_section_value"
+     "cable_section_value",
+     "location_aspect"
     ],
     "title": "EvidenceType",
     "type": "string"
@@ -6493,7 +6495,8 @@
    "FactPredicate": {
     "description": "Everything a fact may assert.",
     "enum": [
-     "has_associated_quantity"
+     "has_associated_quantity",
+     "has_location_aspect"
     ],
     "title": "FactPredicate",
     "type": "string"
@@ -7148,11 +7151,12 @@
     "type": "object"
    },
    "GovernedResultKind": {
-    "description": "What one result *is*.\n\nMirrors the governed vocabulary rather than inventing a parallel one:\ntwo node kinds and one edge kind produce three result kinds, and a\nfourth would be a concept no promotion can create.",
+    "description": "What one result *is*.\n\nMirrors the governed vocabulary rather than inventing a parallel one:\nevery node kind produces a result kind and every edge kind produces\n``RELATIONSHIP``, so a member with no governed counterpart would be a\nconcept no promotion can create.\n\nRelationships of **different edge kinds share one result kind**. A\nresult says what it is - a governed relationship - and its\n``edge_kind`` says which one; splitting the vocabulary per edge kind\nwould make every future relationship a change to this enum and to\nevery consumer that switches on it.",
     "enum": [
      "asset",
      "quantity",
-     "relationship"
+     "relationship",
+     "structural_location"
     ],
     "title": "GovernedResultKind",
     "type": "string"
@@ -7349,9 +7353,10 @@
     "type": "object"
    },
    "GraphEdgeKind": {
-    "description": "The governed engineering relationships.\n\nOne member, from the one semantic statement type that exists. An edge\nkind is added here only when a semantic rule produces the statement\nit would come from - never in anticipation.",
+    "description": "The governed engineering relationships.\n\nOne member per semantic statement type that exists. An edge kind is\nadded here only when a semantic rule produces the statement it would\ncome from - never in anticipation.",
     "enum": [
-     "has_rated_power"
+     "has_rated_power",
+     "is_located_in"
     ],
     "title": "GraphEdgeKind",
     "type": "string"
@@ -7519,7 +7524,8 @@
     "description": "The kinds of thing the governed graph holds.\n\nDeliberately **not** `Transformer`, `Breaker` or `Cable`. Deciding\nthat ``TR1`` names a transformer is a classification, and the entity\ncontext refuses to make it for exactly the reason this context\ninherits: a classification needs a rule somebody reviewed and a\nvocabulary somebody governs.",
     "enum": [
      "engineering_asset",
-     "engineering_quantity"
+     "engineering_quantity",
+     "structural_location"
     ],
     "title": "GraphNodeKind",
     "type": "string"
@@ -12266,7 +12272,8 @@
    "SemanticStatementType": {
     "description": "Every engineering meaning this system can assign.",
     "enum": [
-     "has_rated_power"
+     "has_rated_power",
+     "is_located_in"
     ],
     "title": "SemanticStatementType",
     "type": "string"

@@ -119,19 +119,44 @@ an explicit, capability-gated promotion.
 
 ## 3. What the graph may contain
 
-**Two node kinds and one edge kind.** That is not a placeholder - it is
-exactly what governed semantics produces.
+**Three node kinds and two edge kinds.** That is not a placeholder - it
+is exactly what governed semantics produces.
 
 | Node kind | Promoted from |
 |---|---|
 | `engineering_asset` | an `equipment_designation` entity |
 | `engineering_quantity` | an `engineering_quantity` entity |
+| `structural_location` | a `structural_location` entity (EPIC 32.P1) |
 
 | Edge kind | Promoted from |
 |---|---|
 | `has_rated_power` | a `has_rated_power` semantic statement |
+| `is_located_in` | an `is_located_in` semantic statement (EPIC 32.P1) |
 
-### Why not Voltage, Protection, Connection, Function, Location
+### The structural relationship, and what it does not mean
+
+`is_located_in` is the **first governed relationship whose two endpoints
+are both structural objects**, and the reason EPIC 32.2 has anything to
+reason over. It comes from the location aspect of a compound IEC 81346
+reference designation: `+E01-QA1` designates an object in the context of
+location `+E01`, so the asset is located there.
+
+It is containment, and containment only:
+
+- it does **not** say two assets in one location are connected;
+- it does **not** encode electrical direction - edge orientation records
+  which endpoint is the subject of the reviewed statement;
+- it does **not** classify the location as a bay, panel or room;
+- it does **not** imply anything about equipment state.
+
+The graph now contains two-hop paths between assets that share a
+location. **Those paths mean nothing on their own.** A substation
+location routinely holds equipment from several unrelated circuits, and
+any rule that wants to conclude something from such a path must justify
+the conclusion on engineering grounds under its own version. See
+[ADR-0030](adr/0030-governed-structural-relationship-semantics.md).
+
+### Why not Voltage, Protection, Connection, Function
 
 The EPIC listed those as candidate concepts and then constrained them:
 *"Only introduce concepts that already exist in governed semantics. Do
@@ -397,8 +422,13 @@ retired and why, and the record stays readable.
 
 ## 13. Known limits
 
-- **Two node kinds, one edge kind.** Governed semantics produces one
-  statement type; see §3 for what each further concept needs first.
+- **Three node kinds, two edge kinds.** Governed semantics produces two
+  statement types; see §3 for what each further concept needs first.
+- **Location is designated, not classified.** `+E01` is a place the
+  documents name; whether it is a bay, a panel or a room is a
+  classification no governed vocabulary makes.
+- **No connectivity.** Containment is not a circuit, and nothing in the
+  pipeline observes that two objects are joined.
 - **No cross-document entity resolution** - see §4.
 - **Project visibility is not enforced** - see §11.
 - **A rebuild is synchronous and unbounded.** It re-promotes every

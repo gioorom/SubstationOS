@@ -12,6 +12,7 @@ annotated_rule_versions:
   current_value: "1.0"
   power_value: "1.0"
   cable_section_value: "1.0"
+  location_aspect_iec_81346: "1.0"
 documents:
   - document_ref: bay_data_sheet
     title: Scheda dati quadro MT - sottostazione Alpha
@@ -168,6 +169,30 @@ documents:
               character_start: 12
               character_end: 20
           source_text: "+E01-QA1"
+      # The same token, annotated a second time. IEC 81346-1 assigns "+"
+      # to the location aspect, so "+E01" is written inside "+E01-QA1"
+      # and the character range covers those four characters and no
+      # more - an annotation that pointed at the whole token would be
+      # recording the designation twice under a second name.
+      - evidence_type: location_aspect
+        observed_text: "+E01"
+        status: observed
+        rule_id: location_aspect_iec_81346
+        rule_version: "1.0"
+        designation: "+E01"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 5
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 5
+              character_start: 12
+              character_end: 16
+          source_text: "+E01"
   - document_ref: cable_schedule
     title: Elenco cavi di potenza
     lines:

@@ -71,9 +71,23 @@ QUANTITY_IDENTITY_RULE = ResolutionRule(
     ),
 )
 
+LOCATION_ASPECT_GROUPING_RULE = ResolutionRule(
+    rule_id="location_aspect_grouping",
+    rule_version="1.0",
+    entity_type=EntityType.STRUCTURAL_LOCATION,
+    description=(
+        "Location-aspect observations sharing a normalised designation, "
+        "an evidence status, and the extraction rule that produced them "
+        "resolve to one entity **within one document**. Says nothing "
+        "about what kind of location it is, and nothing about locations "
+        "written the same way in another document."
+    ),
+)
+
 RESOLUTION_RULES: tuple[ResolutionRule, ...] = (
     DESIGNATION_GROUPING_RULE,
     QUANTITY_IDENTITY_RULE,
+    LOCATION_ASPECT_GROUPING_RULE,
 )
 
 RULES_BY_ID: dict[str, ResolutionRule] = {

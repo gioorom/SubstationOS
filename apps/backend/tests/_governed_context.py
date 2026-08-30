@@ -225,6 +225,21 @@ def quantity_item(
     )
 
 
+#: The object node kind and unit each governed edge kind relates to,
+#: mirroring ``EDGE_ENDPOINT_KINDS``. Keeping it here means a helper
+#: cannot build a relationship whose endpoints promotion would refuse.
+_OBJECT_FOR_EDGE_KIND: dict[GraphEdgeKind, tuple[GraphNodeKind, str | None]] = {
+    GraphEdgeKind.HAS_RATED_POWER: (
+        GraphNodeKind.ENGINEERING_QUANTITY,
+        "kVA",
+    ),
+    GraphEdgeKind.IS_LOCATED_IN: (
+        GraphNodeKind.STRUCTURAL_LOCATION,
+        None,
+    ),
+}
+
+
 def relationship_item(
     *,
     subject_node_id: str,
@@ -232,17 +247,29 @@ def relationship_item(
     object_node_id: str,
     object_label: str,
     edge_id: str = "edge-1",
+    edge_kind: GraphEdgeKind = GraphEdgeKind.HAS_RATED_POWER,
     statement_key: str = "statement-1",
     document_id: int = 11,
     review_id: int = 21,
     project_id: int | None = 1,
 ) -> GovernedRetrievalItem:
+    """
+    One governed relationship, of any governed kind.
+
+    ``edge_kind`` defaults to the rated-power relationship so every test
+    written before EPIC 32.P1 keeps building exactly what it built
+    before. The object's node kind is looked up rather than passed,
+    because an object kind that disagreed with the edge kind would be a
+    relationship the governed graph could not hold.
+    """
+
     subject = node(subject_node_id, subject_label)
+    object_kind, object_unit = _OBJECT_FOR_EDGE_KIND[edge_kind]
     object_node = node(
         object_node_id,
         object_label,
-        kind=GraphNodeKind.ENGINEERING_QUANTITY,
-        unit="kVA",
+        kind=object_kind,
+        unit=object_unit,
     )
     strategy = GovernedMatchStrategy.EDGE_KIND
 
@@ -252,7 +279,7 @@ def relationship_item(
         node=None,
         relationship=GovernedRelationshipReference(
             edge_id=edge_id,
-            kind=GraphEdgeKind.HAS_RATED_POWER,
+            kind=edge_kind,
             subject=subject,
             object=object_node,
         ),
@@ -261,7 +288,7 @@ def relationship_item(
         match=GovernedMatchExplanation(
             strategy=strategy,
             matched_field="kind",
-            matched_value=GraphEdgeKind.HAS_RATED_POWER.value,
+            matched_value=edge_kind.value,
         ),
         provenance=provenance(
             statement_key=statement_key,

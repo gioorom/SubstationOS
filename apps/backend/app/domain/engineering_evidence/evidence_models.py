@@ -64,6 +64,18 @@ class EvidenceType(str, Enum):
     POWER_VALUE = "power_value"
     CABLE_SECTION_VALUE = "cable_section_value"
 
+    #: The **location aspect** of a compound IEC 81346 reference
+    #: designation - the ``+E01`` of ``+E01-QA1``.
+    #:
+    #: The only member of this catalogue that observes part of a token
+    #: rather than the whole of one, and it is not an inference: the
+    #: characters ``+E01`` are written in the document, and IEC 81346-1
+    #: assigns ``+`` to the location aspect. What is observed is that a
+    #: location aspect was **written**; whether the equipment is
+    #: therefore located there is a meaning, assigned two layers up by a
+    #: reviewed semantic rule.
+    LOCATION_ASPECT = "location_aspect"
+
 
 class EvidenceStatus(str, Enum):
     """

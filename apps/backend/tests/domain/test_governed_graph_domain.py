@@ -104,18 +104,27 @@ def _provenance(**overrides) -> GraphProvenance:
 
 def test_the_graph_holds_only_what_semantics_produces() -> None:
     """
-    Two node kinds and one edge kind - because the pipeline produces two
-    entity types and one statement type. A Voltage, Protection,
-    Connection, Function or Location kind would be inventing engineering
-    ontology, which the EPIC forbids and which the semantics context
-    already refuses upstream.
+    Three node kinds and two edge kinds - because the pipeline produces
+    three entity types and two statement types. A Voltage, Protection,
+    Connection or Function kind would be inventing engineering ontology,
+    which the EPIC forbids and which the semantics context already
+    refuses upstream.
+
+    ``structural_location``/``is_located_in`` (EPIC 32.P1) are here
+    because ``location_from_compound_reference_designation`` produces the
+    statement they come from - the same standard every other member had
+    to meet.
     """
 
     assert {kind.value for kind in GraphNodeKind} == {
         "engineering_asset",
         "engineering_quantity",
+        "structural_location",
     }
-    assert {kind.value for kind in GraphEdgeKind} == {"has_rated_power"}
+    assert {kind.value for kind in GraphEdgeKind} == {
+        "has_rated_power",
+        "is_located_in",
+    }
 
 
 def test_every_governed_entity_type_maps_to_a_node_kind() -> None:

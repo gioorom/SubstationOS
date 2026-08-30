@@ -57,6 +57,9 @@ from app.domain.governed_knowledge_graph.graph_vocabulary import (
 RESULT_KIND_FOR_NODE_KIND: dict[GraphNodeKind, GovernedResultKind] = {
     GraphNodeKind.ENGINEERING_ASSET: GovernedResultKind.ASSET,
     GraphNodeKind.ENGINEERING_QUANTITY: GovernedResultKind.QUANTITY,
+    GraphNodeKind.STRUCTURAL_LOCATION: (
+        GovernedResultKind.STRUCTURAL_LOCATION
+    ),
 }
 
 

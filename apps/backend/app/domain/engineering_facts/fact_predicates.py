@@ -50,3 +50,14 @@ class FactPredicate(str, Enum):
     # "These two resolved entities satisfied a declared structural
     # association rule." Nothing about roles, properties or topology.
     HAS_ASSOCIATED_QUANTITY = "has_associated_quantity"
+
+    # "This designation was written with this location aspect inside
+    # it." The structural reading of one compound IEC 81346 reference
+    # designation - ``+E01-QA1`` carries ``+E01``.
+    #
+    # Deliberately not ``IS_LOCATED_IN``. This layer records what the
+    # document *wrote*; that the equipment is therefore located there is
+    # a meaning, and meanings are assigned one layer up by a versioned
+    # rule an engineer reviews. The same discipline that keeps
+    # ``HAS_ASSOCIATED_QUANTITY`` from being ``HAS_RATED_POWER``.
+    HAS_LOCATION_ASPECT = "has_location_aspect"

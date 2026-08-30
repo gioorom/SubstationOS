@@ -128,6 +128,8 @@ export const SEMANTIC_STATUS_TONES: Record<
 export const PREDICATE_DESCRIPTIONS: Record<FactPredicate, string> = {
   has_associated_quantity:
     "Associazione strutturale: le due entità compaiono sulla stessa riga sotto una regola dichiarata. Non dice che la grandezza sia la potenza, la tensione o la corrente nominale del soggetto.",
+  has_location_aspect:
+    "Associazione strutturale: la sigla composta contiene quell'aspetto di ubicazione, letto dallo stesso token secondo IEC 81346. Non dice che l'apparecchiatura si trovi in quell'ubicazione.",
 };
 
 export const STATEMENT_TYPE_DESCRIPTIONS: Record<
@@ -136,6 +138,8 @@ export const STATEMENT_TYPE_DESCRIPTIONS: Record<
 > = {
   has_rated_power:
     "Una regola versionata mappa un'associazione con una grandezza di potenza sulla potenza nominale del soggetto. Il valore resta sull'entità grandezza referenziata.",
+  is_located_in:
+    "Una regola versionata legge l'aspetto di ubicazione di una sigla composta IEC 81346: '+E01-QA1' designa un oggetto nel contesto dell'ubicazione '+E01'. Dice dove si trova l'apparecchiatura, non a che cosa è collegata.",
 };
 
 /** `TR1` rather than `entity-7f3a…` where the entity set was loaded. */

@@ -114,12 +114,27 @@ def _validate_entity(
     return _validate_value(entity)
 
 
+#: The entity types whose value is a designation-like string.
+#:
+#: A structural location is designated exactly as equipment is - it is
+#: written ``+E01`` in the document - so it carries the same typed value
+#: rather than a second, near-identical one. What distinguishes the two
+#: is the entity type, which is the field that says what kind of thing
+#: was resolved.
+_DESIGNATION_VALUED_TYPES = frozenset(
+    {
+        EntityType.EQUIPMENT_DESIGNATION,
+        EntityType.STRUCTURAL_LOCATION,
+    }
+)
+
+
 def _validate_value(
     entity: EngineeringEntity,
 ) -> EntityResolutionFailure | None:
     """Exactly one typed value, matching the entity type."""
 
-    if entity.entity_type is EntityType.EQUIPMENT_DESIGNATION:
+    if entity.entity_type in _DESIGNATION_VALUED_TYPES:
         if entity.designation is None or entity.quantity is not None:
             return _failure(
                 EntityResolutionFailureCode.ENTITY_VALIDATION_FAILURE,

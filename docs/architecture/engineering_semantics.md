@@ -68,6 +68,12 @@ rather than assumed.
 The classification statements (`IS_TRANSFORMER`, …) are a different kind
 of claim and need a governed equipment vocabulary that does not exist.
 
+`CONNECTED_TO` deserves naming twice, because `IS_LOCATED_IN` (EPIC
+32.P1) can look like a step towards it and is not. Two objects sharing a
+location are in the same place, which is not a circuit. Connectivity
+needs evidence that two objects are **joined**, and no rule in this
+repository observes that.
+
 ## The semantic rule catalogue
 
 ### `rated_power_from_associated_power_quantity` 1.0
@@ -76,11 +82,41 @@ of claim and need a governed equipment vocabulary that does not exist.
 |---|---|
 | supported fact predicate | `HAS_ASSOCIATED_QUANTITY` |
 | required evidence type | `power_value` |
-| max supporting quantities | 1 |
+| max supporting objects | 1 |
 | resulting statement | `HAS_RATED_POWER` |
 
 A designation associated with **exactly one** power quantity has that
 quantity as its rated power.
+
+### `location_from_compound_reference_designation` 1.0
+
+| Property | Value |
+|---|---|
+| supported fact predicate | `HAS_LOCATION_ASPECT` |
+| required evidence type | `location_aspect` |
+| max supporting objects | 1 |
+| resulting statement | `IS_LOCATED_IN` |
+
+Introduced by EPIC 32.P1, and the first rule here whose object is not a
+quantity.
+
+A designation written as a **compound IEC 81346 reference designation**
+is located in the location its `+` aspect names: IEC 81346-1 assigns `+`
+to the location aspect, so `+E01-QA1` designates an object in the
+context of location `+E01`.
+
+**This is a reading of a standard's syntax, not a proximity rule.** Its
+supporting fact is scoped to a single *token* - the designation and the
+location aspect were produced from the same characters, not from the
+same line, page or drawing. There is no window to widen and no threshold
+to tune. Two different location aspects for one subject produce no
+statement: the document disagreed with itself, and this rule does not
+choose.
+
+It says where equipment is. It does **not** say what it is connected to,
+which direction anything flows, what kind of place `+E01` is, or that
+two assets sharing a location have anything to do with each other. See
+[ADR-0030](adr/0030-governed-structural-relationship-semantics.md).
 
 **No executable engineering rule exists outside this catalogue**, and an
 architecture test asserts nothing else in the context constructs a
@@ -235,8 +271,17 @@ document means would exist.
 
 ## Known debt
 
-- **One rule, one statement type.** Useful only in proportion to how
-  often a data sheet writes a designation and its rating on one line.
+- **Two rules, two statement types.** Each is useful only in proportion
+  to how often documents write in the shape it reads: a designation and
+  its rating on one line, and a compound IEC 81346 reference
+  designation.
+- **The `+` reading is a judgement about documents.** A document using
+  `+` for something other than a location produces a wrong statement.
+  That is caught by review rather than by extraction - the correct place,
+  but not a free one.
+- **Only the location aspect is read.** `-QA1-XB2` (a product within a
+  product) and the `=` function aspect are observable in principle and
+  interpreted by nothing.
 - **Interpretation is unmeasured.** Milestone 28.2's evaluation framework
   measures *extraction*. There is still no corpus of expected entities,
   facts or statements - so grouping, association and now **meaning** are

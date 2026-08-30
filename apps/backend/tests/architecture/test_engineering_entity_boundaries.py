@@ -322,14 +322,34 @@ def test_the_entity_schema_has_nowhere_to_record_a_relationship() -> None:
 def test_the_entity_catalogue_names_no_equipment_class() -> None:
     """No transformer, breaker, CT, VT, relay or cable. Naming those
     classes would let the shape of the model imply knowledge the system
-    does not have."""
+    does not have.
+
+    ``structural_location`` (EPIC 32.P1) is not a counterexample: it says
+    a location was designated, not what kind of place it is. ``BAY`` and
+    ``PANEL`` are as absent as ``TRANSFORMER``, and for the same
+    reason."""
 
     from app.domain.engineering_entities.entity_models import EntityType
 
-    assert {member.value for member in EntityType} == {
+    declared = {member.value for member in EntityType}
+
+    assert declared == {
         "equipment_designation",
         "engineering_quantity",
+        "structural_location",
     }
+    for forbidden in (
+        "transformer",
+        "circuit_breaker",
+        "current_transformer",
+        "voltage_transformer",
+        "protection_relay",
+        "cable",
+        "bay",
+        "panel",
+        "room",
+    ):
+        assert forbidden not in declared
 
 
 def test_quantities_are_stored_exactly_and_never_as_floats() -> None:
