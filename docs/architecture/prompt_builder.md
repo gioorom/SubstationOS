@@ -88,6 +88,19 @@ what was concluded, **not asked to conclude**. The section is disabled
 for every workflow that does not reason, including comparison. See
 [engineering_reasoning.md](engineering_reasoning.md).
 
+Since EPIC 32.2 the section renders **two families**, each with its own
+outcome wording. For a structural conclusion it names the derived
+relationship in full - ``shares_structural_location_with``, never
+shortened to anything a reader could take for connectivity - and the
+shared governed location.
+
+The `INSUFFICIENT_KNOWLEDGE` wording is load-bearing rather than
+decorative. A model told only "insufficient" writes *"they are in
+different places"*, because that is what the word suggests in ordinary
+English; the platform cannot establish separation at all, so the section
+tells the model explicitly that the finding is not that one and that it
+must not report the assets as separate.
+
 Each `PromptSection.content` is a tuple of discrete lines built by
 exactly one small, named, pure function - never a free-form
 concatenated string. A section with nothing to contribute is still

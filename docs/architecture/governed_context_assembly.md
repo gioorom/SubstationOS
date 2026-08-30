@@ -422,8 +422,18 @@ makes them a measurement of assembly rather than of a read.
 
 - **Three node kinds and two edge kinds**, inherited from the governed
   graph. See [knowledge_graph.md](knowledge_graph.md) §3. Assembly
-  required no change to carry the structural relationship added by EPIC
-  32.P1: it selects governed items and reinterprets none of them.
+  selects governed items and reinterprets none of them - it performs no
+  inference, and the shared-location conclusion EPIC 32.2 draws is
+  Engineering Reasoning's, never assembly's.
+
+  EPIC 32.2 was the first question to actually **retrieve** a governed
+  structural location, and it exposed two gaps EPIC 32.P1 had left:
+  aggregation had no section for the kind (a `KeyError` at assembly
+  time) and selection had no budget dimension for it. Both are fixed at
+  the source - `_SECTION_KINDS` is now derived from the governed
+  vocabulary rather than listed by hand, which closes the class of
+  defect rather than the instance, and `BudgetCategory.LOCATIONS` bounds
+  the kind like every other.
 - **No cross-document entity resolution.** Two `TR1`s stay two items.
 - **Project visibility is filtering, not enforcement**, inherited from
   EPIC 30.3.

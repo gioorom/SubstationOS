@@ -18,6 +18,7 @@ from app.domain.context_builder.budget_policy import (
     DEFAULT_MAX_ITEMS,
     DEFAULT_MAX_METADATA_ENTRIES,
     DEFAULT_MAX_QUANTITIES,
+    DEFAULT_MAX_LOCATIONS,
     DEFAULT_MAX_RELATIONSHIPS,
     DEFAULT_MAX_WARNINGS,
     SELECTION_POLICY_VERSION,
@@ -47,6 +48,7 @@ class ContextBuildRequestFactory:
         max_assets: int = DEFAULT_MAX_ASSETS,
         max_quantities: int = DEFAULT_MAX_QUANTITIES,
         max_relationships: int = DEFAULT_MAX_RELATIONSHIPS,
+        max_locations: int = DEFAULT_MAX_LOCATIONS,
         max_metadata_entries: int = DEFAULT_MAX_METADATA_ENTRIES,
         max_warnings: int = DEFAULT_MAX_WARNINGS,
         metadata_entries: tuple[tuple[str, str], ...] = (),
@@ -57,6 +59,7 @@ class ContextBuildRequestFactory:
             max_assets=max_assets,
             max_quantities=max_quantities,
             max_relationships=max_relationships,
+            max_locations=max_locations,
             max_metadata_entries=max_metadata_entries,
             max_warnings=max_warnings,
         )
@@ -68,6 +71,7 @@ class ContextBuildRequestFactory:
             max_assets=max_assets,
             max_quantities=max_quantities,
             max_relationships=max_relationships,
+            max_locations=max_locations,
             max_metadata_entries=max_metadata_entries,
             max_warnings=max_warnings,
         )

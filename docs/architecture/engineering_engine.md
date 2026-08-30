@@ -30,7 +30,17 @@ sits in the pipeline, see
 > assembled governed context. None changed any engine decision
 > **`ENGINEERING_COMPARISON` is the first workflow with two subjects**,
 > two independent retrievals, and a pipeline that genuinely differs
-> rather than only a prompt. None changed any engine decision logic -
+> rather than only a prompt.
+> **`STRUCTURAL_RELATIONSHIP` (EPIC 32.2) is the first workflow whose
+> answer is computed before the model is invoked**: it asks whether two
+> governed assets share a governed structural location, and a versioned
+> reasoning rule answers it deterministically over the assembled
+> context. Two subjects like comparison, but **one** governed context -
+> a question about a relationship between them cannot be answered from
+> two contexts deliberately kept apart. Its pipeline is the verification
+> pipeline, built from it with `replace` so the two cannot drift; what
+> differs is the question, and the reasoning step dispatches on the
+> request's typed intent. None changed any engine decision logic -
 > see [Adding a workflow](#adding-a-workflow-four-worked-examples).
 
 ## What the engine is - and is not

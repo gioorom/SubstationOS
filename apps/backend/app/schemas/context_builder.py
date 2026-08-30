@@ -53,6 +53,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.domain.context_builder.budget_policy import (
+    DEFAULT_MAX_LOCATIONS,
+)
 from app.domain.context_builder.context_builder_models import (
     BudgetCategory,
     BudgetConsumption,
@@ -266,6 +269,9 @@ class BudgetPolicyRead(BaseModel):
     max_assets: int
     max_quantities: int
     max_relationships: int
+    # EPIC 32.2. Defaulted rather than required: an additive budget
+    # dimension must not reject a payload written before it existed.
+    max_locations: int = DEFAULT_MAX_LOCATIONS
     max_metadata_entries: int
     max_warnings: int
 
@@ -520,6 +526,7 @@ def _budget_policy_from_read(model: BudgetPolicyRead) -> BudgetPolicy:
         max_assets=model.max_assets,
         max_quantities=model.max_quantities,
         max_relationships=model.max_relationships,
+        max_locations=model.max_locations,
         max_metadata_entries=model.max_metadata_entries,
         max_warnings=model.max_warnings,
     )

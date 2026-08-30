@@ -43,6 +43,16 @@ class EngineeringIntentType(str, Enum):
     ENGINEERING_COMPARISON = "engineering_comparison"
     DRAWING_REQUEST = "drawing_request"
     VERIFICATION_REQUEST = "verification_request"
+    # EPIC 32.2 - "are TR1 and QB1 in the same structural location?".
+    #
+    # A narrow intent rather than a shape of VERIFICATION_REQUEST: this
+    # question has **two** subjects and is answered deterministically
+    # before any model is asked anything, where a verification request
+    # has one subject and asks whether evidence supports a statement.
+    # Folding it into verification would have made "verify" mean two
+    # different pipelines depending on how many designations the text
+    # happened to contain.
+    STRUCTURAL_RELATIONSHIP_QUERY = "structural_relationship_query"
     NAVIGATION_REQUEST = "navigation_request"
     GENERAL_ENGINEERING_REQUEST = "general_engineering_request"
     UNSUPPORTED_REQUEST = "unsupported_request"

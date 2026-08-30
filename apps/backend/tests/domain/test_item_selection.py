@@ -51,6 +51,7 @@ def _policy(**overrides) -> BudgetPolicy:
         max_assets=50,
         max_quantities=50,
         max_relationships=50,
+        max_locations=50,
         max_metadata_entries=20,
         max_warnings=50,
     )
@@ -218,6 +219,9 @@ def test_consumption_is_reported_for_every_budget_dimension() -> None:
         BudgetCategory.ASSETS,
         BudgetCategory.QUANTITIES,
         BudgetCategory.RELATIONSHIPS,
+        # EPIC 32.2: governed structural locations became retrievable, so
+        # they became a dimension that has to be bounded and reported.
+        BudgetCategory.LOCATIONS,
     }
 
 

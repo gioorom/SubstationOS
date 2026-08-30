@@ -67,6 +67,9 @@ from app.services.engineering_engine.governed_retrieval_artifacts import (
     GovernedRetrievalOutcome,
     GovernedRetrievalPlan,
 )
+from app.domain.engineering_intent.engineering_intent_models import (
+    EngineeringIntentType,
+)
 from app.services.engineering_engine.step_handler import (
     BaseStepHandler,
     StepHandlerError,
@@ -179,6 +182,24 @@ def build_plan(
     )
 
 
+#: The intents whose question **cannot be answered** without the
+#: subjects' governed relationships.
+#:
+#: A declarative input requirement, and deliberately the smallest thing
+#: that could be called one: it states what an intent needs and is read
+#: by the retrieval planner. It performs no retrieval, reaches no
+#: conclusion and knows nothing about rules - it exists so that
+#: "the structural question needs location relationships" is written
+#: down where retrieval is planned, rather than left to a caller
+#: remembering to set a flag.
+#:
+#: Reasoning still never retrieves. If the relationships are absent
+#: anyway, the rule reports `INSUFFICIENT_KNOWLEDGE`.
+RELATIONSHIP_DEPENDENT_INTENTS = frozenset(
+    {EngineeringIntentType.STRUCTURAL_RELATIONSHIP_QUERY}
+)
+
+
 def _plan_for_request(
     request: EngineeringEngineExecutionRequest,
 ) -> GovernedRetrievalPlan:
@@ -189,7 +210,10 @@ def _plan_for_request(
         entity_type=request.retrieval_entity_type,
         attribute_name=request.retrieval_attribute_name,
         limit=request.retrieval_limit,
-        include_relationships=request.retrieval_include_neighborhood,
+        include_relationships=(
+            request.retrieval_include_neighborhood
+            or request.intent_type in RELATIONSHIP_DEPENDENT_INTENTS
+        ),
     )
 
 

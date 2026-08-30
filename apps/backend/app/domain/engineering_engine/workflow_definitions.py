@@ -16,6 +16,8 @@ declaring and **registering** them, never by editing the engine.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from app.domain.engineering_engine.engineering_engine_models import (
     WorkflowArtifactKey,
     WorkflowCapability,
@@ -669,5 +671,49 @@ DOCUMENT_LOOKUP_WORKFLOW = WorkflowDefinition(
         WorkflowCapability.DOCUMENT_RETRIEVAL,
         WorkflowCapability.ENGINEERING_RESPONSE_BUILDING,
         WorkflowCapability.AGGREGATE_UPDATE_PREPARATION,
+    ),
+)
+
+
+# --- Structural relationship (EPIC 32.2) ---------------------------------
+
+STRUCTURAL_RELATIONSHIP_WORKFLOW_ID = "structural-relationship"
+
+STRUCTURAL_RELATIONSHIP_WORKFLOW_VERSION = "1.0"
+
+#: "Are these two governed assets in the same structural location?"
+#:
+#: **The verification pipeline, step for step**, and built from it with
+#: `replace` rather than copied: the two definitions cannot drift, and a
+#: reader can see at a glance that this workflow introduced no new
+#: machinery. Validate, retrieve, assemble context, reason, prompt,
+#: invoke, respond - the same steps in the same order, under the same
+#: capabilities.
+#:
+#: What differs is not the pipeline but the question. The reasoning step
+#: dispatches on the request's intent type, so this workflow reaches the
+#: shared-structural-location rule where the verification workflow
+#: reaches quantity consistency. Nothing else needed to change, which is
+#: the point: a second reasoning family cost a workflow definition and a
+#: branch, not a subsystem.
+STRUCTURAL_RELATIONSHIP_WORKFLOW = replace(
+    ENGINEERING_VERIFICATION_WORKFLOW,
+    workflow_id=WorkflowId(value=STRUCTURAL_RELATIONSHIP_WORKFLOW_ID),
+    workflow_type=WorkflowType.STRUCTURAL_RELATIONSHIP,
+    supported_intent_type=(
+        EngineeringIntentType.STRUCTURAL_RELATIONSHIP_QUERY
+    ),
+    workflow_version=STRUCTURAL_RELATIONSHIP_WORKFLOW_VERSION,
+    description=(
+        "Determines whether governed knowledge establishes that two "
+        "engineering assets stand in the same governed structural "
+        "location - 'are +E01-QA1 and +E01-QB1 in the same location?'. "
+        "The answer is computed deterministically by a versioned "
+        "reasoning rule over the assembled governed context, before any "
+        "model is invoked; the model communicates a conclusion it did "
+        "not reach. The conclusion is a derived inference, never governed "
+        "knowledge, and it says only that the two assets share a "
+        "location context - never that they are connected, adjacent, on "
+        "one circuit, or in any particular kind of place."
     ),
 )

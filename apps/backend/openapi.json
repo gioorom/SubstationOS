@@ -331,6 +331,7 @@
      "assets",
      "quantities",
      "relationships",
+     "locations",
      "metadata_entries",
      "warnings"
     ],
@@ -382,6 +383,11 @@
      },
      "max_items": {
       "title": "Max Items",
+      "type": "integer"
+     },
+     "max_locations": {
+      "default": 20,
+      "title": "Max Locations",
       "type": "integer"
      },
      "max_metadata_entries": {
@@ -2413,13 +2419,29 @@
     "type": "object"
    },
    "DerivedReasoningAssessmentRead": {
-    "description": "A **derived conclusion** (EPIC 32.1), never governed knowledge.\n\nNothing here was reviewed by a human and nothing here is promoted\nback into the graph. ``supports`` names the governed facts the\nconclusion was drawn from; the conclusion itself is not one of them.\n\n``outcome`` has four values, never a boolean and never a score:\n``consistent``, ``inconsistent``, ``insufficient_knowledge`` and\n``ambiguous`` are four different engineering findings.\n``rule_id``/``rule_version`` say what concluded it and\n``diagnostic_code`` says why, from a closed vocabulary.",
+    "description": "A **derived conclusion** (EPIC 32.1), never governed knowledge.\n\nNothing here was reviewed by a human and nothing here is promoted\nback into the graph. ``supports`` names the governed facts the\nconclusion was drawn from; the conclusion itself is not one of them.\n\n``outcome`` is never a boolean and never a score. **Which vocabulary\nit is written in depends on ``rule_family``**: a quantity-consistency\nconclusion is ``consistent``/``inconsistent``/\n``insufficient_knowledge``/``ambiguous``, while a structural\nrelationship conclusion (EPIC 32.2) is\n``established``/``insufficient_knowledge``/``ambiguous``. There is\ndeliberately no structural ``not_established``: the governed graph is\npartial, so nothing in it can establish a negative.\n\n``rule_id``/``rule_version`` say what concluded it and\n``diagnostic_code`` says why, from a closed vocabulary.",
     "properties": {
      "diagnostic_code": {
-      "$ref": "#/components/schemas/ReasoningDiagnosticCode"
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ReasoningDiagnosticCode"
+       },
+       {
+        "$ref": "#/components/schemas/StructuralReasoningDiagnosticCode"
+       }
+      ],
+      "title": "Diagnostic Code"
      },
      "outcome": {
-      "$ref": "#/components/schemas/ReasoningOutcome"
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ReasoningOutcome"
+       },
+       {
+        "$ref": "#/components/schemas/StructuralReasoningOutcome"
+       }
+      ],
+      "title": "Outcome"
      },
      "question": {
       "title": "Question",
@@ -2443,6 +2465,16 @@
      "rule_version": {
       "title": "Rule Version",
       "type": "string"
+     },
+     "structural": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/SharedStructuralLocationReportRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "supports": {
       "items": {
@@ -2533,6 +2565,14 @@
     ],
     "title": "DerivedReasoningSupportRead",
     "type": "object"
+   },
+   "DerivedRelationshipKind": {
+    "description": "A relationship a **reasoning rule derived**, which governed knowledge\ndoes not assert.\n\n## This vocabulary is deliberately disjoint from the governed ones\n\nNo member here may appear in `GraphEdgeKind`, `SemanticStatementType`\nor `FactPredicate`, and an architecture test asserts all three\nintersections are empty. That disjointness is the structural form of\nAF-REASON-001: a derived relationship and a governed one must not be\nrepresentable as the same thing, because within a few milestones\nnobody would be able to tell which of the two they were looking at.\n\nA derived relationship is never promoted, never persisted and never\nreviewed. It lives inside a `ReasoningResult` for as long as that\nresult is in memory.",
+    "enum": [
+     "shares_structural_location_with"
+    ],
+    "title": "DerivedRelationshipKind",
+    "type": "string"
    },
    "DesignationResolution": {
     "description": "How far a designation found in the request text could be resolved\nagainst **existing** vocabularies - never a confidence, never a\nguess.\n\n``CANONICAL_REFERENCE`` means Canonicalization's own\n``normalize_entity_reference`` recognized it and returned a real\n``entity_type``/``canonical_id`` (e.g. \"C-295\" -> ``CABLE:C-295``).\n``LEXICAL_TERM`` means it did not - the designation is real and is\ncarried forward verbatim as a search term, but this system does not\nclaim to know which graph entity it names.",
@@ -4434,6 +4474,7 @@
      "engineering_comparison",
      "drawing_request",
      "verification_request",
+     "structural_relationship_query",
      "navigation_request",
      "general_engineering_request",
      "unsupported_request",
@@ -10808,7 +10849,7 @@
     "type": "string"
    },
    "ReasoningOutcome": {
-    "description": "What a deterministic reasoning rule concluded.\n\nFour members, and the distinction between the last three is the point\nof the vocabulary.",
+    "description": "What a **quantity consistency** rule concluded.\n\nFour members, and the distinction between the last three is the point\nof the vocabulary.\n\nThis vocabulary belongs to `ReasoningRuleFamily.QUANTITY_CONSISTENCY`\nand to nothing else. `CONSISTENT` answers \"do these governed values\nagree?\" - it is not a general-purpose yes, and EPIC 32.2 deliberately\ndid **not** reuse it to mean \"this relationship holds\". Two assets\nsharing a location are not \"consistent\"; the word would be a category\nerror that every downstream reader would inherit.",
     "enum": [
      "consistent",
      "inconsistent",
@@ -10819,9 +10860,10 @@
     "type": "string"
    },
    "ReasoningRuleFamily": {
-    "description": "Which kind of engineering question a rule answers.\n\nOne member, from the one thing governed semantics currently supports.\nA family is added when a rule exists to put in it - never in\nanticipation.",
+    "description": "Which kind of engineering question a rule answers.\n\nA family is added when a rule exists to put in it - never in\nanticipation. **The family also says which outcome vocabulary a\nresult carries**, which is why it is not a decoration: reading an\noutcome without reading the family would be reading a word from the\nwrong dictionary.",
     "enum": [
-     "quantity_consistency"
+     "quantity_consistency",
+     "structural_relationship"
     ],
     "title": "ReasoningRuleFamily",
     "type": "string"
@@ -12331,6 +12373,65 @@
     "title": "SetUserStatusRequest",
     "type": "object"
    },
+   "SharedStructuralLocationReportRead": {
+    "description": "The structural half of a derived conclusion (EPIC 32.2).\n\nPresent only when ``rule_family`` is ``structural_relationship``, and\nthat field is the discriminator: a consumer switches on it and gets\nthis typed object, rather than parsing the human-readable question.\n\n``derived_relationship`` is ``shares_structural_location_with`` - the\ntwo assets stand in one governed structural location. It is **not**\nconnectivity, adjacency, a circuit, a direction or a state, and it\nsays nothing about what kind of place the location is.\n\n``shared_location_node_id`` is a governed identity. Two documents\nwriting ``+E01`` are two governed locations, so a consumer comparing\nthe **labels** would merge them and perform, through this schema, the\ncross-document entity resolution the platform refuses.",
+    "properties": {
+     "derived_relationship": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/DerivedRelationshipKind"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "inference_path": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Inference Path",
+      "type": "array"
+     },
+     "left_asset_node_id": {
+      "title": "Left Asset Node Id",
+      "type": "string"
+     },
+     "right_asset_node_id": {
+      "title": "Right Asset Node Id",
+      "type": "string"
+     },
+     "shared_location_label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shared Location Label"
+     },
+     "shared_location_node_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shared Location Node Id"
+     }
+    },
+    "required": [
+     "left_asset_node_id",
+     "right_asset_node_id",
+     "inference_path"
+    ],
+    "title": "SharedStructuralLocationReportRead",
+    "type": "object"
+   },
    "SortDirection": {
     "description": "Ascending or descending. There is no third option, and no\nfree-text direction string reaches a query.",
     "enum": [
@@ -12443,6 +12544,30 @@
     ],
     "title": "StatementPromotionRead",
     "type": "object"
+   },
+   "StructuralReasoningDiagnosticCode": {
+    "description": "Why a structural relationship rule reached its outcome.\n\nMachine-readable and deterministic, exactly as\n`ReasoningDiagnosticCode` is for quantity consistency. A separate\nvocabulary because the reasons are different reasons - reporting a\nmissing location edge as `NO_REQUIRED_QUANTITY` would be nonsense a\nreader would have to decode.",
+    "enum": [
+     "shared_structural_location_established",
+     "left_location_missing",
+     "right_location_missing",
+     "both_locations_missing",
+     "distinct_location_identities",
+     "multiple_applicable_locations",
+     "asset_identity_ambiguous"
+    ],
+    "title": "StructuralReasoningDiagnosticCode",
+    "type": "string"
+   },
+   "StructuralReasoningOutcome": {
+    "description": "What a **structural relationship** rule concluded.\n\nThree members, and the absent fourth is the important one.\n\n## Why there is no negative outcome\n\nThere is no `NOT_ESTABLISHED`, no `NOT_SHARED` and no `DISJOINT`,\nbecause the governed graph has **no complete-world basis**. It is a\npartial projection of the statements engineers have approved\n(ADR-0024): a location relationship exists only where a document\nhappened to write a compound IEC 81346 designation, an extraction\nrule read it, and a reviewer approved the interpretation.\n\nTwo consequences follow, and either alone would be decisive:\n\n1. **Absence is not refutation.** An asset with no governed location\n   edge is an asset nobody has recorded a location for - not an asset\n   that is nowhere.\n2. **Distinct location identities are not distinct places.** Location\n   identity is document-scoped by design (EPIC 32.P1): the same\n   ``+E01`` written in two documents is two governed identities. So\n   ``A -> X`` and ``B -> Y`` with ``X != Y`` is entirely compatible\n   with A and B standing in the same room.\n\nA negative outcome would therefore assert something no governed input\nsupports. `INSUFFICIENT_KNOWLEDGE` is the true answer, and it stays\nthe answer until an ontology exists that can prove the negative.",
+    "enum": [
+     "established",
+     "insufficient_knowledge",
+     "ambiguous"
+    ],
+    "title": "StructuralReasoningOutcome",
+    "type": "string"
    },
    "SupportRole": {
     "description": "Which side of the association an observation supports.",
@@ -13227,7 +13352,8 @@
      "document_lookup",
      "engineering_explanation",
      "engineering_verification",
-     "engineering_comparison"
+     "engineering_comparison",
+     "structural_relationship"
     ],
     "title": "WorkflowType",
     "type": "string"

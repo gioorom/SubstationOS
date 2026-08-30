@@ -26,13 +26,17 @@ from app.domain.governed_retrieval.governed_retrieval_vocabulary import (
 )
 
 # Fixed, documented order - every ContextAssemblyResult always carries
-# exactly these three sections, even when a section is empty, so a
-# caller can rely on a stable shape.
-_SECTION_KINDS: tuple[GovernedResultKind, ...] = (
-    GovernedResultKind.ASSET,
-    GovernedResultKind.QUANTITY,
-    GovernedResultKind.RELATIONSHIP,
-)
+# exactly one section per governed result kind, even when a section is
+# empty, so a caller can rely on a stable shape.
+#
+# **Derived from the governed vocabulary rather than listed by hand.**
+# A kind missing here was a `KeyError` at assembly time: governed
+# knowledge retrieval returned that Context Assembly could not carry.
+# EPIC 32.P1 added `STRUCTURAL_LOCATION` to the vocabulary and nothing
+# retrieved one until EPIC 32.2 asked a question about locations, at
+# which point the gap surfaced as a failed workflow. Deriving the tuple
+# closes the class of defect rather than this instance of it.
+_SECTION_KINDS: tuple[GovernedResultKind, ...] = tuple(GovernedResultKind)
 
 
 def aggregate(selected: tuple[ContextItem, ...]) -> ContextAssemblyResult:

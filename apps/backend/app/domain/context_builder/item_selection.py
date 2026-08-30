@@ -65,6 +65,7 @@ _BUDGET_CATEGORY_FOR_KIND: dict[GovernedResultKind, BudgetCategory] = {
     GovernedResultKind.ASSET: BudgetCategory.ASSETS,
     GovernedResultKind.QUANTITY: BudgetCategory.QUANTITIES,
     GovernedResultKind.RELATIONSHIP: BudgetCategory.RELATIONSHIPS,
+    GovernedResultKind.STRUCTURAL_LOCATION: BudgetCategory.LOCATIONS,
 }
 
 
@@ -125,6 +126,9 @@ def select_items(
         GovernedResultKind.ASSET: budget_policy.max_assets,
         GovernedResultKind.QUANTITY: budget_policy.max_quantities,
         GovernedResultKind.RELATIONSHIP: budget_policy.max_relationships,
+        GovernedResultKind.STRUCTURAL_LOCATION: (
+            budget_policy.max_locations
+        ),
     }
     kind_requested: dict[GovernedResultKind, int] = {
         kind: 0 for kind in GovernedResultKind
@@ -180,6 +184,16 @@ def select_items(
             requested=kind_requested[GovernedResultKind.RELATIONSHIP],
             accepted=kind_accepted[GovernedResultKind.RELATIONSHIP],
             limit=budget_policy.max_relationships,
+        ),
+        _consumption(
+            BudgetCategory.LOCATIONS,
+            requested=kind_requested[
+                GovernedResultKind.STRUCTURAL_LOCATION
+            ],
+            accepted=kind_accepted[
+                GovernedResultKind.STRUCTURAL_LOCATION
+            ],
+            limit=budget_policy.max_locations,
         ),
     )
 

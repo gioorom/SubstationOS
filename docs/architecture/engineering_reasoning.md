@@ -232,14 +232,40 @@ package is a caller-supplied claim about what governed knowledge says.
 
 ## 11. Current scope
 
-One rule: `governed_quantity_consistency` v1.0, over `HAS_RATED_POWER`.
+**Two rules, in two families**, each with its own closed outcome
+vocabulary:
 
-> **Unchanged by EPIC 32.P1.** That milestone added a second governed
-> relationship - `IS_LOCATED_IN`, between an asset and a structural
-> location - so `HAS_RATED_POWER` is no longer the only relationship kind
-> governed semantics produces. **No reasoning rule reads the new one**,
-> and this context was not modified. Relationship reasoning is EPIC
-> 32.2's subject; see below for the conditions it must meet.
+| Family | Rule | Outcomes |
+|---|---|---|
+| `QUANTITY_CONSISTENCY` | `governed_quantity_consistency` v1.0, over `HAS_RATED_POWER` | `CONSISTENT` / `INCONSISTENT` / `INSUFFICIENT_KNOWLEDGE` / `AMBIGUOUS` |
+| `STRUCTURAL_RELATIONSHIP` | `shared_structural_location` v1.0, over `IS_LOCATED_IN` (EPIC 32.2) | `ESTABLISHED` / `INSUFFICIENT_KNOWLEDGE` / `AMBIGUOUS` |
+
+The vocabularies are separate on purpose. `CONSISTENT` answers "do these
+governed values agree?" and cannot be stretched to mean "this
+relationship holds" without making both meanings unreadable. `rule_family`
+on a result says which dictionary its outcome is written in.
+
+### The second rule: shared structural location
+
+> Does governed knowledge establish that these two assets stand in the
+> same governed structural location?
+
+EPIC 32.P1 gave the graph `IS_LOCATED_IN`; this rule reads two of them
+and concludes that two assets share a location context - and **nothing
+else**. Not connectivity, not adjacency, not direction, not state, not
+what kind of place the location is.
+
+Its most important property is the outcome it does not have. There is no
+`NOT_SHARED`: the governed graph is partial, and location identity is
+document-scoped, so `A -> X`, `B -> Y`, `X != Y` is entirely compatible
+with one physical room. That case is `INSUFFICIENT_KNOWLEDGE` with the
+`DISTINCT_LOCATION_IDENTITIES` diagnostic.
+
+See [ADR-0031](adr/0031-deterministic-shared-structural-location-reasoning.md).
+
+This is not a rule engine. Two rules are two functions and one branch in
+the engine's existing reasoning step, dispatching on the request's typed
+intent.
 
 
 This is not a rule engine, a DSL or a plug-in registry. One rule, one
@@ -271,13 +297,18 @@ Both are reasonable products. Both cross AF-REASON-003.
 Either needs its own ADR and, almost certainly, its own explicitly
 **ungoverned** surface - never a write into the governed graph.
 
-### The second pressure: relationship reasoning
+### The second pressure: relationship reasoning *(discharged in part)*
 
 EPIC 32.2 stopped with `BLOCKED_BY_ONTOLOGY` because the governed graph
 was **depth-1 bipartite** - every edge ran from an asset to a quantity,
 so no two-hop path could exist under any data. EPIC 32.P1 removed that
 blocker by adding `IS_LOCATED_IN`
-([ADR-0030](adr/0030-governed-structural-relationship-semantics.md)).
+([ADR-0030](adr/0030-governed-structural-relationship-semantics.md)), and
+EPIC 32.2 then resumed narrowly as the shared-structural-location rule
+above.
+
+The constraints below are **not** discharged. They bind that rule, and
+they bind every structural rule after it.
 
 A path now exists:
 

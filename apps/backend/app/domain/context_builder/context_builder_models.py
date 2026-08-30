@@ -73,6 +73,10 @@ class BudgetCategory(str, Enum):
     ASSETS = "assets"
     QUANTITIES = "quantities"
     RELATIONSHIPS = "relationships"
+    # EPIC 32.P1's governed structural locations. Added by EPIC 32.2,
+    # which was the first question to retrieve one - until then a
+    # location reaching Context Assembly was an unhandled kind.
+    LOCATIONS = "locations"
     METADATA_ENTRIES = "metadata_entries"
     WARNINGS = "warnings"
 
@@ -197,6 +201,7 @@ class BudgetPolicy:
     max_assets: int
     max_quantities: int
     max_relationships: int
+    max_locations: int
     max_metadata_entries: int
     max_warnings: int
 

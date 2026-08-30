@@ -156,12 +156,31 @@ knowledge**, found by a deterministic rule. It cannot be resolved by
 retrieving better or asking the model again - somebody has to fix the
 source.
 
-### Derived reasoning (EPIC 32.1)
+### Derived reasoning (EPIC 32.1, extended by EPIC 32.2)
 
 `EngineeringResponse.derived_reasoning` carries a
 `DerivedReasoningAssessment` when the workflow ran a reasoning step, and
 `None` otherwise - a different and honest state from a `CONSISTENT`
 nobody derived.
+
+**Two families, one field, discriminated by `rule_family`.** A
+quantity-consistency conclusion carries `ReasoningOutcome`; a structural
+relationship conclusion (EPIC 32.2) carries `StructuralReasoningOutcome`
+plus a typed `SharedStructuralLocationReport` naming the derived
+relationship, the shared governed location **identity**, and the ordered
+governed path the conclusion rests on. A consumer switches on the family
+and gets a static type - never a dictionary, and never prose it has to
+parse.
+
+The structural family has no negative outcome. There is no
+`NOT_SHARED`, because the governed graph is partial and location identity
+is document-scoped, so "we cannot establish that they share a location"
+is never "they are in different places". The
+`INSUFFICIENT_KNOWLEDGE` warning says so in words, because a reader given
+only the word *insufficient* will conclude separation.
+`CONFLICTING_KNOWLEDGE` is never raised for a structural conclusion - two
+assets in different governed locations are not statements that
+contradict each other.
 
 It is a **field of its own, deliberately not an evidence reference**. To
 every downstream consumer, an entry in `references` reads as one more

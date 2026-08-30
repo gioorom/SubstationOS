@@ -157,7 +157,7 @@ engine reads context, not the graph.
 | Governed graph | Governed KG | **promotion only** | retrieval, API | **Yes — rebuildable** | projection | mandatory, non-null |
 | Retrieval results | Governed Retrieval | **none** | context assembly | **Yes** | transient | inherited |
 | Context packages | Context Assembly | **none** | prompt, response | **Yes** | transient | inherited |
-| Reasoning conclusions | EPIC 32.1 / `ReasoningResult` | derived, never persisted | — | — | — | **required — `ReasoningContributor` carries the full governed chain (AF-REASON-002)** |
+| Reasoning conclusions | EPIC 32.1 / `ReasoningResult`, two families since EPIC 32.2 | derived, never persisted | — | — | — | **required — `ReasoningContributor` carries the full governed chain (AF-REASON-002); a structural conclusion keeps both contributing chains and the ordered inference path** |
 | Engineering Response | Engineering Response | response service | session, conversation | **Yes** | transient | citations |
 | Audit events | Audit | audit service | audit API | **No** | **append-only** | actor identity |
 | `canonical_facts` etc. | Canonicalization / Review Workflow | their services | their APIs | **No** | mutable | human-authored |
@@ -173,7 +173,7 @@ engine reads context, not the graph.
 | **Governed KG** | **`knowledge_promotion_service`** | forbidden — `AF-KG-003` |
 | Governed Retrieval | **NONE** | port has no write method — `AF-RET-001` |
 | Context Assembly | **NONE** | performs no I/O — `AF-CTX-002` |
-| Reasoning conclusions | **EPIC 32.1: nobody — they are never persisted, so no lifecycle was invented** | is not the graph, and cannot write it (AF-REASON-003) |
+| Reasoning conclusions | **nobody — they are never persisted, so no lifecycle was invented (unchanged by EPIC 32.2)** | is not the graph, and cannot write it (AF-REASON-003) |
 | Audit | `audit_service` | forbidden |
 
 ## 9. Dependency Direction
@@ -310,6 +310,18 @@ fallback is not merely unwired but unavailable.
 > `engineering_reasoning`, and AF-DET-002's deterministic core gained
 > `engineering_reasoning` as an eleventh context — both additions, not
 > relaxations.
+>
+> **Extended by EPIC 32.2.** A second reasoning family,
+> `STRUCTURAL_RELATIONSHIP`, with one rule (`shared_structural_location`
+> v1.0) over the `IS_LOCATED_IN` relationship EPIC 32.P1 added. It
+> introduced **no governed ontology**, no new dependency direction, and
+> no persistence. AF-REASON-001 gained a structural enforcement it did
+> not have before: `DerivedRelationshipKind` is asserted disjoint from
+> `GraphEdgeKind`, `SemanticStatementType`, `FactPredicate` and
+> `GraphNodeKind`, so a derived relationship cannot be represented as a
+> governed one. Enforced in
+> `tests/architecture/test_structural_reasoning_boundaries.py`; see
+> [ADR-0031](adr/0031-deterministic-shared-structural-location-reasoning.md).
 
 **May:** consume governed knowledge and context; derive explicit
 reasoning artefacts; produce conclusions with provenance; represent
@@ -425,7 +437,7 @@ string `structured_retrieval` is not banned, because
 | `analysis.entities_found` always `0` | **No** — a response field surviving its cause |
 | `scripts/benchmarks` imports one governed fixture from `tests/**` | **No** — a benchmark, contrary to its own docstring; not runtime |
 | No cross-document entity resolution | **No** — an explicit stated limit; AF-AMB-001 depends on it being absent. EPIC 32.P1 did not change it: two documents writing `+E01` are two governed locations |
-| Governed graph now has two-hop asset-to-asset paths | **No** — EPIC 32.P1's `IS_LOCATED_IN` makes `asset → location ← asset` traversable. Reachability is not meaning, and no rule reads it; see ADR-0030 |
+| Governed graph now has two-hop asset-to-asset paths | **No** — EPIC 32.P1's `IS_LOCATED_IN` makes `asset → location ← asset` traversable. EPIC 32.2 reads that shape under one named, versioned rule that names the edge kind explicitly; reachability alone still authorises nothing. See ADR-0030 and ADR-0031 |
 | Rebuild is synchronous and unbounded | **No** — operational |
 | Governed graph is unversioned per project | **No** — one global generation |
 

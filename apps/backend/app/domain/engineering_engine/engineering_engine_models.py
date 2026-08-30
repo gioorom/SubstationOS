@@ -70,6 +70,12 @@ class WorkflowType(str, Enum):
     # identity is preserved end to end, never merged into one context.
     # What the two sides mean is decided entirely outside the engine.
     ENGINEERING_COMPARISON = "engineering_comparison"
+    # EPIC 32.2 - the first workflow whose *answer* is computed
+    # deterministically before the model is invoked. Two subjects, like
+    # comparison, but one governed context rather than two: the question
+    # is about a relationship between them, which cannot be answered from
+    # two contexts that were deliberately kept apart.
+    STRUCTURAL_RELATIONSHIP = "structural_relationship"
 
 
 class WorkflowStepType(str, Enum):

@@ -42,5 +42,14 @@ DEFAULT_MAX_ITEMS = 100
 DEFAULT_MAX_ASSETS = 50
 DEFAULT_MAX_QUANTITIES = 50
 DEFAULT_MAX_RELATIONSHIPS = 50
+
+#: Governed structural locations (EPIC 32.P1) admitted to one context.
+#:
+#: Lower than the others on purpose. A location is a place several assets
+#: point at, so a context that retrieved twenty assets rarely reaches
+#: twenty distinct locations - and a context carrying more locations than
+#: equipment is describing a building rather than answering an
+#: engineering question.
+DEFAULT_MAX_LOCATIONS = 20
 DEFAULT_MAX_METADATA_ENTRIES = 20
 DEFAULT_MAX_WARNINGS = 50

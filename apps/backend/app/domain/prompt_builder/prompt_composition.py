@@ -31,6 +31,7 @@ from app.domain.engineering_reasoning.reasoning_models import (
 from app.domain.engineering_reasoning.reasoning_vocabulary import (
     ReasoningDiagnosticCode,
     ReasoningOutcome,
+    StructuralReasoningOutcome,
 )
 from app.domain.prompt_builder.composition_policy import (
     CONSTRAINTS,
@@ -288,6 +289,37 @@ _OUTCOME_MEANING: dict[ReasoningOutcome, str] = {
 }
 
 
+#: What each structural outcome means, in words the model may repeat.
+#:
+#: The `INSUFFICIENT_KNOWLEDGE` wording is the load-bearing one. A model
+#: told only "insufficient" will write "they are not in the same place",
+#: because that is what the word suggests in ordinary English. It is told
+#: explicitly that the finding is *not* a finding of separation, because
+#: the governed graph cannot establish separation at all.
+_STRUCTURAL_OUTCOME_MEANING: dict[StructuralReasoningOutcome, str] = {
+    StructuralReasoningOutcome.ESTABLISHED: (
+        "Governed knowledge places both assets in the SAME governed "
+        "structural location. This says they share a location context "
+        "and NOTHING else: it does not say they are connected, that "
+        "current can flow between them, that one feeds or protects the "
+        "other, that they are adjacent, or what kind of place the "
+        "location is."
+    ),
+    StructuralReasoningOutcome.INSUFFICIENT_KNOWLEDGE: (
+        "Governed knowledge does not establish that the two assets share "
+        "a structural location. This is NOT a finding that they are in "
+        "different places: the governed graph records only what "
+        "documents state and engineers have approved, and a shared "
+        "location may simply never have been recorded. Do not report "
+        "them as separate."
+    ),
+    StructuralReasoningOutcome.AMBIGUOUS: (
+        "The question resolved to more than one possibility and was "
+        "therefore never a single question. No candidate was chosen."
+    ),
+}
+
+
 def build_derived_reasoning(
     reasoning: ReasoningResult | None,
 ) -> PromptSection:
@@ -307,6 +339,9 @@ def build_derived_reasoning(
 
     if reasoning is None:
         return section(PromptSectionType.DERIVED_REASONING, ())
+
+    if isinstance(reasoning.outcome, StructuralReasoningOutcome):
+        return _build_structural_reasoning(reasoning)
 
     if (
         reasoning.outcome is ReasoningOutcome.INSUFFICIENT_KNOWLEDGE
@@ -333,6 +368,58 @@ def build_derived_reasoning(
     content.extend(
         f"Contributing governed value: {contributor.label} "
         f"[node {contributor.node_id}] "
+        f"(statement {contributor.statement_key}, "
+        f"review {contributor.review_id})"
+        for contributor in reasoning.contributors
+    )
+
+    return section(PromptSectionType.DERIVED_REASONING, tuple(content))
+
+
+def _build_structural_reasoning(
+    reasoning: ReasoningResult,
+) -> PromptSection:
+    """
+    A structural conclusion, presented as **derived**.
+
+    The model is never asked whether the two assets share a location.
+    That question was answered exactly, upstream, by a versioned rule;
+    this section reports the answer and the governed path it rests on, so
+    the model's job is to communicate a conclusion rather than to reach
+    one.
+
+    The derived relationship is named in full - ``shares structural
+    location with`` - and never shortened to anything a reader could take
+    for connectivity.
+    """
+
+    assessment = reasoning.structural
+
+    content = [
+        "The following is a DERIVED CONCLUSION produced by a "
+        "deterministic engineering rule. It is NOT a reviewed "
+        "engineering statement and NOT part of the governed knowledge "
+        "above.",
+        f"Question: {reasoning.query.question}",
+        f"Rule: {reasoning.rule.identity}",
+        f"Outcome: {reasoning.outcome.value.upper()}",
+        f"Meaning: {_STRUCTURAL_OUTCOME_MEANING[reasoning.outcome]}",
+        f"Basis: {assessment.diagnostics.code.value}",
+    ]
+
+    if assessment.is_established:
+        content.append(
+            "Derived relationship: "
+            f"{assessment.derived_relationship.value} "
+            f"(shared governed structural location "
+            f"'{assessment.shared_location_label}' "
+            f"[node {assessment.shared_location_node_id}])"
+        )
+
+    content.extend(
+        "Contributing governed relationship: "
+        f"{contributor.label} "
+        f"[edge {contributor.edge_id}] "
         f"(statement {contributor.statement_key}, "
         f"review {contributor.review_id})"
         for contributor in reasoning.contributors

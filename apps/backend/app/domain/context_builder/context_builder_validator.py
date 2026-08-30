@@ -44,6 +44,7 @@ class ContextBuilderValidator:
         max_assets: int,
         max_quantities: int,
         max_relationships: int,
+        max_locations: int,
         max_metadata_entries: int,
         max_warnings: int,
     ) -> None:

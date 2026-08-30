@@ -18,13 +18,17 @@ from app.domain.engineering_index.engineering_index_locator import (
     IndexEntryLocatorKind,
 )
 from app.domain.engineering_reasoning.reasoning_vocabulary import (
+    DerivedRelationshipKind,
     ReasoningDiagnosticCode,
     ReasoningOutcome,
+    StructuralReasoningDiagnosticCode,
+    StructuralReasoningOutcome,
     ReasoningRuleFamily,
 )
 from app.domain.engineering_response.engineering_response_models import (
     DerivedReasoningAssessment,
     DerivedReasoningSupport,
+    SharedStructuralLocationReport,
     EngineeringEvidenceReference,
     EngineeringResponse,
     EngineeringResponseMetadata,
@@ -185,6 +189,35 @@ class DerivedReasoningSupportRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SharedStructuralLocationReportRead(BaseModel):
+    """
+    The structural half of a derived conclusion (EPIC 32.2).
+
+    Present only when ``rule_family`` is ``structural_relationship``, and
+    that field is the discriminator: a consumer switches on it and gets
+    this typed object, rather than parsing the human-readable question.
+
+    ``derived_relationship`` is ``shares_structural_location_with`` - the
+    two assets stand in one governed structural location. It is **not**
+    connectivity, adjacency, a circuit, a direction or a state, and it
+    says nothing about what kind of place the location is.
+
+    ``shared_location_node_id`` is a governed identity. Two documents
+    writing ``+E01`` are two governed locations, so a consumer comparing
+    the **labels** would merge them and perform, through this schema, the
+    cross-document entity resolution the platform refuses.
+    """
+
+    derived_relationship: DerivedRelationshipKind | None = None
+    shared_location_node_id: str | None = None
+    shared_location_label: str | None = None
+    left_asset_node_id: str
+    right_asset_node_id: str
+    inference_path: list[str]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DerivedReasoningAssessmentRead(BaseModel):
     """
     A **derived conclusion** (EPIC 32.1), never governed knowledge.
@@ -193,22 +226,33 @@ class DerivedReasoningAssessmentRead(BaseModel):
     back into the graph. ``supports`` names the governed facts the
     conclusion was drawn from; the conclusion itself is not one of them.
 
-    ``outcome`` has four values, never a boolean and never a score:
-    ``consistent``, ``inconsistent``, ``insufficient_knowledge`` and
-    ``ambiguous`` are four different engineering findings.
+    ``outcome`` is never a boolean and never a score. **Which vocabulary
+    it is written in depends on ``rule_family``**: a quantity-consistency
+    conclusion is ``consistent``/``inconsistent``/
+    ``insufficient_knowledge``/``ambiguous``, while a structural
+    relationship conclusion (EPIC 32.2) is
+    ``established``/``insufficient_knowledge``/``ambiguous``. There is
+    deliberately no structural ``not_established``: the governed graph is
+    partial, so nothing in it can establish a negative.
+
     ``rule_id``/``rule_version`` say what concluded it and
     ``diagnostic_code`` says why, from a closed vocabulary.
     """
 
-    outcome: ReasoningOutcome
+    outcome: ReasoningOutcome | StructuralReasoningOutcome
     rule_id: str
     rule_version: str
     rule_family: ReasoningRuleFamily
-    diagnostic_code: ReasoningDiagnosticCode
+    diagnostic_code: (
+        ReasoningDiagnosticCode | StructuralReasoningDiagnosticCode
+    )
     question: str
     result_id: str
     reasoning_policy_version: str
     supports: list[DerivedReasoningSupportRead]
+    #: Present only for the structural relationship family - see
+    #: `SharedStructuralLocationReportRead`.
+    structural: SharedStructuralLocationReportRead | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -529,6 +573,36 @@ def engineering_response_from_schema(
                 result_id=model.derived_reasoning.result_id,
                 reasoning_policy_version=(
                     model.derived_reasoning.reasoning_policy_version
+                ),
+                structural=(
+                    None
+                    if model.derived_reasoning.structural is None
+                    else SharedStructuralLocationReport(
+                        derived_relationship=(
+                            model.derived_reasoning.structural
+                            .derived_relationship
+                        ),
+                        shared_location_node_id=(
+                            model.derived_reasoning.structural
+                            .shared_location_node_id
+                        ),
+                        shared_location_label=(
+                            model.derived_reasoning.structural
+                            .shared_location_label
+                        ),
+                        left_asset_node_id=(
+                            model.derived_reasoning.structural
+                            .left_asset_node_id
+                        ),
+                        right_asset_node_id=(
+                            model.derived_reasoning.structural
+                            .right_asset_node_id
+                        ),
+                        inference_path=tuple(
+                            model.derived_reasoning.structural
+                            .inference_path
+                        ),
+                    )
                 ),
                 supports=tuple(
                     DerivedReasoningSupport(

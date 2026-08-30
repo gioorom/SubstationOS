@@ -50,6 +50,8 @@ REGISTERED_INTENT_TYPES = (
     EngineeringIntentType.ENGINEERING_COMPARISON,
     EngineeringIntentType.ENGINEERING_EXPLANATION,
     EngineeringIntentType.KNOWLEDGE_QUERY,
+    # EPIC 32.2 - the shared-structural-location workflow.
+    EngineeringIntentType.STRUCTURAL_RELATIONSHIP_QUERY,
     EngineeringIntentType.VERIFICATION_REQUEST,
 )
 

@@ -37,6 +37,7 @@ from app.domain.engineering_engine.engineering_engine_models import (
 from app.domain.engineering_engine.workflow_definitions import (
     DOCUMENT_LOOKUP_WORKFLOW,
     ENGINEERING_COMPARISON_WORKFLOW,
+    STRUCTURAL_RELATIONSHIP_WORKFLOW,
     ENGINEERING_EXPLANATION_WORKFLOW,
     ENGINEERING_VERIFICATION_WORKFLOW,
     KNOWLEDGE_QUERY_WORKFLOW,
@@ -98,6 +99,7 @@ def build_workflow_registry() -> WorkflowRegistry:
     registry.register(ENGINEERING_EXPLANATION_WORKFLOW)
     registry.register(ENGINEERING_VERIFICATION_WORKFLOW)
     registry.register(ENGINEERING_COMPARISON_WORKFLOW)
+    registry.register(STRUCTURAL_RELATIONSHIP_WORKFLOW)
 
     return registry.freeze()
 

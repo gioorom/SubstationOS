@@ -231,3 +231,98 @@ def governed_asset_with_quantity(
     )
 
     return (asset, quantity, edge)
+
+
+def governed_location(
+    *,
+    designation: str,
+    entity_key: str | None = None,
+    document_id: int = 1,
+    project_id: int | None = 1,
+    statement_key: str = "statement:location",
+    state: GraphObjectState = GraphObjectState.ACTIVE,
+    created_at: datetime = DEFAULT_CREATED_AT,
+) -> GraphNode:
+    """
+    One governed structural location - the ``+E01`` of ``+E01-QA1``
+    (EPIC 32.P1).
+
+    ``entity_key`` defaults to a **document-scoped** key, because that is
+    what the pipeline produces: the same ``+E01`` written in two
+    documents is two governed locations. A test that wants two documents
+    to name one location must say so explicitly by passing the same key,
+    and no test should, because the platform cannot establish it.
+    """
+
+    key = entity_key or f"location:{document_id}:{designation}"
+
+    return GraphNode(
+        node_id=node_id_for(GraphNodeKind.STRUCTURAL_LOCATION, key),
+        kind=GraphNodeKind.STRUCTURAL_LOCATION,
+        label=designation,
+        normalized_value=designation.upper(),
+        unit=None,
+        state=state,
+        provenance=governed_provenance(
+            statement_key=statement_key,
+            document_id=document_id,
+            project_id=project_id,
+        ),
+        created_at=created_at,
+    )
+
+
+def governed_asset_in_location(
+    *,
+    designation: str,
+    location_designation: str = "+E01",
+    location_entity_key: str | None = None,
+    document_id: int = 1,
+    project_id: int | None = 1,
+    state: GraphObjectState = GraphObjectState.ACTIVE,
+    created_at: datetime = DEFAULT_CREATED_AT,
+) -> tuple[GraphNode, GraphNode, GraphEdge]:
+    """
+    An asset, a structural location, and the approved `IS_LOCATED_IN`
+    relationship between them.
+
+    The sibling of `governed_asset_with_quantity`, for the relationship
+    EPIC 32.P1 added and EPIC 32.2 reasons over.
+    """
+
+    statement_key = (
+        f"statement:{document_id}:{designation}:is-located-in"
+    )
+
+    asset = governed_asset(
+        designation=designation,
+        document_id=document_id,
+        project_id=project_id,
+        statement_key=statement_key,
+        state=state,
+        created_at=created_at,
+    )
+    location = governed_location(
+        designation=location_designation,
+        entity_key=location_entity_key,
+        document_id=document_id,
+        project_id=project_id,
+        statement_key=statement_key,
+        state=state,
+        created_at=created_at,
+    )
+    edge = GraphEdge(
+        edge_id=edge_id_for(GraphEdgeKind.IS_LOCATED_IN, statement_key),
+        kind=GraphEdgeKind.IS_LOCATED_IN,
+        subject_node_id=asset.node_id.value,
+        object_node_id=location.node_id.value,
+        state=state,
+        provenance=governed_provenance(
+            statement_key=statement_key,
+            document_id=document_id,
+            project_id=project_id,
+        ),
+        created_at=created_at,
+    )
+
+    return (asset, location, edge)

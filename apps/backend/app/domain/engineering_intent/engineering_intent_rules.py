@@ -117,6 +117,34 @@ CLASSIFICATION_RULES: tuple[EngineeringIntentRule, ...] = (
             "inconsistencies",
         ),
     ),
+    # --- STRUCTURAL_RELATIONSHIP_QUERY -------------------------------
+    #
+    # Phrases only, and long ones. The capability is narrow - governed
+    # **structural location** and nothing else - so the routing has to be
+    # narrow too: a request that reaches this workflow gets an answer
+    # about co-location, and a request about connectivity or about what
+    # kind of place something is must not, because those questions have
+    # no governed basis and the workflow would answer a different one.
+    #
+    # Deliberately absent: "same bay", "same panel", "same room" (the
+    # platform does not classify a location), "connected", "collegato"
+    # (connectivity is not containment), and the bare "same place",
+    # which in an engineering conversation means physical proximity far
+    # more often than it means a shared reference designation.
+    _rule(
+        "structural_relationship.shared_location",
+        EngineeringIntentType.STRUCTURAL_RELATIONSHIP_QUERY,
+        _STRONG,
+        phrases=(
+            "same structural location",
+            "same governed location",
+            "share a structural location",
+            "share the same structural location",
+            "stessa ubicazione strutturale",
+            "stessa ubicazione",
+            "medesima ubicazione",
+        ),
+    ),
     # --- ENGINEERING_COMPARISON --------------------------------------
     _rule(
         "comparison.verb",

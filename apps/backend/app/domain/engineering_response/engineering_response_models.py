@@ -58,8 +58,11 @@ from app.domain.engineering_reasoning.reasoning_models import (
     ReasoningResult,
 )
 from app.domain.engineering_reasoning.reasoning_vocabulary import (
+    DerivedRelationshipKind,
     ReasoningDiagnosticCode,
     ReasoningOutcome,
+    StructuralReasoningDiagnosticCode,
+    StructuralReasoningOutcome,
     ReasoningRuleFamily,
 )
 from app.domain.prompt_builder.prompt_builder_models import PromptPackage
@@ -461,6 +464,49 @@ class DerivedReasoningSupport:
 
 
 @dataclass(frozen=True, slots=True)
+class SharedStructuralLocationReport:
+    """
+    The structural half of a derived reasoning assessment (EPIC 32.2).
+
+    Reports what the shared-structural-location rule concluded, in the
+    response's own vocabulary. It **evaluates nothing**: every value is
+    copied from a `ReasoningResult` that a versioned rule already
+    produced.
+
+    ## What it says, and the longer list of what it does not
+
+    ``derived_relationship`` is
+    ``shares_structural_location_with`` - the two assets stand in one
+    governed structural location. It is not connectivity, not adjacency,
+    not a circuit, not a direction and not a state. A substation location
+    routinely holds equipment from several unrelated circuits.
+
+    ``shared_location_node_id`` is a **governed identity**, and the label
+    beside it is for reading only. Two documents writing ``+E01`` are two
+    governed locations; a consumer comparing labels would merge them, and
+    the platform would have performed cross-document entity resolution
+    through its response schema.
+
+    ``inference_path`` names the two governed relationships the
+    conclusion rests on, in order, so a reader can dispute the conclusion
+    by disputing an edge rather than by disbelieving a sentence.
+    """
+
+    derived_relationship: DerivedRelationshipKind | None
+    shared_location_node_id: str | None
+    shared_location_label: str | None
+    left_asset_node_id: str
+    right_asset_node_id: str
+    inference_path: tuple[str, ...]
+
+    @property
+    def is_governed_knowledge(self) -> bool:
+        """Always ``False`` - see `DerivedReasoningAssessment`."""
+
+        return False
+
+
+@dataclass(frozen=True, slots=True)
 class DerivedReasoningAssessment:
     """
     The machine-readable result of one deterministic reasoning rule
@@ -489,15 +535,30 @@ class DerivedReasoningAssessment:
     facts and the same rule version always produce the same identifier.
     """
 
-    outcome: ReasoningOutcome
+    outcome: ReasoningOutcome | StructuralReasoningOutcome
     rule_id: str
     rule_version: str
     rule_family: ReasoningRuleFamily
-    diagnostic_code: ReasoningDiagnosticCode
+    diagnostic_code: (
+        ReasoningDiagnosticCode | StructuralReasoningDiagnosticCode
+    )
     question: str
     result_id: str
     reasoning_policy_version: str
     supports: tuple[DerivedReasoningSupport, ...]
+
+    #: The family-specific conclusion, when the family has one.
+    #:
+    #: ``None`` for quantity consistency. Populated for structural
+    #: relationship reasoning (EPIC 32.2), whose conclusion additionally
+    #: names a derived relationship, a shared structural location and the
+    #: governed path it rests on.
+    #:
+    #: **Typed, not a dictionary.** ``rule_family`` is the discriminator,
+    #: and a consumer that switches on it gets a static type. A response
+    #: reader must be able to tell a quantity-consistency assessment from
+    #: a shared-location one without parsing prose.
+    structural: "SharedStructuralLocationReport | None" = None
 
     @property
     def is_governed_knowledge(self) -> bool:
