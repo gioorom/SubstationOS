@@ -87,6 +87,13 @@ class PromptSectionType(str, Enum):
     # every objective that is not a comparison.
     LEFT_KNOWLEDGE = "left_knowledge"
     RIGHT_KNOWLEDGE = "right_knowledge"
+    # Deterministic engineering reasoning (EPIC 32.1). A **derived**
+    # conclusion, and its own section precisely so the model cannot read
+    # it as one more governed statement: SELECTED_KNOWLEDGE is what
+    # engineers approved, this is what a versioned rule concluded from
+    # it. Always constructed; enabled only when a rule actually examined
+    # governed knowledge.
+    DERIVED_REASONING = "derived_reasoning"
     EVIDENCE_REFERENCES = "evidence_references"
     CONSTRAINTS = "constraints"
     FORMATTING_RULES = "formatting_rules"

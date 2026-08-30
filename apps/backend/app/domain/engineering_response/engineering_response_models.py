@@ -54,6 +54,14 @@ from app.domain.engineering_index.document_retrieval_models import (
     DocumentReference,
     DocumentRetrievalResult,
 )
+from app.domain.engineering_reasoning.reasoning_models import (
+    ReasoningResult,
+)
+from app.domain.engineering_reasoning.reasoning_vocabulary import (
+    ReasoningDiagnosticCode,
+    ReasoningOutcome,
+    ReasoningRuleFamily,
+)
 from app.domain.prompt_builder.prompt_builder_models import PromptPackage
 
 
@@ -134,6 +142,14 @@ class EngineeringWarningCategory(str, Enum):
     #: preserves it and the prompt states it, so a response that dropped
     #: it here would be the one place in the chain that hid it.
     AMBIGUOUS_KNOWLEDGE = "ambiguous_knowledge"
+
+    #: Governed knowledge itself disagrees. Added by EPIC 32.1: a
+    #: deterministic rule found two different governed values for the
+    #: same governed quantity of the same equipment. This is not the
+    #: model being unsure and not the evidence being thin - it is a
+    #: conflict inside reviewed, approved knowledge, which somebody has
+    #: to resolve at the source.
+    CONFLICTING_KNOWLEDGE = "conflicting_knowledge"
 
     PROVIDER_WARNING = "provider_warning"
     UNKNOWN_CONTENT = "unknown_content"
@@ -416,6 +432,83 @@ class EngineeringResponseConfiguration:
 
 
 @dataclass(frozen=True, slots=True)
+class DerivedReasoningSupport:
+    """
+    One governed fact a derived conclusion was drawn from.
+
+    Every field here is **read off governed knowledge**, never computed
+    by reasoning: the governed node and edge, the Semantic Statement, the
+    Human Review that approved it, and the document the evidence came
+    from. That is what makes a conclusion traceable - a reader can walk
+    from the conclusion back to the approved statement without trusting
+    the reasoner (AF-REASON-002).
+
+    ``value`` is the declared governed value as text and ``unit`` its
+    declared unit. Rendered as text rather than as a number because this
+    is a *report* of what the graph said, and a governed quantity is
+    reported exactly as governed, never re-scaled or re-rounded.
+    """
+
+    node_id: str
+    edge_id: str
+    label: str
+    value: str | None
+    unit: str | None
+    statement_key: str
+    review_id: int
+    reviewer_display_name: str
+    document_id: int
+
+
+@dataclass(frozen=True, slots=True)
+class DerivedReasoningAssessment:
+    """
+    The machine-readable result of one deterministic reasoning rule
+    (EPIC 32.1) - a **derived conclusion**, never governed knowledge.
+
+    That distinction is the whole reason this is a separate field rather
+    than an extra evidence reference or an extra context item. Nothing
+    here was reviewed by a human, nothing here is promoted back into the
+    graph, and nothing downstream may treat it as if it had been
+    (AF-REASON-001, AF-REASON-003). ``supports`` names the governed facts
+    the conclusion was drawn *from*; the conclusion itself is not one of
+    them.
+
+    ``outcome`` is one of four values, never a boolean and never a score.
+    "The governed values agree", "they disagree", "the graph does not say"
+    and "the question named more than one piece of equipment" are four
+    different engineering findings, and collapsing the last three into
+    "not consistent" is how a real installation gets signed off on a gap
+    nobody looked for.
+
+    ``rule_id``/``rule_version`` identify what concluded it, so a change
+    in what the platform concludes is always a version change somebody
+    can point at. ``diagnostic_code`` states *why* the rule reached this
+    outcome, from a closed vocabulary - never free prose. ``result_id``
+    is the deterministic identity of the conclusion: the same governed
+    facts and the same rule version always produce the same identifier.
+    """
+
+    outcome: ReasoningOutcome
+    rule_id: str
+    rule_version: str
+    rule_family: ReasoningRuleFamily
+    diagnostic_code: ReasoningDiagnosticCode
+    question: str
+    result_id: str
+    reasoning_policy_version: str
+    supports: tuple[DerivedReasoningSupport, ...]
+
+    @property
+    def is_governed_knowledge(self) -> bool:
+        """Always ``False``. Present so that any caller tempted to treat
+        a conclusion as a governed fact has to read the word ``False``
+        while doing it."""
+
+        return False
+
+
+@dataclass(frozen=True, slots=True)
 class EngineeringResponseBuildRequest:
     """
     A fully validated request to build one ``EngineeringResponse``.
@@ -431,6 +524,14 @@ class EngineeringResponseBuildRequest:
     prompt_package: PromptPackage
     source: EngineeringResponseSourceEnvelope
     configuration: EngineeringResponseConfiguration
+
+    #: The deterministic conclusion this answer was accompanied by, when
+    #: the workflow ran a reasoning step. ``None`` for every workflow
+    #: that does not reason - which is all of them but engineering
+    #: verification - and the response then simply carries no derived
+    #: reasoning. Optional on purpose: reasoning is a capability a
+    #: workflow opts into, not a precondition of answering.
+    reasoning: ReasoningResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -474,6 +575,12 @@ class EngineeringResponseCompositionResult:
     document_references: tuple[DocumentReference, ...] = ()
     verification: VerificationAssessment | None = None
     comparison: ComparisonAssessment | None = None
+
+    #: A derived conclusion (EPIC 32.1), or ``None`` when this workflow
+    #: did not reason. Deliberately a field of its own rather than an
+    #: entry in ``references``: ``references`` are governed evidence,
+    #: and a conclusion is not evidence.
+    derived_reasoning: DerivedReasoningAssessment | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -592,6 +699,12 @@ class EngineeringResponse:
     document_references: tuple[DocumentReference, ...] = ()
     verification: VerificationAssessment | None = None
     comparison: ComparisonAssessment | None = None
+
+    #: A derived conclusion (EPIC 32.1), or ``None`` when this workflow
+    #: did not reason. Deliberately a field of its own rather than an
+    #: entry in ``references``: ``references`` are governed evidence,
+    #: and a conclusion is not evidence.
+    derived_reasoning: DerivedReasoningAssessment | None = None
 
 
 @dataclass(frozen=True, slots=True)

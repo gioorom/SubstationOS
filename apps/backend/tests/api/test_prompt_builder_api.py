@@ -142,7 +142,10 @@ def test_build_endpoint_assembles_a_prompt_package(api_client: TestClient) -> No
     assert body["project_id"] == project["id"]
     prompt = body["package"]
     assert prompt["project_id"] == project["id"]
-    assert len(prompt["sections"]) == 11
+    # Twelve since EPIC 32.1: derived_reasoning joined the vocabulary and
+    # is disabled here, because this endpoint composes a prompt and does
+    # not reason.
+    assert len(prompt["sections"]) == 12
     assert prompt["retrieved_knowledge"]["enabled"] is True
     assert len(prompt["constraints"]) == 5
     assert len(prompt["instructions"]) == 3

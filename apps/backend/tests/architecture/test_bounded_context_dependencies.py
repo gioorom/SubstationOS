@@ -150,6 +150,30 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
             "context_builder",
             "governed_retrieval",
             "governed_knowledge_graph",
+            # EPIC 32.1: a prompt may *render* a derived conclusion, so
+            # it reads ReasoningResult and the outcome vocabulary as
+            # shared, stable input types - the same downstream-reads-
+            # upstream pattern as context_builder above. Rendering is
+            # all it does: Prompt Builder evaluates no rule, derives no
+            # conclusion, and constructs no ReasoningResult of its own.
+            "engineering_reasoning",
+        }
+    ),
+    # Deterministic Engineering Reasoning (EPIC 32.1) derives explicit,
+    # versioned conclusions from governed knowledge. It reads exactly
+    # the context types it is handed - ContextPackage and the governed
+    # node/edge vocabulary a ContextItem embeds - and nothing else. It
+    # imports no repository, no port, no session and no provider,
+    # because its entire input is the context package a caller passes
+    # in (see ADR-0029 and tests/architecture/test_engineering_reasoning
+    # _boundaries.py). It is downstream of context_builder and upstream
+    # of prompt_builder, so the graph stays acyclic: prompt_builder ->
+    # engineering_reasoning -> context_builder, never back.
+    "engineering_reasoning": frozenset(
+        {
+            "context_builder",
+            "governed_retrieval",
+            "governed_knowledge_graph",
         }
     ),
     # Engineering Response (Milestone 18) consumes Prompt Builder's own
@@ -185,6 +209,18 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
             "prompt_builder",
             "governed_retrieval",
             "engineering_index",
+            # EPIC 32.1: a response *reports* a derived conclusion, so it
+            # reads ReasoningResult and the outcome vocabulary as shared,
+            # stable input types - the same downstream-reads-upstream
+            # pattern as context_builder/prompt_builder above.
+            #
+            # Reporting is all it does. Engineering Response evaluates no
+            # rule, derives no conclusion, and constructs no
+            # ReasoningResult; it restates one it was handed into its own
+            # DerivedReasoningAssessment, deliberately in a field of its
+            # own rather than among the evidence references, because a
+            # conclusion is not evidence (AF-REASON-001).
+            "engineering_reasoning",
         }
     ),
     # Engineering Session (Milestone 19) consumes Engineering Response's

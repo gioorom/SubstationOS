@@ -47,6 +47,9 @@ from app.domain.engineering_response.engineering_response_models import (
     EngineeringResponse,
     EngineeringResponseValidationResult,
 )
+from app.domain.engineering_reasoning.reasoning_models import (
+    ReasoningResult,
+)
 from app.domain.prompt_builder.prompt_builder_models import PromptPackage
 from app.services.engineering_engine.governed_retrieval_artifacts import (
     GovernedRetrievalOutcome,
@@ -76,6 +79,10 @@ class WorkflowExecutionContext:
     right_retrieval_result: GovernedRetrievalOutcome | None = None
     comparison_context: ComparisonContextPackage | None = None
     context_package: ContextPackage | None = None
+
+    #: A **derived** conclusion (EPIC 32.1), never governed knowledge.
+    #: Present only in workflows that run the reasoning step.
+    reasoning_result: ReasoningResult | None = None
     prompt_package: PromptPackage | None = None
     llm_response_envelope: LLMResponseEnvelope | None = None
     engineering_response: EngineeringResponse | None = None
@@ -103,6 +110,7 @@ class WorkflowExecutionContext:
         WorkflowArtifactKey.RIGHT_RETRIEVAL_RESULT: "right_retrieval_result",
         WorkflowArtifactKey.COMPARISON_CONTEXT: "comparison_context",
         WorkflowArtifactKey.CONTEXT_PACKAGE: "context_package",
+        WorkflowArtifactKey.REASONING_RESULT: "reasoning_result",
         WorkflowArtifactKey.PROMPT_PACKAGE: "prompt_package",
         WorkflowArtifactKey.LLM_RESPONSE_ENVELOPE: "llm_response_envelope",
         WorkflowArtifactKey.ENGINEERING_RESPONSE: "engineering_response",

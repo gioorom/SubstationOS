@@ -2412,6 +2412,128 @@
     "title": "CurrentReviewRead",
     "type": "object"
    },
+   "DerivedReasoningAssessmentRead": {
+    "description": "A **derived conclusion** (EPIC 32.1), never governed knowledge.\n\nNothing here was reviewed by a human and nothing here is promoted\nback into the graph. ``supports`` names the governed facts the\nconclusion was drawn from; the conclusion itself is not one of them.\n\n``outcome`` has four values, never a boolean and never a score:\n``consistent``, ``inconsistent``, ``insufficient_knowledge`` and\n``ambiguous`` are four different engineering findings.\n``rule_id``/``rule_version`` say what concluded it and\n``diagnostic_code`` says why, from a closed vocabulary.",
+    "properties": {
+     "diagnostic_code": {
+      "$ref": "#/components/schemas/ReasoningDiagnosticCode"
+     },
+     "outcome": {
+      "$ref": "#/components/schemas/ReasoningOutcome"
+     },
+     "question": {
+      "title": "Question",
+      "type": "string"
+     },
+     "reasoning_policy_version": {
+      "title": "Reasoning Policy Version",
+      "type": "string"
+     },
+     "result_id": {
+      "title": "Result Id",
+      "type": "string"
+     },
+     "rule_family": {
+      "$ref": "#/components/schemas/ReasoningRuleFamily"
+     },
+     "rule_id": {
+      "title": "Rule Id",
+      "type": "string"
+     },
+     "rule_version": {
+      "title": "Rule Version",
+      "type": "string"
+     },
+     "supports": {
+      "items": {
+       "$ref": "#/components/schemas/DerivedReasoningSupportRead"
+      },
+      "title": "Supports",
+      "type": "array"
+     }
+    },
+    "required": [
+     "outcome",
+     "rule_id",
+     "rule_version",
+     "rule_family",
+     "diagnostic_code",
+     "question",
+     "result_id",
+     "reasoning_policy_version",
+     "supports"
+    ],
+    "title": "DerivedReasoningAssessmentRead",
+    "type": "object"
+   },
+   "DerivedReasoningSupportRead": {
+    "description": "One governed fact a derived conclusion was drawn from - the\ngoverned node and edge, the Semantic Statement, the Human Review\nthat approved it and the document behind it, so a reader can walk\nback from the conclusion to the approved knowledge.",
+    "properties": {
+     "document_id": {
+      "title": "Document Id",
+      "type": "integer"
+     },
+     "edge_id": {
+      "title": "Edge Id",
+      "type": "string"
+     },
+     "label": {
+      "title": "Label",
+      "type": "string"
+     },
+     "node_id": {
+      "title": "Node Id",
+      "type": "string"
+     },
+     "review_id": {
+      "title": "Review Id",
+      "type": "integer"
+     },
+     "reviewer_display_name": {
+      "title": "Reviewer Display Name",
+      "type": "string"
+     },
+     "statement_key": {
+      "title": "Statement Key",
+      "type": "string"
+     },
+     "unit": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Unit"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     }
+    },
+    "required": [
+     "node_id",
+     "edge_id",
+     "label",
+     "value",
+     "unit",
+     "statement_key",
+     "review_id",
+     "reviewer_display_name",
+     "document_id"
+    ],
+    "title": "DerivedReasoningSupportRead",
+    "type": "object"
+   },
    "DesignationResolution": {
     "description": "How far a designation found in the request text could be resolved\nagainst **existing** vocabularies - never a confidence, never a\nguess.\n\n``CANONICAL_REFERENCE`` means Canonicalization's own\n``normalize_entity_reference`` recognized it and returned a real\n``entity_type``/``canonical_id`` (e.g. \"C-295\" -> ``CABLE:C-295``).\n``LEXICAL_TERM`` means it did not - the designation is real and is\ncarried forward verbatim as a search term, but this system does not\nclaim to know which graph entity it names.",
     "enum": [
@@ -4611,6 +4733,16 @@
        }
       ]
      },
+     "derived_reasoning": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/DerivedReasoningAssessmentRead"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
      "direct_answer": {
       "$ref": "#/components/schemas/EngineeringResponseSectionRead"
      },
@@ -5407,6 +5539,7 @@
      "insufficient_evidence",
      "partial_context",
      "ambiguous_knowledge",
+     "conflicting_knowledge",
      "provider_warning",
      "unknown_content",
      "limited_response",
@@ -10403,6 +10536,7 @@
      "selected_knowledge",
      "left_knowledge",
      "right_knowledge",
+     "derived_reasoning",
      "evidence_references",
      "constraints",
      "formatting_rules",
@@ -10650,6 +10784,40 @@
      "location_only"
     ],
     "title": "ProvenanceMatchPolicy",
+    "type": "string"
+   },
+   "ReasoningDiagnosticCode": {
+    "description": "Why the rule reached its outcome.\n\nMachine-readable and deterministic. Human-readable text, where a\ncaller wants it, is rendered *from* these - never instead of them,\nand never by asking a model to explain a comparison the platform\nalready performed exactly.",
+    "enum": [
+     "values_equal",
+     "values_conflict",
+     "single_value",
+     "no_required_quantity",
+     "no_subject",
+     "ambiguous_subject",
+     "unsupported_comparison",
+     "unparsable_value"
+    ],
+    "title": "ReasoningDiagnosticCode",
+    "type": "string"
+   },
+   "ReasoningOutcome": {
+    "description": "What a deterministic reasoning rule concluded.\n\nFour members, and the distinction between the last three is the point\nof the vocabulary.",
+    "enum": [
+     "consistent",
+     "inconsistent",
+     "insufficient_knowledge",
+     "ambiguous"
+    ],
+    "title": "ReasoningOutcome",
+    "type": "string"
+   },
+   "ReasoningRuleFamily": {
+    "description": "Which kind of engineering question a rule answers.\n\nOne member, from the one thing governed semantics currently supports.\nA family is added when a rule exists to put in it - never in\nanticipation.",
+    "enum": [
+     "quantity_consistency"
+    ],
+    "title": "ReasoningRuleFamily",
     "type": "string"
    },
    "RebuildResultResponse": {
@@ -12524,6 +12692,7 @@
      "right_retrieval_result",
      "comparison_context",
      "context_package",
+     "reasoning_result",
      "prompt_package",
      "llm_response_envelope",
      "engineering_response",
@@ -12541,6 +12710,7 @@
      "structured_retrieval",
      "document_retrieval",
      "context_building",
+     "engineering_reasoning",
      "prompt_building",
      "llm_runtime_invocation",
      "engineering_response_building",
@@ -13032,6 +13202,7 @@
      "build_document_lookup_response",
      "build_explanation_prompt",
      "build_verification_prompt",
+     "execute_engineering_reasoning",
      "build_comparison_retrieval_requests",
      "execute_left_retrieval",
      "execute_right_retrieval",

@@ -112,6 +112,10 @@ def test_full_package_produces_every_section_enabled_when_content_exists():
     # populates them (Milestone 24.2).
     disabled = [s.section_type for s in result.package.sections if not s.enabled]
     assert disabled == [
+        # No reasoning ran for this prompt: DERIVED_REASONING is present
+        # and disabled, like the two comparison sides, so every
+        # PromptPackage keeps the same shape (EPIC 32.1).
+        PromptSectionType.DERIVED_REASONING,
         PromptSectionType.LEFT_KNOWLEDGE,
         PromptSectionType.RIGHT_KNOWLEDGE,
         PromptSectionType.WARNINGS,

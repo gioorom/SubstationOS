@@ -43,11 +43,23 @@ from app.domain.prompt_builder.prompt_validation import validate_package
 
 
 def assemble_prompt_package(
-    request: PromptBuildRequest, *, now: datetime
+    request: PromptBuildRequest,
+    *,
+    now: datetime,
+    reasoning: "ReasoningResult | None" = None,
 ) -> PromptBuildResult:
+    """
+    ``reasoning`` is a **derived** conclusion (EPIC 32.1), optional
+    because most workflows run no rule. It is passed alongside the
+    request rather than folded into it: a `PromptBuildRequest` is what a
+    caller asks for, and a conclusion is something the engine produced.
+    """
+
     context_package = request.context_package
 
-    assembly = compose_sections(context_package, objective=request.objective)
+    assembly = compose_sections(
+        context_package, objective=request.objective, reasoning=reasoning
+    )
     statistics = build_statistics(assembly, context_package)
     metadata = build_metadata(
         configuration=request.configuration,

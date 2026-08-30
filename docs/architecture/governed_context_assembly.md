@@ -376,6 +376,27 @@ a governed question had more than one governed answer, so
 *retrieved* / *approved* / *proven* / *certain* stay four different
 things.
 
+### Engineering Reasoning (EPIC 32.1)
+
+The `ENGINEERING_VERIFICATION` workflow now runs a deterministic
+reasoning step over the assembled `ContextPackage`, between assembly and
+the prompt. It is a **pure consumer**: it reads the package it is handed
+and nothing else - no session, no repository, no second query.
+
+That is why `INSUFFICIENT_KNOWLEDGE` is one of its four outcomes. If a
+rule needs governed knowledge the context does not carry, the honest
+answer is that the context does not carry it. A reasoning service that
+could read for itself would be able to widen the project scope, the
+document scope or the caller's authorization that Context Assembly and
+Governed Structured Retrieval already applied - with nothing downstream
+noticing.
+
+Context Assembly changed **not at all** for this: reasoning is
+downstream of it, and the frozen dependency direction
+`context_builder → engineering_reasoning` is now asserted by AF-DEP-001,
+because context is assembled before anything is concluded from it. See
+[engineering_reasoning.md](engineering_reasoning.md).
+
 ### Comparison workflows
 
 Each side hands over its **own** governed results. No projection, no

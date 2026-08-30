@@ -529,6 +529,34 @@ router      →  application service  →  repository / port  →  database / st
 - The `_SORT_COLUMNS` tables are keyed by **enum member**, never by
   string, and no adapter calls `getattr` to resolve a column.
 
+## No reasoning endpoint (EPIC 32.1)
+
+Deterministic Engineering Reasoning added **no public API**. A derived
+conclusion is reachable exactly where it is meaningful: on the
+engineering response the engine produced, as `derived_reasoning`,
+alongside - never among - the governed `references`.
+
+A standalone `POST /reasoning` was considered and rejected. It would
+have to accept a context package from the caller, and a caller-supplied
+context package is a caller-supplied claim about what governed knowledge
+says. That is the same class of problem AF-PROV-002 forbids for
+provenance: **provenance a caller asserts is not provenance**, and a
+conclusion derived from asserted knowledge is not a conclusion about
+this installation.
+
+The response payload carries:
+
+| Field | Meaning |
+|---|---|
+| `derived_reasoning.outcome` | `consistent` / `inconsistent` / `insufficient_knowledge` / `ambiguous` |
+| `derived_reasoning.rule_id`, `.rule_version`, `.rule_family` | what concluded it |
+| `derived_reasoning.diagnostic_code` | why, from a closed vocabulary |
+| `derived_reasoning.result_id` | deterministic identity of the conclusion |
+| `derived_reasoning.supports[]` | the governed node, edge, statement, review, reviewer and document behind each contributing fact |
+
+`derived_reasoning` is `null` for every workflow that does not reason -
+a different and honest state from a `consistent` nobody derived.
+
 ## OpenAPI drift
 
 The contract snapshot lives at `apps/backend/openapi.json` and is

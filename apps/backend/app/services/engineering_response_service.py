@@ -45,6 +45,7 @@ from app.domain.engineering_response.engineering_response_document_assembler imp
 from app.domain.engineering_response.engineering_response_document_factory import (  # noqa: E501
     EngineeringResponseDocumentLookupBuildRequestFactory,
 )
+from app.domain.engineering_reasoning.reasoning_models import ReasoningResult
 from app.domain.engineering_response.engineering_response_factory import (
     EngineeringResponseBuildRequestFactory,
 )
@@ -94,6 +95,7 @@ def build_engineering_response(
     prompt_package: PromptPackage,
     llm_response_envelope: LLMResponseEnvelope,
     now: datetime,
+    reasoning: ReasoningResult | None = None,
 ) -> EngineeringResponseBuilderResult:
     source = _source_envelope_from_llm_envelope(llm_response_envelope)
 
@@ -102,6 +104,7 @@ def build_engineering_response(
         context_package=context_package,
         prompt_package=prompt_package,
         source=source,
+        reasoning=reasoning,
     )
 
     return assemble_engineering_response(request, now=now)

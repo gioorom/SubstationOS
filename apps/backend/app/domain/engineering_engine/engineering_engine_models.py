@@ -117,6 +117,11 @@ class WorkflowStepType(str, Enum):
     # objective - and served by the same handler class, parameterized at
     # composition rather than duplicated.
     BUILD_VERIFICATION_PROMPT = "build_verification_prompt"
+
+    #: Deterministic engineering reasoning over the assembled governed
+    #: context (EPIC 32.1). Produces a derived conclusion, never governed
+    #: knowledge - see ``engineering_reasoning.md``.
+    EXECUTE_ENGINEERING_REASONING = "execute_engineering_reasoning"
     # Engineering comparison (Milestone 24.2). Building both operands'
     # retrieval requests is one step - it is pure, and an invalid operand
     # set is an invalid *request* whichever side it came from. Executing
@@ -159,6 +164,11 @@ class WorkflowArtifactKey(str, Enum):
     RIGHT_RETRIEVAL_RESULT = "right_retrieval_result"
     COMPARISON_CONTEXT = "comparison_context"
     CONTEXT_PACKAGE = "context_package"
+
+    #: A ``ReasoningResult`` - a **derived** conclusion, structurally
+    #: distinct from every governed artefact in this tuple. It carries a
+    #: rule id and version, which no governed artefact has.
+    REASONING_RESULT = "reasoning_result"
     PROMPT_PACKAGE = "prompt_package"
     LLM_RESPONSE_ENVELOPE = "llm_response_envelope"
     ENGINEERING_RESPONSE = "engineering_response"
@@ -180,6 +190,10 @@ class WorkflowCapability(str, Enum):
     # STRUCTURED_RETRIEVAL, which reads the project knowledge graph.
     DOCUMENT_RETRIEVAL = "document_retrieval"
     CONTEXT_BUILDING = "context_building"
+    # Deterministic engineering reasoning over already-assembled governed
+    # context. A genuinely different capability from CONTEXT_BUILDING: it
+    # concludes something, where context assembly only organises.
+    ENGINEERING_REASONING = "engineering_reasoning"
     PROMPT_BUILDING = "prompt_building"
     LLM_RUNTIME_INVOCATION = "llm_runtime_invocation"
     ENGINEERING_RESPONSE_BUILDING = "engineering_response_building"

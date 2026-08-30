@@ -175,6 +175,55 @@ FROZEN_DIRECTIONS = (
         "engineering_engine",
         "same reason",
     ),
+    # EPIC 32.1 added Engineering Reasoning downstream of context
+    # assembly. These four directions freeze it there. Reasoning is the
+    # first capability in this platform that *derives* rather than
+    # records, so the directions that keep a derivation from feeding
+    # back into governed knowledge are the ones most worth naming.
+    (
+        "human_review",
+        "engineering_reasoning",
+        "**Engineering Judgement must not depend on what the platform "
+        "concluded.** A reviewer approving a statement because a rule "
+        "already inferred it would be reviewing the system's own output, "
+        "and the governed graph would slowly fill with knowledge nobody "
+        "read a document for (AF-REASON-003)",
+    ),
+    (
+        "governed_knowledge_graph",
+        "engineering_reasoning",
+        "the projection is built from approved statements alone; a "
+        "dependency here is exactly the auto-promotion path AF-REASON-003 "
+        "forbids",
+    ),
+    (
+        "governed_retrieval",
+        "engineering_reasoning",
+        "retrieval decides what matched; a conclusion drawn afterwards "
+        "must not be able to change what is retrievable",
+    ),
+    (
+        "context_builder",
+        "engineering_reasoning",
+        "context is assembled before anything is concluded from it; "
+        "depending on the conclusion would make the evidence a function "
+        "of the inference",
+    ),
+    (
+        "engineering_reasoning",
+        "engineering_engine",
+        "a rule must not know an answering engine exists - the same "
+        "direction already frozen for engineering_facts and "
+        "engineering_semantics",
+    ),
+    (
+        "engineering_reasoning",
+        "human_review",
+        "**Fact != Inference, from the other side.** A rule reads review "
+        "provenance off the context it was handed; a rule that could "
+        "import Human Review could read judgements the assembled context "
+        "never authorized (AF-REASON-002)",
+    ),
 )
 
 
@@ -461,6 +510,12 @@ DETERMINISTIC_CONTEXTS = (
     "governed_knowledge_graph",
     "governed_retrieval",
     "context_builder",
+    # EPIC 32.1. The one context in this list that produces something new
+    # rather than recording something observed - and therefore the one
+    # where "deterministic" had to be a decision rather than a
+    # consequence. A conclusion an LLM helped reach is a guess with a
+    # rule id attached.
+    "engineering_reasoning",
 )
 
 

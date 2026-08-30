@@ -104,3 +104,4 @@ one.
 | [0026](0026-governed-structured-retrieval.md) | Governed Structured Retrieval | Accepted |
 | [0027](0027-governed-context-assembly.md) | Governed Context Assembly | Accepted |
 | [0028](0028-retire-the-canonical-facts-graph.md) | Retire the Canonical Facts Graph | Accepted |
+| [0029](0029-deterministic-engineering-reasoning-foundation.md) | Deterministic Engineering Reasoning Foundation | Accepted |

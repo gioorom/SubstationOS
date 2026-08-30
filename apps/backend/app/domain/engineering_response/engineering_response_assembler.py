@@ -50,7 +50,10 @@ def assemble_engineering_response(
     request: EngineeringResponseBuildRequest, *, now: datetime
 ) -> EngineeringResponseBuilderResult:
     composition = compose_engineering_response(
-        request.context_package, request.prompt_package, request.source
+        request.context_package,
+        request.prompt_package,
+        request.source,
+        request.reasoning,
     )
     statistics = build_statistics(composition)
     metadata = build_metadata(request, now=now)
@@ -70,6 +73,7 @@ def assemble_engineering_response(
         statistics=statistics,
         version=version,
         verification=composition.verification,
+        derived_reasoning=composition.derived_reasoning,
     )
 
     validation = validate_response(response)

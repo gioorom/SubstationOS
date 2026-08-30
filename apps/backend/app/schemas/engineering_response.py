@@ -17,7 +17,14 @@ from app.domain.engineering_index.engineering_index_entry_kind import (
 from app.domain.engineering_index.engineering_index_locator import (
     IndexEntryLocatorKind,
 )
+from app.domain.engineering_reasoning.reasoning_vocabulary import (
+    ReasoningDiagnosticCode,
+    ReasoningOutcome,
+    ReasoningRuleFamily,
+)
 from app.domain.engineering_response.engineering_response_models import (
+    DerivedReasoningAssessment,
+    DerivedReasoningSupport,
     EngineeringEvidenceReference,
     EngineeringResponse,
     EngineeringResponseMetadata,
@@ -159,6 +166,53 @@ class VerificationAssessmentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DerivedReasoningSupportRead(BaseModel):
+    """One governed fact a derived conclusion was drawn from - the
+    governed node and edge, the Semantic Statement, the Human Review
+    that approved it and the document behind it, so a reader can walk
+    back from the conclusion to the approved knowledge."""
+
+    node_id: str
+    edge_id: str
+    label: str
+    value: str | None
+    unit: str | None
+    statement_key: str
+    review_id: int
+    reviewer_display_name: str
+    document_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DerivedReasoningAssessmentRead(BaseModel):
+    """
+    A **derived conclusion** (EPIC 32.1), never governed knowledge.
+
+    Nothing here was reviewed by a human and nothing here is promoted
+    back into the graph. ``supports`` names the governed facts the
+    conclusion was drawn from; the conclusion itself is not one of them.
+
+    ``outcome`` has four values, never a boolean and never a score:
+    ``consistent``, ``inconsistent``, ``insufficient_knowledge`` and
+    ``ambiguous`` are four different engineering findings.
+    ``rule_id``/``rule_version`` say what concluded it and
+    ``diagnostic_code`` says why, from a closed vocabulary.
+    """
+
+    outcome: ReasoningOutcome
+    rule_id: str
+    rule_version: str
+    rule_family: ReasoningRuleFamily
+    diagnostic_code: ReasoningDiagnosticCode
+    question: str
+    result_id: str
+    reasoning_policy_version: str
+    supports: list[DerivedReasoningSupportRead]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ComparisonAssessmentRead(BaseModel):
     """
     The machine-readable outcome of a comparison. ``outcome`` is ``null``
@@ -268,6 +322,7 @@ class EngineeringResponseRead(BaseModel):
     document_references: list[DocumentReferenceRead] = []
     verification: VerificationAssessmentRead | None = None
     comparison: ComparisonAssessmentRead | None = None
+    derived_reasoning: DerivedReasoningAssessmentRead | None = None
     warnings: list[EngineeringWarningRead]
     uncertainties: list[EngineeringUncertaintyRead]
     overall_uncertainty: EngineeringUncertaintyLevel
@@ -461,6 +516,36 @@ def engineering_response_from_schema(
                 ),
             )
         ),
+        derived_reasoning=(
+            None
+            if model.derived_reasoning is None
+            else DerivedReasoningAssessment(
+                outcome=model.derived_reasoning.outcome,
+                rule_id=model.derived_reasoning.rule_id,
+                rule_version=model.derived_reasoning.rule_version,
+                rule_family=model.derived_reasoning.rule_family,
+                diagnostic_code=model.derived_reasoning.diagnostic_code,
+                question=model.derived_reasoning.question,
+                result_id=model.derived_reasoning.result_id,
+                reasoning_policy_version=(
+                    model.derived_reasoning.reasoning_policy_version
+                ),
+                supports=tuple(
+                    DerivedReasoningSupport(
+                        node_id=support.node_id,
+                        edge_id=support.edge_id,
+                        label=support.label,
+                        value=support.value,
+                        unit=support.unit,
+                        statement_key=support.statement_key,
+                        review_id=support.review_id,
+                        reviewer_display_name=support.reviewer_display_name,
+                        document_id=support.document_id,
+                    )
+                    for support in model.derived_reasoning.supports
+                ),
+            )
+        ),
     )
 
 
@@ -468,6 +553,8 @@ __all__ = [
     "EngineeringResponseBuildRequestBody",
     "EngineeringResponseBuilderResultRead",
     "EngineeringResponseRead",
+    "DerivedReasoningAssessmentRead",
+    "DerivedReasoningSupportRead",
     "context_package_from_schema",
     "prompt_package_from_schema",
     "llm_response_envelope_from_schema",

@@ -8,6 +8,7 @@ enforces invariants at construction time).
 from __future__ import annotations
 
 from app.domain.context_builder.context_builder_models import ContextPackage
+from app.domain.engineering_reasoning.reasoning_models import ReasoningResult
 from app.domain.engineering_response.engineering_response_models import (
     EngineeringResponseBuildRequest,
     EngineeringResponseConfiguration,
@@ -32,6 +33,7 @@ class EngineeringResponseBuildRequestFactory:
         context_package: ContextPackage,
         prompt_package: PromptPackage,
         source: EngineeringResponseSourceEnvelope,
+        reasoning: ReasoningResult | None = None,
     ) -> EngineeringResponseBuildRequest:
         EngineeringResponseInputValidator.validate_project_id(project_id)
         EngineeringResponseInputValidator.validate_project_id_matches_context_package(
@@ -54,4 +56,5 @@ class EngineeringResponseBuildRequestFactory:
             prompt_package=prompt_package,
             source=source,
             configuration=configuration,
+            reasoning=reasoning,
         )

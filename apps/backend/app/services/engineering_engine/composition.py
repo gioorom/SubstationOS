@@ -68,6 +68,9 @@ from app.services.engineering_engine.document_lookup_step_handlers import (
 from app.services.engineering_engine.engineering_engine_service import (
     EngineeringEngineService,
 )
+from app.services.engineering_engine.reasoning_step_handlers import (
+    ExecuteEngineeringReasoningStepHandler,
+)
 from app.services.engineering_engine.step_handler_registry import (
     StepHandlerRegistry,
 )
@@ -136,6 +139,13 @@ def build_step_handler_registry(
     )
     registry.register(
         WorkflowStepType.BUILD_CONTEXT, BuildContextStepHandler()
+    )
+    # Deterministic engineering reasoning (EPIC 32.1). Registered with no
+    # dependency, because it needs none: it reasons over the context it
+    # is handed and can reach nothing else.
+    registry.register(
+        WorkflowStepType.EXECUTE_ENGINEERING_REASONING,
+        ExecuteEngineeringReasoningStepHandler(),
     )
     # One handler class, three registrations: the explanation and
     # verification workflows reuse Prompt Builder through exactly the same

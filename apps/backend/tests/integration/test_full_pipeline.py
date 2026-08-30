@@ -230,9 +230,18 @@ def test_full_pipeline_reaches_a_governed_engineering_response(
 
     prompt_package = prompt_result["package"]
     assert prompt_package["project_id"] == project["id"]
-    # Eleven since Milestone 24.2: the two comparison sides are always
-    # present, and disabled for every non-comparison prompt.
-    assert len(prompt_package["sections"]) == 11
+    # Twelve since EPIC 32.1. Every section the prompt vocabulary knows is
+    # always present; the ones this prompt does not use are disabled. The
+    # two comparison sides are disabled here (Milestone 24.2), and so is
+    # derived_reasoning: this is the Prompt Builder API, which composes a
+    # prompt from a context package and never reasons.
+    assert len(prompt_package["sections"]) == 12
+    disabled = {
+        section["section_type"]
+        for section in prompt_package["sections"]
+        if not section["enabled"]
+    }
+    assert "derived_reasoning" in disabled
     assert prompt_package["retrieved_knowledge"]["enabled"] is True
     # The governed citation survives into the prompt: the item, the
     # statement it came from, and the review that authorised it.

@@ -157,20 +157,36 @@ def quantity_item(
     quantity_node_id: str,
     quantity_label: str,
     unit: str = "kVA",
+    normalized_value: str | None = None,
     edge_id: str = "edge-1",
     statement_key: str = "statement-1",
     document_id: int = 11,
     review_id: int = 21,
     project_id: int | None = 1,
 ) -> GovernedRetrievalItem:
-    """A governed quantity reached by traversing one governed
-    relationship - the shape ``has_rated_power`` produces."""
+    """
+    A governed quantity reached by traversing one governed relationship -
+    the shape ``has_rated_power`` produces.
+
+    ``normalized_value`` defaults to the **bare decimal** parsed out of
+    the label, which is what promotion actually writes
+    (``str(entity.quantity.value)`` in ``_node_for``) - the unit lives in
+    its own column. It is not the designation fold ``node()`` applies:
+    that fold is right for an asset label and wrong for a quantity, and
+    a fixture that used it would let a test pass against a shape the
+    pipeline never produces.
+    """
 
     subject = node(subject_node_id, subject_label)
-    quantity = node(
-        quantity_node_id,
-        quantity_label,
+    quantity = GovernedNodeReference(
+        node_id=quantity_node_id,
         kind=GraphNodeKind.ENGINEERING_QUANTITY,
+        label=quantity_label,
+        normalized_value=(
+            quantity_label.split()[0]
+            if normalized_value is None
+            else normalized_value
+        ),
         unit=unit,
     )
     strategy = GovernedMatchStrategy.RELATIONSHIP_TRAVERSAL

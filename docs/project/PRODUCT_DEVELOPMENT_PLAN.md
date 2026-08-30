@@ -2551,6 +2551,81 @@ interruptions, and are ranges, not commitments.
   nobody has measured.
 - Dependencies: EPIC 30.1.2 (whose audit produced the list).
 
+**EPIC 32.1 — Deterministic Engineering Consistency Reasoning Foundation** - *Completed*
+- Objective: introduce the first Engineering Reasoning capability -
+  explicit, versioned, deterministic engineering conclusions derived
+  exclusively from governed knowledge - and establish the architecture
+  that keeps a conclusion from ever becoming a fact.
+- **The headline: SubstationOS now concludes something.** Everything
+  before this milestone *records*: what a document says, what was
+  measured, what it means, what a human approved. This is the first
+  capability that produces a statement which is in no document and was
+  approved by no reviewer. The first thing it concludes is the thing a
+  substation engineer most needs noticed: **two approved documents
+  disagree**.
+- **`Governed Knowledge != Reasoning Conclusion`, enforced as a type
+  boundary rather than a flag.** A conclusion is `ReasoningResult` in its
+  own bounded context, and reaches a response as `derived_reasoning` -
+  deliberately **not** among `references`, because to every downstream
+  consumer an evidence reference reads as one more governed fact
+  supporting the answer. A conclusion is a statement *about* those facts.
+  `DerivedReasoningAssessment.is_governed_knowledge` returns `False`
+  permanently, so a caller tempted to treat one as the other has to read
+  the word while doing it.
+- **Four outcomes, never a boolean and never a score**: `CONSISTENT`,
+  `INCONSISTENT`, `INSUFFICIENT_KNOWLEDGE`, `AMBIGUOUS`. An absence of
+  contradiction is not agreement, and "the graph does not record a rated
+  power for this transformer" is not "this transformer is consistent".
+  Collapsing the last three into "not consistent" is how a real
+  installation gets signed off on a gap nobody looked for.
+- **Nothing is promoted, enforced by absence.** The whole reasoning
+  surface imports no repository, no session, no promotion service, no
+  Human Review module and no graph port; the engine step handler declares
+  no `__init__`, so it is constructed with nothing at all. An end-to-end
+  test asserts the governed graph is byte-identical across an execution
+  that concluded `INCONSISTENT` - the case a future "just record the
+  conclusion" change would target first. `knowledge_promotion_service`
+  remains the single graph-authoring authority.
+- **Deterministic as a decision, not an inheritance.** No LLM, no
+  embedding, no probability, confidence, score, likelihood, ranking or
+  threshold, no randomness, no clock. `Decimal`, never `float`. A
+  structural fitness function asserts no *identifier* in the reasoning
+  surface is named for a score - checked on the AST, because the
+  docstrings say the word repeatedly, always to forbid it.
+- **Units are never converted.** The governed graph carries a declared
+  value and a declared unit but no base value - those exist only at the
+  evidence layer. Two governed quantities in different units therefore
+  yield `unsupported_comparison` → `INSUFFICIENT_KNOWLEDGE`. Converting
+  would put a unit table in the reasoning layer, applied to values whose
+  provenance says nothing about how they were normalised.
+- **No new intent.** `VERIFICATION_REQUEST` already owns the consistency
+  vocabulary the deterministic classifier matches on (`incoerenza`,
+  `coerente`, `inconsistency`); a `CONSISTENCY_CHECK` intent would have
+  made that classifier ambiguous, and an ambiguous deterministic
+  classifier is worse than no new intent. Reasoning is a **workflow
+  capability** instead: `ENGINEERING_VERIFICATION` (now version `2.0`) is
+  the only workflow that declares it, so every other workflow comes back
+  with `derived_reasoning` of `None`.
+- **No new public API, no migration, no new table, no configuration, no
+  external dependency.** A conclusion is reachable where it is
+  meaningful - on the engineering response. A standalone `POST
+  /reasoning` would accept a caller-supplied context package, which is a
+  caller-supplied claim about what governed knowledge says: the same
+  class of problem AF-PROV-002 forbids for provenance.
+- **AF-01 held.** No invariant was weakened, bypassed, renamed away or
+  reinterpreted. AF-REASON-001/002/003 stopped being forward
+  requirements and became executing fitness functions; AF-DEP-001 gained
+  six frozen directions involving `engineering_reasoning`; AF-DET-002's
+  deterministic core gained it as an eleventh context. All additions.
+- Scope is deliberately one rule - `governed_quantity_consistency` v1.0
+  over `HAS_RATED_POWER`, the only relationship kind governed semantics
+  currently produces. Not a rule engine, DSL or plug-in registry. The
+  deliverable is the boundary; a second rule now costs a file.
+- Recorded in
+  [ADR-0029](../architecture/adr/0029-deterministic-engineering-reasoning-foundation.md)
+  and [engineering_reasoning.md](../architecture/engineering_reasoning.md).
+- Dependencies: EPIC 31.3 (governed context), Architecture Freeze AF-01.
+
 **EPIC 31.4 — Legacy Retrieval Surface & Canonical Facts Retirement** - *Completed*
 - Objective: leave **one** runtime engineering knowledge graph. A pure
   retirement milestone - no new product capability, and none was added.

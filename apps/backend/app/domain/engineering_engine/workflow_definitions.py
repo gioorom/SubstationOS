@@ -264,7 +264,8 @@ ENGINEERING_EXPLANATION_WORKFLOW = WorkflowDefinition(
 )
 
 ENGINEERING_VERIFICATION_WORKFLOW_ID = "engineering-verification"
-ENGINEERING_VERIFICATION_WORKFLOW_VERSION = "1.0"
+#: 2.0: EPIC 32.1 added the deterministic reasoning step.
+ENGINEERING_VERIFICATION_WORKFLOW_VERSION = "2.0"
 
 # The first workflow that **evaluates** rather than presents: it decides
 # whether the project's own evidence supports a statement.
@@ -324,11 +325,32 @@ ENGINEERING_VERIFICATION_WORKFLOW = WorkflowDefinition(
             required_artifacts=(WorkflowArtifactKey.RETRIEVAL_RESULT,),
             produced_artifacts=(WorkflowArtifactKey.CONTEXT_PACKAGE,),
         ),
-        # The one step that differs from KNOWLEDGE_QUERY.
+        # EPIC 32.1: deterministic reasoning, **before** the prompt.
+        #
+        # The verification workflow is where it belongs, and that is a
+        # repository finding rather than a convenience: this system's
+        # classifier has routed "incoerenza", "coerente", "inconsistency"
+        # to VERIFICATION_REQUEST since Milestone 22. A second intent
+        # owning the same vocabulary would make a deterministic
+        # classifier ambiguous, so the deterministic rule joins the
+        # workflow the words already reach.
+        #
+        # It runs before the prompt so the model is *told* what the
+        # governed knowledge does, rather than asked to work it out.
+        WorkflowStepDefinition(
+            step_type=WorkflowStepType.EXECUTE_ENGINEERING_REASONING,
+            required_capability=WorkflowCapability.ENGINEERING_REASONING,
+            required_artifacts=(WorkflowArtifactKey.CONTEXT_PACKAGE,),
+            produced_artifacts=(WorkflowArtifactKey.REASONING_RESULT,),
+        ),
+        # The step that differs from KNOWLEDGE_QUERY.
         WorkflowStepDefinition(
             step_type=WorkflowStepType.BUILD_VERIFICATION_PROMPT,
             required_capability=WorkflowCapability.PROMPT_BUILDING,
-            required_artifacts=(WorkflowArtifactKey.CONTEXT_PACKAGE,),
+            required_artifacts=(
+                WorkflowArtifactKey.CONTEXT_PACKAGE,
+                WorkflowArtifactKey.REASONING_RESULT,
+            ),
             produced_artifacts=(WorkflowArtifactKey.PROMPT_PACKAGE,),
         ),
         WorkflowStepDefinition(
@@ -349,6 +371,11 @@ ENGINEERING_VERIFICATION_WORKFLOW = WorkflowDefinition(
                 WorkflowArtifactKey.CONTEXT_PACKAGE,
                 WorkflowArtifactKey.PROMPT_PACKAGE,
                 WorkflowArtifactKey.LLM_RESPONSE_ENVELOPE,
+                # EPIC 32.1: this workflow reasons, so its response
+                # must carry the conclusion. Declared here so a
+                # future edit that drops the reasoning step fails
+                # the plan rather than quietly answering without it.
+                WorkflowArtifactKey.REASONING_RESULT,
             ),
             produced_artifacts=(
                 WorkflowArtifactKey.ENGINEERING_RESPONSE,
@@ -389,6 +416,7 @@ ENGINEERING_VERIFICATION_WORKFLOW = WorkflowDefinition(
         WorkflowCapability.REQUEST_VALIDATION,
         WorkflowCapability.STRUCTURED_RETRIEVAL,
         WorkflowCapability.CONTEXT_BUILDING,
+        WorkflowCapability.ENGINEERING_REASONING,
         WorkflowCapability.PROMPT_BUILDING,
         WorkflowCapability.LLM_RUNTIME_INVOCATION,
         WorkflowCapability.ENGINEERING_RESPONSE_BUILDING,

@@ -154,6 +154,10 @@ class BuildPromptStepHandler(BaseStepHandler):
                 project_id=context.execution_request.project_id,
                 context_package=context.context_package,
                 objective=self._objective,
+                # Present only in a workflow that ran the reasoning step;
+                # ``None`` everywhere else, and the section is then empty
+                # and disabled.
+                reasoning=context.reasoning_result,
                 now=context.execution_request.executed_at,
             )
         except PromptBuilderError as error:
@@ -280,6 +284,9 @@ class EngineeringResponseBuildStepHandler(BaseStepHandler):
                 prompt_package=context.prompt_package,
                 llm_response_envelope=context.llm_response_envelope,
                 now=context.execution_request.executed_at,
+                # None for every workflow that does not reason - the
+                # response then simply carries no derived conclusion.
+                reasoning=context.reasoning_result,
             )
         except EngineeringResponseError as error:
             raise StepHandlerError(

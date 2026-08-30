@@ -49,6 +49,11 @@ _ROLE_FOR_SECTION: dict[PromptSectionType, LLMMessageRole] = {
     PromptSectionType.EXPECTED_OUTPUT: LLMMessageRole.INSTRUCTION,
     PromptSectionType.ENGINEERING_CONTEXT: LLMMessageRole.CONTEXT,
     PromptSectionType.SELECTED_KNOWLEDGE: LLMMessageRole.CONTEXT,
+    # A derived conclusion (EPIC 32.1) travels as CONTEXT, like the
+    # governed knowledge it was drawn from - the *content* is what marks
+    # it as derived, not the message role. Giving it an instruction role
+    # would tell the model to act on a conclusion rather than read one.
+    PromptSectionType.DERIVED_REASONING: LLMMessageRole.CONTEXT,
     # The two comparison sides carry evidence, so they are context like
     # any other knowledge section. The mapper does not know what a
     # comparison is - it maps sections to roles, and these two are

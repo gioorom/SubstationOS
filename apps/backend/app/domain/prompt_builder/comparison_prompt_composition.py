@@ -196,6 +196,12 @@ def compose_comparison_sections(
     # body of selected knowledge, and putting either side there would
     # imply one is the default.
     selected_knowledge = section(PromptSectionType.SELECTED_KNOWLEDGE, ())
+    # Empty for a comparison, and deliberately so (EPIC 32.1). A
+    # comparison has two governed contexts; reasoning across them would be
+    # cross-document reasoning, which no rule performs and which 32.1
+    # explicitly does not introduce. Each side keeps its own provenance,
+    # and nothing here joins them.
+    derived_reasoning = section(PromptSectionType.DERIVED_REASONING, ())
     left_knowledge = _build_side(
         PromptSectionType.LEFT_KNOWLEDGE, "LEFT", comparison.left
     )
@@ -224,6 +230,7 @@ def compose_comparison_sections(
             system_context,
             engineering_context,
             selected_knowledge,
+            derived_reasoning,
             left_knowledge,
             right_knowledge,
             evidence_references,

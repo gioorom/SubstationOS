@@ -147,6 +147,43 @@ present), `LIMITED_RESPONSE` (a truncating finish reason), and
 all). Every warning is a structured `(category, message)` pair, never a
 free-text string standing alone.
 
+`AMBIGUOUS_KNOWLEDGE` was added in EPIC 31.3 (a governed question had
+more than one governed answer) and `CONFLICTING_KNOWLEDGE` in EPIC 32.1.
+
+`CONFLICTING_KNOWLEDGE` is not the model being unsure and not the
+evidence being thin: it is a conflict **inside reviewed, approved
+knowledge**, found by a deterministic rule. It cannot be resolved by
+retrieving better or asking the model again - somebody has to fix the
+source.
+
+### Derived reasoning (EPIC 32.1)
+
+`EngineeringResponse.derived_reasoning` carries a
+`DerivedReasoningAssessment` when the workflow ran a reasoning step, and
+`None` otherwise - a different and honest state from a `CONSISTENT`
+nobody derived.
+
+It is a **field of its own, deliberately not an evidence reference**. To
+every downstream consumer, an entry in `references` reads as one more
+governed fact supporting the answer; a conclusion is a statement *about*
+those facts, not one of them (AF-REASON-001).
+
+Three of the four outcomes also raise a warning, in three separate
+categories, because collapsing them would erase exactly the distinction
+the four-valued outcome exists to preserve:
+
+| Outcome | Warning |
+|---|---|
+| `INCONSISTENT` | `CONFLICTING_KNOWLEDGE` |
+| `AMBIGUOUS` | `AMBIGUOUS_KNOWLEDGE` |
+| `INSUFFICIENT_KNOWLEDGE` | `INSUFFICIENT_EVIDENCE` |
+| `CONSISTENT` | *(none)* |
+
+`engineering_response_reasoning.py` does **no reasoning**: it reads a
+result a versioned rule already produced and restates it in this
+context's vocabulary. See
+[engineering_reasoning.md](engineering_reasoning.md).
+
 ## Uncertainty
 
 `EngineeringUncertainty` is **not model confidence** - no provider

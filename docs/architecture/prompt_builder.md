@@ -64,27 +64,36 @@ below at construction time) always has:
 
 ## Sections
 
-Nine `PromptSectionType`s, always present in this fixed, canonical
-order (`PROMPT_SECTION_ORDER` in `prompt_composition.py`):
+`PromptSectionType`s, always present in this fixed, canonical order
+(`PROMPT_SECTION_ORDER` in `prompt_composition.py`):
 
 | Order | Section | Content | Always enabled? |
 |---:|---|---|---|
 | 0 | `SYSTEM_CONTEXT` | Fixed, versioned framing text | Yes |
 | 1 | `ENGINEERING_CONTEXT` | Project id, retrieved/selected counts, coverage | Yes |
 | 2 | `SELECTED_KNOWLEDGE` | One deterministically formatted line per selected candidate | Only if candidates were selected |
-| 3 | `EVIDENCE_REFERENCES` | One citation line per selected candidate's provenance | Only if candidates were selected |
-| 4 | `CONSTRAINTS` | The five fixed `PromptConstraint` descriptions | Yes |
-| 5 | `FORMATTING_RULES` | The three fixed `PromptInstruction` descriptions | Yes |
-| 6 | `EXPECTED_OUTPUT` | Fixed, versioned output-shape guidance | Yes |
-| 7 | `WARNINGS` | One line per `ContextPackage.warnings` entry | Only if Context Builder reported warnings |
-| 8 | `METADATA` | Context assembly timestamp/version echo | Yes |
+| 3 | `DERIVED_REASONING` | The deterministic conclusion, its rule and version, its diagnostic, and the governed facts behind it | Only if the workflow reasoned (EPIC 32.1) |
+| 4 | `EVIDENCE_REFERENCES` | One citation line per selected candidate's provenance | Only if candidates were selected |
+| 5 | `CONSTRAINTS` | The five fixed `PromptConstraint` descriptions | Yes |
+| 6 | `FORMATTING_RULES` | The three fixed `PromptInstruction` descriptions | Yes |
+| 7 | `EXPECTED_OUTPUT` | Fixed, versioned output-shape guidance | Yes |
+| 8 | `WARNINGS` | One line per `ContextPackage.warnings` entry | Only if Context Builder reported warnings |
+| 9 | `METADATA` | Context assembly timestamp/version echo | Yes |
+
+`DERIVED_REASONING` sits immediately after `SELECTED_KNOWLEDGE` and
+before `EVIDENCE_REFERENCES`, deliberately: the model reads the governed
+facts, then what was concluded from them, then the citations. It travels
+as a `CONTEXT` message rather than an instruction - the model is told
+what was concluded, **not asked to conclude**. The section is disabled
+for every workflow that does not reason, including comparison. See
+[engineering_reasoning.md](engineering_reasoning.md).
 
 Each `PromptSection.content` is a tuple of discrete lines built by
 exactly one small, named, pure function - never a free-form
 concatenated string. A section with nothing to contribute is still
 constructed, in its fixed position, with empty content and
 `enabled=False` - `PromptPackage.sections` always has this same
-nine-section shape regardless of input.
+shape regardless of input.
 
 ## Composition
 

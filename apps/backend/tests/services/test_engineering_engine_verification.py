@@ -163,7 +163,29 @@ def test_the_composed_handler_registry_covers_every_step() -> None:
 # --- 2. The definition reuses the pipeline, differing in one step ----------
 
 
-def test_the_pipeline_matches_knowledge_query_except_the_prompt_step() -> None:
+def test_the_pipeline_is_knowledge_query_plus_reasoning_and_its_prompt() -> (
+    None
+):
+    """
+    **This assertion changed in EPIC 32.1, and the change is the point.**
+
+    Until then the verification workflow was byte-for-byte the
+    knowledge-query pipeline with one different step - the prompt
+    objective - and this test said so.
+
+    It is now that pipeline **plus a deterministic reasoning step**.
+    Verification is the one workflow that evaluates rather than presents,
+    so it is the one that runs a rule before asking a model anything: the
+    engine tells the model what the governed knowledge does, rather than
+    asking it to work that out.
+
+    Two differences, both deliberate, and nothing else:
+
+    - `EXECUTE_ENGINEERING_REASONING` is inserted after the context is
+      assembled and before the prompt is built;
+    - the prompt step is the verification objective.
+    """
+
     verification = [
         step.step_type for step in ENGINEERING_VERIFICATION_WORKFLOW.steps
     ]
@@ -171,10 +193,33 @@ def test_the_pipeline_matches_knowledge_query_except_the_prompt_step() -> None:
         step.step_type for step in KNOWLEDGE_QUERY_WORKFLOW.steps
     ]
 
-    assert len(verification) == len(knowledge_query)
+    assert len(verification) == len(knowledge_query) + 1
+    assert (
+        WorkflowStepType.EXECUTE_ENGINEERING_REASONING in verification
+    )
+    assert WorkflowStepType.EXECUTE_ENGINEERING_REASONING not in (
+        knowledge_query
+    )
+
+    # Reasoning runs on assembled governed context, and before the
+    # prompt - never after the model has already been asked.
+    assert verification.index(
+        WorkflowStepType.EXECUTE_ENGINEERING_REASONING
+    ) == verification.index(WorkflowStepType.BUILD_CONTEXT) + 1
+    assert verification.index(
+        WorkflowStepType.EXECUTE_ENGINEERING_REASONING
+    ) < verification.index(WorkflowStepType.BUILD_VERIFICATION_PROMPT)
+
+    # With the reasoning step removed, the two pipelines differ in
+    # exactly the prompt step, as they always did.
+    without_reasoning = [
+        step
+        for step in verification
+        if step is not WorkflowStepType.EXECUTE_ENGINEERING_REASONING
+    ]
     differing = [
         (left, right)
-        for left, right in zip(verification, knowledge_query)
+        for left, right in zip(without_reasoning, knowledge_query)
         if left is not right
     ]
 
@@ -183,6 +228,39 @@ def test_the_pipeline_matches_knowledge_query_except_the_prompt_step() -> None:
             WorkflowStepType.BUILD_VERIFICATION_PROMPT,
             WorkflowStepType.BUILD_PROMPT,
         )
+    ]
+
+
+def test_only_the_verification_workflow_reasons() -> None:
+    """
+    **Optionality.** Deterministic reasoning is not forced onto requests
+    that did not ask a consistency question.
+
+    A knowledge query, an explanation, a document lookup and a comparison
+    all run without it - which is what keeps a quantity-consistency rule
+    from attaching itself to every question the platform is asked.
+    """
+
+    from app.domain.engineering_engine.workflow_definitions import (
+        DOCUMENT_LOOKUP_WORKFLOW,
+        ENGINEERING_COMPARISON_WORKFLOW,
+        ENGINEERING_EXPLANATION_WORKFLOW,
+    )
+
+    reasoning = WorkflowStepType.EXECUTE_ENGINEERING_REASONING
+
+    for workflow in (
+        KNOWLEDGE_QUERY_WORKFLOW,
+        DOCUMENT_LOOKUP_WORKFLOW,
+        ENGINEERING_EXPLANATION_WORKFLOW,
+        ENGINEERING_COMPARISON_WORKFLOW,
+    ):
+        assert reasoning not in [
+            step.step_type for step in workflow.steps
+        ], workflow.workflow_id.value
+
+    assert reasoning in [
+        step.step_type for step in ENGINEERING_VERIFICATION_WORKFLOW.steps
     ]
 
 

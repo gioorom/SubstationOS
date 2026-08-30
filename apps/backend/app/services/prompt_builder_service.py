@@ -20,6 +20,9 @@ from app.domain.context_builder.context_builder_models import ContextPackage
 from app.domain.prompt_builder.comparison_prompt_assembler import (
     assemble_comparison_prompt_package,
 )
+from app.domain.engineering_reasoning.reasoning_models import (
+    ReasoningResult,
+)
 from app.domain.prompt_builder.prompt_builder_factory import (
     PromptBuildRequestFactory,
 )
@@ -37,6 +40,7 @@ def build_prompt_package(
     project_id: int,
     context_package: ContextPackage,
     objective: PromptObjective = PromptObjective.DIRECT_ANSWER,
+    reasoning: ReasoningResult | None = None,
     now: datetime,
 ) -> PromptBuildResult:
     """``objective`` selects between the fixed, versioned instruction and
@@ -50,7 +54,7 @@ def build_prompt_package(
         objective=objective,
     )
 
-    return assemble_prompt_package(request, now=now)
+    return assemble_prompt_package(request, now=now, reasoning=reasoning)
 
 
 def build_comparison_prompt_package(

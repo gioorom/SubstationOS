@@ -216,3 +216,25 @@ rows.
 **A rollback returns the shape, never the contents.** An installation
 that may need the data takes the export above before upgrading.
 
+## Engineering Reasoning adds no operational surface (EPIC 32.1)
+
+Deterministic Engineering Reasoning introduced:
+
+- **no migration** and no new table - conclusions are derived on demand
+  and never persisted;
+- **no new configuration**, environment variable or feature flag;
+- **no new external dependency**, provider or network call;
+- **no new endpoint** (see [public_api.md](public_api.md));
+- **no I/O of any kind** - the reasoning service opens no session, holds
+  no repository, and reads only the `ContextPackage` it is handed.
+
+Operationally it is one in-process, deterministic evaluation over data
+the request already loaded. Its only measured quantity,
+`diagnostics.duration_seconds`, is operational and is deliberately
+excluded from the conclusion's identity, so the same governed knowledge
+always yields the same `result_id` regardless of how fast the machine
+ran.
+
+The failure posture is correspondingly small: a rule that cannot answer
+returns `INSUFFICIENT_KNOWLEDGE` rather than raising, so a gap in
+governed knowledge degrades the *answer*, never the request.

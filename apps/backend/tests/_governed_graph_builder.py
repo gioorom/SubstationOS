@@ -186,6 +186,12 @@ def governed_asset_with_quantity(
     *,
     designation: str,
     quantity_label: str = "630 kVA",
+    # The declared quantity as the graph stores it: a bare decimal,
+    # separate from the human label. Kept as its own parameter so a test
+    # that needs two *different* governed values says so explicitly -
+    # deriving it from the label would make a disagreement impossible to
+    # express.
+    quantity_value: str = "630.0",
     document_id: int = 1,
     project_id: int | None = 1,
     state: GraphObjectState = GraphObjectState.ACTIVE,
@@ -206,6 +212,7 @@ def governed_asset_with_quantity(
     )
     quantity = governed_quantity(
         label=quantity_label,
+        normalized_value=quantity_value,
         entity_key=f"quantity:{document_id}:{designation}:{quantity_label}",
         document_id=document_id,
         project_id=project_id,

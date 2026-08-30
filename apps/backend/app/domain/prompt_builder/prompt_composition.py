@@ -25,6 +25,13 @@ other section is O(1).
 from __future__ import annotations
 
 from app.domain.context_builder.context_builder_models import ContextPackage
+from app.domain.engineering_reasoning.reasoning_models import (
+    ReasoningResult,
+)
+from app.domain.engineering_reasoning.reasoning_vocabulary import (
+    ReasoningDiagnosticCode,
+    ReasoningOutcome,
+)
 from app.domain.prompt_builder.composition_policy import (
     CONSTRAINTS,
     EXPECTED_OUTPUT_BY_OBJECTIVE,
@@ -51,6 +58,7 @@ PROMPT_SECTION_ORDER: tuple[PromptSectionType, ...] = (
     PromptSectionType.SYSTEM_CONTEXT,
     PromptSectionType.ENGINEERING_CONTEXT,
     PromptSectionType.SELECTED_KNOWLEDGE,
+    PromptSectionType.DERIVED_REASONING,
     PromptSectionType.LEFT_KNOWLEDGE,
     PromptSectionType.RIGHT_KNOWLEDGE,
     PromptSectionType.EVIDENCE_REFERENCES,
@@ -251,6 +259,88 @@ def describe_item(item: ContextItem) -> str:
     )
 
 
+#: What each deterministic outcome means, stated for the model in words
+#: it cannot misread as a judgement somebody made.
+#:
+#: `INCONSISTENT` deliberately does **not** say a document is wrong or
+#: that anything was rejected. The platform knows only that two approved
+#: statements cannot both describe the same thing; which one is right is
+#: an engineering question nobody has answered yet.
+_OUTCOME_MEANING: dict[ReasoningOutcome, str] = {
+    ReasoningOutcome.CONSISTENT: (
+        "The governed values examined agree with each other."
+    ),
+    ReasoningOutcome.INCONSISTENT: (
+        "The governed values examined CONFLICT. Two or more approved "
+        "statements cannot both be describing the same thing. This does "
+        "not say which is correct, and it does not say any document is "
+        "wrong - nobody has reviewed the conflict."
+    ),
+    ReasoningOutcome.INSUFFICIENT_KNOWLEDGE: (
+        "There was not enough governed knowledge to reach a conclusion. "
+        "This is NOT the same as agreement: nothing was found to compare."
+    ),
+    ReasoningOutcome.AMBIGUOUS: (
+        "The subject named more than one governed asset, so the question "
+        "was never about a single piece of equipment. It was not "
+        "answered, and no candidate was chosen."
+    ),
+}
+
+
+def build_derived_reasoning(
+    reasoning: ReasoningResult | None,
+) -> PromptSection:
+    """
+    The deterministic conclusion, presented as **derived**.
+
+    Every line here says so: the heading, the rule identity, and the
+    explicit statement that this is not a reviewed engineering
+    statement. A conclusion the model mistook for governed knowledge
+    would be an inference laundered into a fact, which is the failure
+    AF-REASON-001 exists to prevent.
+
+    Empty and disabled when no rule ran or none examined any governed
+    knowledge - a reasoning block reporting that it found nothing would
+    add noise to every prompt and information to none.
+    """
+
+    if reasoning is None:
+        return section(PromptSectionType.DERIVED_REASONING, ())
+
+    if (
+        reasoning.outcome is ReasoningOutcome.INSUFFICIENT_KNOWLEDGE
+        and reasoning.diagnostics.code
+        in (
+            ReasoningDiagnosticCode.NO_SUBJECT,
+            ReasoningDiagnosticCode.NO_REQUIRED_QUANTITY,
+        )
+    ):
+        return section(PromptSectionType.DERIVED_REASONING, ())
+
+    content = [
+        "The following is a DERIVED CONCLUSION produced by a "
+        "deterministic engineering rule. It is NOT a reviewed "
+        "engineering statement and NOT part of the governed knowledge "
+        "above.",
+        f"Question: {reasoning.query.question}",
+        f"Rule: {reasoning.rule.identity}",
+        f"Outcome: {reasoning.outcome.value.upper()}",
+        f"Meaning: {_OUTCOME_MEANING[reasoning.outcome]}",
+        f"Basis: {reasoning.diagnostics.code.value}",
+    ]
+
+    content.extend(
+        f"Contributing governed value: {contributor.label} "
+        f"[node {contributor.node_id}] "
+        f"(statement {contributor.statement_key}, "
+        f"review {contributor.review_id})"
+        for contributor in reasoning.contributors
+    )
+
+    return section(PromptSectionType.DERIVED_REASONING, tuple(content))
+
+
 def _build_selected_knowledge(
     context_package: ContextPackage,
 ) -> PromptSection:
@@ -323,6 +413,7 @@ def compose_sections(
     context_package: ContextPackage,
     *,
     objective: PromptObjective = PromptObjective.DIRECT_ANSWER,
+    reasoning: ReasoningResult | None = None,
 ) -> PromptAssemblyResult:
     """
     ``objective`` selects the fixed instruction and expected-output sets
@@ -337,6 +428,7 @@ def compose_sections(
     system_context = _build_system_context()
     engineering_context = _build_engineering_context(context_package)
     selected_knowledge = _build_selected_knowledge(context_package)
+    derived_reasoning = build_derived_reasoning(reasoning)
     references = _build_references(context_package)
     evidence_references = _build_evidence_references(references)
     constraints_section = _build_constraints_section()
@@ -354,6 +446,7 @@ def compose_sections(
         system_context,
         engineering_context,
         selected_knowledge,
+        derived_reasoning,
         left_knowledge,
         right_knowledge,
         evidence_references,

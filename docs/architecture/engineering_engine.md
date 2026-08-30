@@ -25,7 +25,9 @@ sits in the pipeline, see
 > reuses the knowledge-query pipeline end to end.
 > **`ENGINEERING_VERIFICATION` is the first *reasoning* workflow**: it
 > evaluates whether a statement is supported by the project's evidence
-> rather than presenting that evidence. None changed any engine decision
+> rather than presenting that evidence, and since EPIC 32.1 (workflow
+> version `2.0`) it also runs a deterministic reasoning step over the
+> assembled governed context. None changed any engine decision
 > **`ENGINEERING_COMPARISON` is the first workflow with two subjects**,
 > two independent retrievals, and a pipeline that genuinely differs
 > rather than only a prompt. None changed any engine decision logic -
@@ -431,25 +433,39 @@ Answers *"verify that protection 87T is present"*, *"check whether cable
 C-295 is connected to TA-12"*, *"verify that breaker Q52 exists"*. The
 first workflow that **evaluates** rather than presents.
 
-Its pipeline is the knowledge-query pipeline again, differing in exactly
-one step - step 4 is `BUILD_VERIFICATION_PROMPT` instead of
-`BUILD_PROMPT`. Everything else, including `BUILD_ENGINEERING_RESPONSE`,
-is reused unchanged.
+Its pipeline was the knowledge-query pipeline again, differing in
+exactly one step - step 4 was `BUILD_VERIFICATION_PROMPT` instead of
+`BUILD_PROMPT`.
 
-That is the finding, not a shortcut. *"Verify that transformer T1 has
-differential protection"* needs exactly the same governed graph evidence
-as asking what T1 is protected by. What differs is what the engineer
-wants done with it, and **that belongs in the prompt and in reading the
-result back** - not in a second retrieval strategy, a second context
-budget, or engine logic.
+**EPIC 32.1 added a genuine second difference**, and the workflow is now
+version `2.0`: an `EXECUTE_ENGINEERING_REASONING` step runs between
+`BUILD_CONTEXT` and `BUILD_VERIFICATION_PROMPT`, producing a
+`REASONING_RESULT` artefact that both the prompt step and
+`BUILD_ENGINEERING_RESPONSE` declare as required. It is the **only**
+workflow that declares `WorkflowCapability.ENGINEERING_REASONING`, so it
+is the only workflow that reasons - every other one comes back with
+`derived_reasoning` of `None`.
+
+Everything else, including retrieval, Context Assembly and the response
+builder, is still reused unchanged. That remains the finding, not a
+shortcut. *"Verify that transformer T1 has differential protection"*
+needs exactly the same governed graph evidence as asking what T1 is
+protected by. What differs is what the engineer wants done with it.
 
 #### Where the reasoning lives
 
 | Concern | Owner |
 |---|---|
+| Deriving a deterministic conclusion from governed knowledge | Engineering Reasoning (`quantity_consistency_rule.py`) — see [engineering_reasoning.md](engineering_reasoning.md) |
 | Asking for a verdict, and the rules that govern it | Prompt Builder (`VERIFICATION_INSTRUCTIONS`) |
 | Reading the verdict back | Engineering Response (`engineering_response_verification.py`) |
+| Reporting the derived conclusion | Engineering Response (`engineering_response_reasoning.py`) |
 | Coordinating the steps | The engine - which evaluates **nothing** |
+
+The reasoning step handler holds **no dependency at all**: no session,
+no repository, no provider. That absence is the boundary - the step
+cannot reach knowledge the assembled context does not already carry, and
+cannot write anything anywhere (AF-REASON-003).
 
 An architecture test
 (`test_no_verification_logic_lives_inside_the_engine`) asserts that no

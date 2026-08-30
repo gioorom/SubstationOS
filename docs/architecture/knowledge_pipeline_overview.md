@@ -482,6 +482,7 @@ Conversation = structured engineering dialogue belonging to an EngineeringSessio
 Working Memory = the temporary, deterministic engineering context needed to continue reasoning during a session - not conversation history, not project knowledge, always rebuildable, never AI-edited
 Engineering Request Classification = deterministic, rule-based routing of one explicit request into a workflow category - request classification, never psychological intent detection; a classification result, never an executable command
 Engineering Engine = the application coordinator that selects, plans and executes one engineering workflow - deterministic workflow structure, not an agent, an LLM brain, a reasoning engine or an orchestrator of agents; KNOWLEDGE_QUERY only today
+Engineering Reasoning = deterministic, versioned derivation of an explicit engineering conclusion from governed knowledge alone - a DERIVED CONCLUSION, never a governed fact; four-valued (consistent / inconsistent / insufficient_knowledge / ambiguous), never a boolean or a score; promotes nothing, persists nothing, and reads only the ContextPackage it was handed
 Semantic Retrieval = future retrieval and ranking layer
 AI Assistant = future consumer, not owner, of engineering truth
 ```
@@ -1013,5 +1014,6 @@ See [knowledge_graph.md](knowledge_graph.md),
 - **Engineering Entity Resolution:** [engineering_entities.md](engineering_entities.md).
 - **Engineering Fact Construction:** [engineering_facts.md](engineering_facts.md).
 - **Engineering Semantic Interpretation:** [engineering_semantics.md](engineering_semantics.md).
+- **Engineering Reasoning:** [engineering_reasoning.md](engineering_reasoning.md), [ADR-0029](adr/0029-deterministic-engineering-reasoning-foundation.md) - the first capability that *derives* rather than records.
 - **Classification-to-Retrieval Bridge:** [retrieval_bridge.md](retrieval_bridge.md) (no ADR of its own - it applies ADR-0019 and ADR-0020 rather than departing from either).
 - **Engineering Engine:** [engineering_engine.md](engineering_engine.md), [ADR-0020](adr/0020-engineering-engine-foundation.md).

@@ -19,7 +19,8 @@ change one.
 Engineering Engine, its trust boundaries, its write authority, its
 determinism and its provenance.
 
-**Out:** Engineering Reasoning (EPIC 32), UI, ontology growth, product
+**Out:** Engineering Reasoning (EPIC 32 — its foundation shipped after
+this freeze; see §18), UI, ontology growth, product
 features. AF-01 adds no capability. It adds 13 architecture tests and
 this document.
 
@@ -138,7 +139,7 @@ engine reads context, not the graph.
 | Governed graph | Governed KG | **promotion only** | retrieval, API | **Yes — rebuildable** | projection | mandatory, non-null |
 | Retrieval results | Governed Retrieval | **none** | context assembly | **Yes** | transient | inherited |
 | Context packages | Context Assembly | **none** | prompt, response | **Yes** | transient | inherited |
-| Reasoning conclusions | *(EPIC 32)* | *(future)* | — | — | — | **must be required** |
+| Reasoning conclusions | EPIC 32.1 / `ReasoningResult` | derived, never persisted | — | — | — | **required — `ReasoningContributor` carries the full governed chain (AF-REASON-002)** |
 | Engineering Response | Engineering Response | response service | session, conversation | **Yes** | transient | citations |
 | Audit events | Audit | audit service | audit API | **No** | **append-only** | actor identity |
 | `canonical_facts` etc. | Canonicalization / Review Workflow | their services | their APIs | **No** | mutable | human-authored |
@@ -154,7 +155,7 @@ engine reads context, not the graph.
 | **Governed KG** | **`knowledge_promotion_service`** | forbidden — `AF-KG-003` |
 | Governed Retrieval | **NONE** | port has no write method — `AF-RET-001` |
 | Context Assembly | **NONE** | performs no I/O — `AF-CTX-002` |
-| Reasoning conclusions | **EPIC 32 owner, with a governance lifecycle** | must not be the graph |
+| Reasoning conclusions | **EPIC 32.1: nobody — they are never persisted, so no lifecycle was invented** | is not the graph, and cannot write it (AF-REASON-003) |
 | Audit | `audit_service` | forbidden |
 
 ## 9. Dependency Direction
@@ -276,7 +277,21 @@ raw graph queries, Canonical Facts, raw proposed claims, unreviewed
 statements or raw LLM extraction — the packages are deleted, so the
 fallback is not merely unwired but unavailable.
 
-## 18. Future Engineering Reasoning Contract (EPIC 32)
+## 18. Engineering Reasoning Contract (EPIC 32)
+
+> **Discharged in part by EPIC 32.1.** AF-REASON-001, AF-REASON-002 and
+> AF-REASON-003 were forward requirements when AF-01 was written; the
+> first reasoning capability now exists, and all three are enforced by
+> executing fitness functions in
+> `tests/architecture/test_engineering_reasoning_boundaries.py`. See
+> [ADR-0029](adr/0029-deterministic-engineering-reasoning-foundation.md)
+> and [engineering_reasoning.md](engineering_reasoning.md).
+>
+> **No invariant below was weakened, bypassed, renamed away or
+> reinterpreted.** AF-DEP-001 gained six frozen directions involving
+> `engineering_reasoning`, and AF-DET-002's deterministic core gained
+> `engineering_reasoning` as an eleventh context — both additions, not
+> relaxations.
 
 **May:** consume governed knowledge and context; derive explicit
 reasoning artefacts; produce conclusions with provenance; represent
@@ -303,6 +318,17 @@ Conclusion → rule/version → governed context/retrieval inputs
 **AF-REASON-003.** Any reasoning output that later becomes persistent
 engineering knowledge requires an explicit governance lifecycle,
 designed then, not assumed now.
+
+**As implemented (EPIC 32.1).** No reasoning output becomes persistent
+engineering knowledge, so no governance lifecycle was needed and none
+was invented. Reasoning is enforced to be *incapable* of persistence:
+the whole reasoning surface imports no repository, no session, no
+promotion service, no Human Review module and no graph port, and the
+engine step handler declares no `__init__`, so it is constructed with
+nothing at all. `knowledge_promotion_service` remains the single
+graph-authoring authority (AF-KG-003, unchanged), and an end-to-end test
+asserts the governed graph is byte-identical across an execution that
+concluded `INCONSISTENT`.
 
 ## 19. Retired Architecture Tombstones
 
@@ -368,7 +394,10 @@ string `structured_retrieval` is not banned, because
 | **AF-SEC-003** no arbitrary filter/sort | SECURITY | `test_sort_fields_are_closed_enums_not_strings`, `test_the_retrieval_api_accepts_no_arbitrary_filter` |
 | **AF-EVO-001** this document exists and matches | EVOLUTION_RULE | `test_af_evo_001_the_freeze_document_exists` |
 | **AF-LLM-001** LLM output is not authoritative | NON_GOAL_AT_FREEZE | §23 — no LLM output reaches any authoritative store; enforced by AF-DET-002 + AF-KG-003 |
-| **AF-REASON-001/002/003** reasoning contract | EVOLUTION_RULE | *forward requirement on EPIC 32; no code exists to test* |
+| **AF-REASON-001** fact ≠ inference | HARD | `test_af_reason_001_a_result_is_a_type_of_its_own`, `test_af_reason_001_a_conclusion_never_claims_to_be_governed`, `test_af_reason_001_the_response_keeps_reasoning_out_of_evidence` |
+| **AF-REASON-002** reasoning provenance | PROVENANCE | `test_af_reason_002_a_result_names_its_rule_and_version`, `test_af_reason_002_every_contributor_carries_governed_provenance`, `test_af_reason_002_provenance_survives_into_the_response` |
+| **AF-REASON-003** no auto-promotion | HARD | `test_af_reason_003_reasoning_imports_nothing_that_can_write`, `test_af_reason_003_reasoning_imports_no_graph_repository`, `test_af_reason_003_the_reasoning_step_handler_holds_no_dependency`, `test_af_reason_003_the_reasoning_service_opens_no_session`, `test_reasoning_promotes_nothing_into_governed_knowledge` |
+| **AF-REASON-004** reasoning is deterministic | DETERMINISM | `test_reasoning_reads_no_clock`, `test_the_result_identity_is_a_pure_function_of_governed_material`, `test_the_outcome_vocabulary_is_four_valued_and_closed`, `test_no_confidence_or_score_anywhere_in_reasoning` |
 
 ## 21. Known Technical Debt
 

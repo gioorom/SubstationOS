@@ -40,6 +40,11 @@ from app.domain.context_builder.context_builder_models import ContextPackage
 from app.domain.governed_retrieval.governed_retrieval_vocabulary import (
     GovernedMatchOutcome,
 )
+from app.domain.engineering_reasoning.reasoning_models import ReasoningResult
+from app.domain.engineering_response.engineering_response_reasoning import (
+    build_derived_reasoning_assessment,
+    build_derived_reasoning_warnings,
+)
 from app.domain.engineering_response.engineering_response_models import (
     EngineeringEvidenceReference,
     EngineeringResponseCompositionResult,
@@ -468,10 +473,16 @@ def compose_engineering_response(
     context_package: ContextPackage,
     prompt_package: PromptPackage,
     source: EngineeringResponseSourceEnvelope,
+    reasoning: ReasoningResult | None = None,
 ) -> EngineeringResponseCompositionResult:
     status = _determine_status(source)
     references = _build_references(prompt_package)
-    warnings = _build_warnings(context_package, source, status)
+    # Reasoning's own warnings come last, after the context and provider
+    # warnings: a reader sees the state of the knowledge before the
+    # conclusion drawn from it.
+    warnings = _build_warnings(
+        context_package, source, status
+    ) + build_derived_reasoning_warnings(reasoning)
     uncertainties = _build_uncertainties(context_package, status)
     overall_uncertainty = overall_uncertainty_from(uncertainties)
 
@@ -515,4 +526,5 @@ def compose_engineering_response(
         verification=_verification_assessment(
             context_package, prompt_package, source
         ),
+        derived_reasoning=build_derived_reasoning_assessment(reasoning),
     )
