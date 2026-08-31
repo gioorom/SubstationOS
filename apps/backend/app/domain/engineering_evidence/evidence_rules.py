@@ -31,8 +31,11 @@ from enum import Enum
 from app.domain.engineering_evidence.evidence_models import EvidenceType
 from app.domain.engineering_evidence.evidence_patterns import (
     DESIGNATION_IEC_81346_COMPOUND,
+    DESIGNATION_IEC_81346_LOCATION,
     DESIGNATION_PATTERNS,
 )
+
+
 
 # Punctuation running text attaches to a value. Deliberately does not
 # include ``+`` or ``-``: those carry meaning in IEC 81346 designations
@@ -86,15 +89,19 @@ class ExtractionRule:
 
 DESIGNATION_RULE = ExtractionRule(
     rule_id="designation_generic",
-    rule_version="1.0",
+    rule_version="2.0",
     evidence_type=EvidenceType.DESIGNATION,
     kind=RuleKind.SINGLE_TOKEN,
     description=(
         "A token whose whole text matches one of the declared "
         "designation shapes: letters-then-digits (T1, QMT01), a numeric "
-        "function code (52-Q1), or an IEC 81346 aspect (+E01-QA1). "
-        "Records only that designation-like text was observed; says "
-        "nothing about what equipment it names."
+        "function code (52-Q1), an IEC 81346 aspect (+E01-QA1), a "
+        "product aspect (-E, -E1, -X), or a dot-qualified product "
+        "aspect (-E1.L, -E.AM). Excludes standalone location aspects, "
+        "which the location rule observes. Records only that "
+        "designation-like text was observed; says nothing about what "
+        "equipment it names, and nothing about the internal structure "
+        "of a dot-qualified form."
     ),
 )
 
@@ -139,15 +146,17 @@ CABLE_SECTION_RULE = ExtractionRule(
 
 LOCATION_ASPECT_RULE = ExtractionRule(
     rule_id="location_aspect_iec_81346",
-    rule_version="1.0",
+    rule_version="2.0",
     evidence_type=EvidenceType.LOCATION_ASPECT,
     kind=RuleKind.LOCATION_ASPECT,
     description=(
-        "The location-aspect segment of a compound IEC 81346 reference "
-        "designation written as one token: the '+E01' of '+E01-QA1'. "
-        "Records only that a location aspect was written there - not "
-        "that the equipment is located in it, which is a meaning a "
-        "semantic rule assigns and an engineer reviews."
+        "An IEC 81346 location aspect, in either form the real source "
+        "set writes: the '+E01' segment of a compound '+E01-QA1', or a "
+        "standalone location token such as '+GSH002', '+DQ1910', "
+        "'+TELAIO' or '+CELLA'. Records only that a location aspect was "
+        "written there - not that any equipment is located in it, which "
+        "is a meaning a semantic rule assigns and an engineer reviews, "
+        "and not what kind of place it is."
     ),
 )
 
@@ -224,9 +233,54 @@ def matches_designation(text: str) -> bool:
     Lives here rather than in the extractor so that the whole of what
     "is a designation" means is readable in one file, alongside the
     patterns it uses.
+
+    One exclusion, applied after the shape matches: **a standalone
+    location aspect is not a designation**. ``+GSH002`` matches the IEC
+    shape, but the ``+`` says it names a *place*. Recording it as
+    equipment would put 268 locations into the graph as assets. The
+    location rule observes it instead.
+
+    A **compound** ``+E01-QA1`` is still a designation: it names a
+    product, in a location, and only the leading segment is the place.
+
+    ## What this policy knowingly gets wrong
+
+    ``SF6`` is sulphur hexafluoride, and it matches
+    ``DESIGNATION_LETTERS_THEN_DIGITS``. It is observed as a designation,
+    16 times across the real document set, and that is a **known false
+    positive** rather than an oversight.
+
+    Two mechanisms were built and removed:
+
+    - **A token catalogue** (``if text in ("SF6",)``) encodes "SF6 is
+      never an engineering designation" as universal truth. It is not:
+      nothing stops a real installation designating an object ``SF6``,
+      and the catalogue would make it permanently invisible. A present
+      false positive is visible and disputable; that future false
+      negative would be neither.
+    - **A source-context rule** rejecting the token after ``ALLARMI`` or
+      ``PRESSIONE``. Its entire evidence base is two words, on four
+      lines, in two documents, in one language - and it would miss
+      ``GAS SF6``, a bare ``SF6`` table cell, and any non-Italian
+      phrasing. That is a heuristic with a version number, which is the
+      artefact this catalogue of rules exists to avoid.
+
+    No grammar can separate the token: it is shaped exactly like the real
+    designations ``MI1``, ``MO2`` and ``Q8`` in the same drawings.
+
+    The honest fix is upstream and is **not** an extractor concern: a
+    governed substance vocabulary, reviewed like every other domain
+    catalogue in ``app/domain/ontology``, which this rule could then
+    consult as source-authoritative classification rather than as a
+    hand-curated list. Until that exists the false positive stands, is
+    measured by the reference corpus, and is recorded in
+    ``engineering_evidence.md``.
     """
 
-    return any(pattern.match(text) for pattern in DESIGNATION_PATTERNS)
+    if not any(pattern.match(text) for pattern in DESIGNATION_PATTERNS):
+        return False
+
+    return not DESIGNATION_IEC_81346_LOCATION.match(text)
 
 
 def match_location_aspect(text: str) -> tuple[str, int] | None:
@@ -234,8 +288,18 @@ def match_location_aspect(text: str) -> tuple[str, int] | None:
     The location-aspect rule's matching policy.
 
     Returns the location segment and how many characters follow it, or
-    ``None`` when the token is not a compound IEC 81346 reference
-    designation carrying a location aspect.
+    ``None`` when the token carries no location aspect.
+
+    Two shapes, because the real source set writes both. A compound
+    ``+E01-QA1`` yields ``("+E01", 4)`` - the location, and the length of
+    the product segment that follows it. A standalone ``+GSH002`` yields
+    ``("+GSH002", 0)``: the whole token is the location and nothing
+    trails it.
+
+    The standalone form is by far the commoner one in real documents -
+    268 occurrences against zero compounds - which is why EPIC 32.E2
+    added it. Milestone 32.P1 saw only the compound form, in one
+    annotated corpus line.
 
     The trailing length is returned rather than computed by the caller
     because it is what narrows the observation's character provenance
@@ -244,12 +308,18 @@ def match_location_aspect(text: str) -> tuple[str, int] | None:
 
     ``-QA1-XB2`` returns ``None``. It is a product within a product,
     which is a different engineering statement that no rule here
-    interprets.
+    interprets - and which EPIC 32.E1 found occurs zero times in 1,050
+    pages of real source.
     """
 
     match = DESIGNATION_IEC_81346_COMPOUND.match(text)
 
-    if match is None:
-        return None
+    if match is not None:
+        return match.group("location"), len(match.group("product"))
 
-    return match.group("location"), len(match.group("product"))
+    if DESIGNATION_IEC_81346_LOCATION.match(text):
+        # A standalone location aspect: the whole token is the location,
+        # so nothing trails it and the character range is the token's own.
+        return text, 0
+
+    return None

@@ -88,7 +88,7 @@ def test_the_result_reports_the_source_and_the_policies(
 
     entity_set = _resolve(api_client, document_id).json()["entity_set"]
 
-    assert entity_set["extraction_policy_version"] == "1.0"
+    assert entity_set["extraction_policy_version"] == "2.0"
     assert entity_set["resolution_policy_version"] == "1.0"
     assert entity_set["content_checksum"]
 

@@ -139,7 +139,7 @@ def test_the_set_records_its_canonical_source_and_policy(
     assert evidence_set.document_id == document.id
     assert evidence_set.project_id == 9
     assert evidence_set.segmentation_version == "1.0"
-    assert evidence_set.extraction_policy_version == "1.0"
+    assert evidence_set.extraction_policy_version == "2.0"
 
 
 def test_a_document_with_nothing_recognisable_is_a_success(
@@ -221,7 +221,7 @@ def test_the_rule_id_and_version_are_persisted(
 
     for item in stored.evidence:
         assert item.rule_id
-        assert item.rule_version == "1.0"
+        assert item.rule_version in {"1.0", "2.0"}
 
 
 def test_symbols_survive_persistence(db_session: Session) -> None:
@@ -359,7 +359,7 @@ def test_the_historical_set_remains_unchanged(
 
     historical = SqlAlchemyEngineeringEvidenceRepository(
         db_session
-    ).find_for_source(document.id, first.content_checksum, "1.0")
+    ).find_for_source(document.id, first.content_checksum, "2.0")
 
     assert historical == first
     assert (
@@ -369,15 +369,23 @@ def test_the_historical_set_remains_unchanged(
 
 
 def test_a_new_policy_version_extracts_again(db_session: Session) -> None:
-    """The rules changed, so the result is a different set even though
-    the canonical source is identical - which is why the policy version
-    is part of the key."""
+    """
+    The rules changed, so the result is a different set even though the
+    canonical source is identical - which is why the policy version is
+    part of the key.
+
+    The version used here is deliberately far ahead of the real one:
+    the point is that *any* change of policy re-extracts, and a literal
+    that happened to equal the current default would assert nothing.
+    EPIC 32.E2 raised the real default from 1.0 to 2.0 and this test
+    caught it, which is the mechanism working.
+    """
 
     document = _prepared(db_session)
     _extract(db_session, document.id)
 
     result = _extract(
-        db_session, document.id, extraction_policy_version="2.0"
+        db_session, document.id, extraction_policy_version="99.0"
     )
 
     assert result.reused is False

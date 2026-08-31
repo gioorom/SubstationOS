@@ -175,18 +175,22 @@ def _extract_from_line(
         if designation is not None:
             found.append(designation)
 
-            # The same token may carry a second, narrower observation.
-            # Emitted **beside** the designation rather than instead of
-            # it: ``+E01-QA1`` is a designation that was written, and
-            # ``+E01`` is a location aspect that was written inside it.
-            # Both are true, and the evidence keys differ because the
-            # rule and the evidence type are part of the key.
-            location = _match_location_aspect(
-                canonical_text, section, paragraph, line, tokens, index
-            )
+        # Evaluated **independently** of the designation rule, because a
+        # token may carry a location aspect either way round:
+        #
+        # - ``+E01-QA1`` is a designation that was written, and ``+E01``
+        #   is a location aspect written inside it. Both are true, and
+        #   the evidence keys differ because the rule and the evidence
+        #   type are part of the key.
+        # - ``+GSH002`` is a location aspect and nothing else. The
+        #   designation rule declines it (EPIC 32.E2), so this branch is
+        #   the only one that observes it.
+        location = _match_location_aspect(
+            canonical_text, section, paragraph, line, tokens, index
+        )
 
-            if location is not None:
-                found.append(location)
+        if location is not None:
+            found.append(location)
 
         index += 1
 
@@ -240,16 +244,24 @@ def _match_location_aspect(
     """
     The location-aspect rule, applied to one token.
 
-    The only observation in this context that covers **part** of a
-    token, and the whole of the care here is in saying so exactly: the
-    trim's ``right`` offset is widened by the length of the product
-    segment, so ``_provenance`` narrows the character range onto
+    Two shapes, and the care is in recording each one's characters
+    exactly.
+
+    For a **compound** ``+E01-QA1`` the observation covers part of the
+    token: the trim's ``right`` offset is widened by the length of the
+    product segment, so ``_provenance`` narrows the character range onto
     ``+E01`` and the item's ``source_text`` is ``+E01``. An auditor who
     follows this evidence back to the document lands on the four
     characters that produced it, not on the whole token.
 
-    Consumes no token: the caller has already recorded the designation
-    and advances past it either way.
+    For a **standalone** ``+GSH002`` - the commoner form in real
+    documents - the whole token is the location, and the range is the
+    token's own.
+
+    Consumes no token, and makes no assumption about the designation
+    rule: for the compound form the caller has already recorded a
+    designation, and for the standalone form it has recorded nothing,
+    because a location aspect is not equipment.
     """
 
     token = tokens[index]

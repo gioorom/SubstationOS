@@ -60,8 +60,8 @@ def test_the_corpus_declares_its_versions(
 ) -> None:
     corpus = repository.load(REFERENCE_CORPUS)
 
-    assert corpus.corpus_version == "1.0"
-    assert corpus.annotated_against_policy_version == "1.0"
+    assert corpus.corpus_version == "2.0"
+    assert corpus.annotated_against_policy_version == "2.0"
     assert corpus.annotated_rule_versions
 
 
@@ -263,8 +263,9 @@ def test_the_reference_corpus_records_the_current_measured_baseline(
     The baseline this milestone measured, pinned so a rule change that
     moves it has to move this number deliberately.
 
-    18 of 19 annotations are matched exactly - text, value, status and
-    full provenance. The single miss is ``TR-1`` in
+    38 of 39 annotations are matched exactly - text, value, status and
+    full provenance - alongside **three false positives that the corpus
+    exists to measure**. The single miss is ``TR-1`` in
     ``designation_variants``, a **known and deliberately annotated
     recall gap**: the designation patterns do not recognise
     letters-hyphen-digits, and an engineer reading that document would
@@ -277,6 +278,18 @@ def test_the_reference_corpus_records_the_current_measured_baseline(
     measured on the same terms as every other: exact text, exact status,
     and a character range covering the four characters it read - not the
     whole token it was found in.
+
+    EPIC 32.E2 moved it from 18/19 to 38/39 by transcribing three
+    documents from a single Italian DSO's drawings: dot-qualified product
+    designations, bare product designations, word-form location aspects,
+    and the SF6 gas-alarm lines.
+
+    The three false positives are all ``SF6``, and they are deliberate.
+    An earlier draft suppressed the token with a catalogue and reported
+    perfect precision; that was removed on review, because encoding "SF6
+    is never an engineering designation" as universal truth trades a
+    visible false positive for an invisible false negative. The corpus
+    now measures the defect instead of concealing it.
     """
 
     corpus = repository.load(REFERENCE_CORPUS)
@@ -296,14 +309,22 @@ def test_the_reference_corpus_records_the_current_measured_baseline(
         false_positives += metrics.false_positives
         false_negatives += metrics.false_negatives
 
-    assert (true_positives, false_positives, false_negatives) == (18, 0, 1)
+    assert (true_positives, false_positives, false_negatives) == (38, 3, 1)
 
 
-def test_the_known_recall_gap_is_the_only_miss(
+def test_the_known_defects_are_the_only_misses(
     repository: YamlReferenceCorpusRepository,
 ) -> None:
-    """Named explicitly, so that if a *different* item starts failing the
-    test says which."""
+    """
+    Named explicitly, so that if a *different* item starts failing the
+    test says which.
+
+    ``TR-1`` is the known recall gap: letters-hyphen-digits is not a
+    recognised shape. The three ``SF6`` entries are the known precision
+    defect: sulphur hexafluoride is shaped exactly like the real
+    designations ``MI1`` and ``Q8``, and no grammar, catalogue or
+    two-word context rule separates them defensibly.
+    """
 
     corpus = repository.load(REFERENCE_CORPUS)
     missed: list[str] = []
@@ -321,4 +342,4 @@ def test_the_known_recall_gap_is_the_only_miss(
             if not result.is_correct
         )
 
-    assert missed == ["TR-1"]
+    assert missed == ["TR-1", "SF6", "SF6", "SF6"]

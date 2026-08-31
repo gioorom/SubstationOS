@@ -102,18 +102,110 @@ designation**, and the cost of being wrong is asymmetric: a missed
 designation is a gap a later milestone can fill, while a false one
 becomes an entity somebody has to disprove.
 
-Three shapes are recognised, each requiring letters and digits together:
+Five shapes are recognised. The first three shipped with Milestone 28.1
+and required letters and digits together; the last two were added by
+**EPIC 32.E2** after measuring 41,739 tokens of a single Italian DSO's
+HV/MV functional diagrams, where product-aspect designations turned out
+not to obey that rule.
 
 | Shape | Matches | Does not match |
 |---|---|---|
 | letters then digits | `T1`, `TR1`, `QMT01`, `M1` | `TRASFORMATORE`, `AT`, `kV` |
 | numeric function code | `52-Q1`, `189-SB1` | `145`, `20-30` |
-| IEC 81346 aspect | `+E01`, `-QA1`, `+E01-QA1` | `+`, `-` |
+| IEC 81346 compound | `+E01-QA1` | `+`, `-` |
+| product aspect | `-E`, `-E1`, `-X`, `-TA` | `-`, `-SCHEMA` |
+| dot-qualified product | `-E1.L`, `-E.AM`, `-EV.TVL` | `-.L`, `-E1.L.X` |
 
 Bare uppercase words, bare numbers, single letters and lower-case tokens
 are all rejected. **The equipment category is never inferred from the
 designation** - `QMT01` looks like a medium-voltage panel to an engineer,
 and this layer records only that the designation-like text was observed.
+
+### Why the product-aspect shapes need no digit
+
+`-E`, `-X` and `-TA` are real terminal blocks, observed 28 times in the
+real set. The `-` **is** the distinguishing mark: IEC 81346 assigns it to
+the product aspect, so unlike a bare word the token does not need a digit
+to be recognisable. Length is bounded at four letters, which is what
+keeps `-SCHEMA` out and covers every observed real form.
+
+### The dot is lexical, not hierarchical
+
+`-E1.L` is recorded as **one atomic designation**. It does not decompose
+into `-E1` and `L`, creates no second asset, and authorises no
+parent/child relationship of any kind.
+
+**The decisive reason is the absence of positive evidence.** No source
+available to this platform establishes that the leading lexical segment
+denotes the parent engineering object of the dot-qualified designation.
+A governed relationship needs evidence *for* it; nothing here provides
+any.
+
+A second observation points the same way without proving anything on its
+own: the real drawings place `-E` at `+GSH001` and `-E.AM` at `+GSH003`.
+That divergence is evidence against a naive **physical containment**
+reading, and it is consistent with a sibling naming-family
+interpretation. It does **not** prove that no reference-designation
+hierarchy exists - a reference-designation hierarchy need not imply
+co-location, and this platform has established no such invariant.
+
+The interpretation is **provisional**. Authoritative Italian DSO
+designation documentation, or a domain expert, may revise it; if a
+future authoritative source defines different semantics for the dot,
+that is new evidence and may trigger a governed architecture revision.
+It is not a general claim about IEC 81346.
+
+### Location aspects
+
+A location aspect is recognised in both forms the real documents write:
+
+| Form | Example | Note |
+|---|---|---|
+| inside a compound | `+E01` of `+E01-QA1` | Milestone 32.P1; span narrowed to the location characters |
+| standalone | `+GSH002`, `+DQ1910`, `+TELAIO`, `+CELLA`, `+Z` | EPIC 32.E2 |
+
+The standalone form is overwhelmingly the commoner one: 268 occurrences
+against zero compounds across the real set. Word forms such as `+TELAIO`
+(frame) and `+CELLA` (cubicle) are ordinary location **designations** -
+the platform records the value and assigns no equipment class, exactly as
+it refuses to read `QMT01` as a panel.
+
+**A standalone location aspect is not also a designation.** The
+designation rule declines it, so the token is observed once, as what it
+is. Recording 268 places as equipment assets would have been the largest
+single misclassification in the pipeline.
+
+### Substance notation
+
+`SF6` is sulphur hexafluoride and appears only in running prose -
+"ALLARMI SF6", "BASSA PRESSIONE SF6 (P1 GAS)". It matches
+letters-then-digits and is observed as a designation **16 times across
+the real document set. This is a known false positive, and it is
+measured rather than suppressed.**
+
+No grammar can separate it: it is structurally identical to the real
+designations `MI1`, `MO2` and `Q8` in the same documents.
+
+Two suppressions were built and removed on review:
+
+- **A token catalogue** (`SUBSTANCE_NOTATION`) encodes "SF6 is never an
+  engineering designation" as universal truth. Nothing stops a real
+  installation designating an object `SF6`, and the catalogue would make
+  it permanently invisible. A present false positive is visible and
+  disputable; that future false negative would be neither.
+- **A source-context rule** rejecting the token after `ALLARMI` or
+  `PRESSIONE`. Its entire evidence base is two words, on four lines, in
+  two documents, in one language - and it would miss `GAS SF6`, a bare
+  `SF6` table cell, and any non-Italian phrasing. That is a heuristic
+  with a version number.
+
+The honest fix is upstream and is not an extractor concern: a **governed
+substance vocabulary**, reviewed like every other domain catalogue in
+`app/domain/ontology`, which the rule could then consult as
+source-authoritative classification rather than as a hand-curated list.
+Until that exists the false positive stands, and the reference corpus
+measures it: three of its annotations' worth of `SF6`, reported in
+precision rather than hidden.
 
 ## Quantities and units
 
@@ -432,7 +524,25 @@ improvement.
   extraction from assembled text; migrating it onto this layer is a later
   milestone, and an architecture test pins the current absence of that
   dependency so the change will be deliberate when it comes.
-- **The reference corpus is synthetic.** Its documents were written to
-  exercise the rules, not drawn from real substation documentation. The
-  framework is what makes real documents measurable; adding them is the
-  work that turns a measured baseline into a meaningful one.
+- **The reference corpus is now part real** (EPIC 32.E2). Three of its
+  eight documents are transcribed verbatim from a single Italian DSO's
+  drawings and carry the document code, page and file checksum; the other
+  five were written to exercise the rules. `ReferenceDocument.source`
+  keeps the two distinguishable, so a metric cannot quietly measure the
+  extractor against strings written to make it pass.
+- **The real source set is dominated by functional diagrams.** Ten real
+  documents, ~1,050 pages, nine of them functional diagrams plus one
+  cable list. No single-line diagram, wiring diagram, equipment list,
+  nameplate table, technical specification or bay data sheet. Extraction
+  quality is measured on that family and should not be generalised
+  beyond it.
+- **Several real documents are effectively image-only.** Four yield under
+  2,200 characters over 100+ pages. Their designations are not
+  text-extractable at all, and **absence of extracted text is not
+  evidence of absence of designations** - no OCR is performed and none is
+  inferred.
+- **Slash- and hyphen-qualified designations are not yet observed.** The
+  real set writes `Q6/A`, `Q31/SB`, `A/COM`, `M-SA`, `X-VAC` and
+  `Q9-1` - a further real family, measured and deliberately out of scope
+  for 32.E2, which targeted the dot-qualified, bare-product and location
+  families.

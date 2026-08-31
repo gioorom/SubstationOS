@@ -63,6 +63,7 @@ from app.domain.evidence_evaluation.corpus_models import (
     ExpectedObservation,
     ReferenceCorpus,
     ReferenceDocument,
+    ReferenceSource,
 )
 from app.domain.evidence_evaluation.corpus_repository import (
     ReferenceCorpusRepository,
@@ -242,6 +243,30 @@ def _document(corpus_id: str, raw: dict) -> ReferenceDocument:
             _expected(corpus_id, entry, lines)
             for entry in raw.get("expected") or ()
         ),
+        source=_source(corpus_id, raw.get("source")),
+    )
+
+
+def _source(corpus_id: str, raw: dict | None) -> ReferenceSource | None:
+    """
+    The real drawing a document's lines were transcribed from, or
+    ``None`` for a corpus document written to exercise a rule.
+
+    A ``source:`` block that is present but incomplete is **refused**,
+    not partially accepted: a real corpus entry whose provenance cannot
+    be read is exactly the entry nobody could trace back to a drawing,
+    and this module's contract is to fail loudly rather than load
+    something half-known.
+    """
+
+    if not raw:
+        return None
+
+    return ReferenceSource(
+        document_code=str(_require(raw, "document_code", corpus_id)),
+        page_number=int(_require(raw, "page_number", corpus_id)),
+        checksum=str(_require(raw, "checksum", corpus_id)),
+        note=None if raw.get("note") is None else str(raw["note"]),
     )
 
 

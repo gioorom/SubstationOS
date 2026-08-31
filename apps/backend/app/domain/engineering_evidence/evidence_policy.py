@@ -16,7 +16,14 @@ from app.domain.canonical_text.canonical_text_policy import (
 # stored evidence set always says which body of rules produced it, and a
 # re-extraction is a deliberate, visible event rather than a silent
 # reinterpretation.
-EXTRACTION_POLICY_VERSION = "1.0"
+#
+# 2.0 (EPIC 32.E2): two rule versions raised and two designation shapes
+# added. This field is the reuse key, so leaving it at 1.0 would have
+# been the exact failure it exists to prevent - documents extracted
+# before the change would be served forever with `+GSH002` stored as a
+# DESIGNATION, while documents extracted after record it as a
+# LOCATION_ASPECT, both claiming policy 1.0.
+EXTRACTION_POLICY_VERSION = "2.0"
 
 # Segmentation contracts this extractor understands. A canonical text
 # built under a newer contract is refused rather than extracted on a

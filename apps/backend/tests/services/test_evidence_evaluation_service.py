@@ -73,10 +73,10 @@ def test_the_report_records_every_version_it_ran_under(
     report = _evaluate(db_session).stored.report
 
     assert report.corpus_id == REFERENCE_CORPUS
-    assert report.corpus_version == "1.0"
-    assert report.extraction_policy_version == "1.0"
+    assert report.corpus_version == "2.0"
+    assert report.extraction_policy_version == "2.0"
     assert report.provenance_policy is ProvenanceMatchPolicy.EXACT
-    assert dict(report.rule_versions)["designation_generic"] == "1.0"
+    assert dict(report.rule_versions)["designation_generic"] == "2.0"
     assert len(report.rule_versions) == 6
 
 
@@ -88,10 +88,10 @@ def test_the_measured_metrics_are_exact(db_session: Session) -> None:
         metrics.true_positives,
         metrics.false_positives,
         metrics.false_negatives,
-    ) == (18, 0, 1)
-    assert metrics.precision == Decimal("1.000000")
-    assert metrics.recall == Decimal("0.947368")
-    assert metrics.f1 == Decimal("0.972973")
+    ) == (38, 3, 1)
+    assert metrics.precision == Decimal("0.926829")
+    assert metrics.recall == Decimal("0.974359")
+    assert metrics.f1 == Decimal("0.950000")
 
 
 def test_metrics_are_broken_down_by_document_type_and_rule(
@@ -105,10 +105,14 @@ def test_metrics_are_broken_down_by_document_type_and_rule(
         "descriptive_prose",
         "ambiguous_ratings",
         "designation_variants",
+        # EPIC 32.E2 - transcribed from a single Italian DSO's drawings.
+        "real_linee_at_terminal_blocks",
+        "real_tr_terminal_blocks",
+        "real_gas_alarm_prose",
     }
     assert report.metrics_by_evidence_type["designation"].false_negatives == 1
     assert (
-        report.metrics_by_rule["designation_generic@1.0"].false_negatives
+        report.metrics_by_rule["designation_generic@2.0"].false_negatives
         == 1
     )
     assert report.metrics_by_document["descriptive_prose"].predicted == 0

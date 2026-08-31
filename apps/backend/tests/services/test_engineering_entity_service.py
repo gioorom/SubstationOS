@@ -178,7 +178,7 @@ def test_the_set_records_the_source_and_the_policies(
 
     assert entity_set.document_id == document.id
     assert entity_set.project_id == 3
-    assert entity_set.extraction_policy_version == "1.0"
+    assert entity_set.extraction_policy_version == "2.0"
     assert entity_set.resolution_policy_version == "1.0"
 
 

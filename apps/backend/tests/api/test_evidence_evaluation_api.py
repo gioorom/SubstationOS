@@ -40,7 +40,7 @@ def test_evaluating_the_reference_corpus_returns_201(
     body = response.json()
     assert body["succeeded"] is True
     assert body["report"]["corpus_id"] == REFERENCE_CORPUS
-    assert body["report"]["corpus_version"] == "1.0"
+    assert body["report"]["corpus_version"] == "2.0"
 
 
 def test_the_report_carries_exact_metrics(api_client: TestClient) -> None:
@@ -49,12 +49,12 @@ def test_the_report_carries_exact_metrics(api_client: TestClient) -> None:
 
     metrics = _evaluate(api_client).json()["report"]["metrics"]
 
-    assert metrics["true_positives"] == 18
-    assert metrics["false_positives"] == 0
+    assert metrics["true_positives"] == 38
+    assert metrics["false_positives"] == 3
     assert metrics["false_negatives"] == 1
-    assert metrics["precision"] == "1.000000"
-    assert metrics["recall"] == "0.947368"
-    assert metrics["f1"] == "0.972973"
+    assert metrics["precision"] == "0.926829"
+    assert metrics["recall"] == "0.974359"
+    assert metrics["f1"] == "0.950000"
 
 
 def test_the_report_breaks_metrics_down_by_type_and_rule(
@@ -68,7 +68,7 @@ def test_the_report_breaks_metrics_down_by_type_and_rule(
         ]
         == 1
     )
-    assert "designation_generic@1.0" in report["metrics_by_rule"]
+    assert "designation_generic@2.0" in report["metrics_by_rule"]
     assert {
         document["document_ref"] for document in report["documents"]
     } == {
@@ -77,6 +77,10 @@ def test_the_report_breaks_metrics_down_by_type_and_rule(
         "descriptive_prose",
         "ambiguous_ratings",
         "designation_variants",
+        # EPIC 32.E2 - transcribed from a single Italian DSO's drawings.
+        "real_linee_at_terminal_blocks",
+        "real_tr_terminal_blocks",
+        "real_gas_alarm_prose",
     }
 
 
@@ -89,7 +93,7 @@ def test_the_report_records_every_rule_version(
         for entry in report["rule_versions"]
     }
 
-    assert versions["designation_generic"] == "1.0"
+    assert versions["designation_generic"] == "2.0"
     assert len(versions) == 6
 
 
@@ -107,7 +111,12 @@ def test_the_failing_item_is_named_in_the_report(
         if result["outcome"] != "true_positive"
     ]
 
-    assert [result["observed_text"] for result in misses] == ["TR-1"]
+    assert [result["observed_text"] for result in misses] == [
+        "TR-1",
+        "SF6",
+        "SF6",
+        "SF6",
+    ]
     assert misses[0]["outcome"] == "false_negative"
     assert misses[0]["rule_id"] == "designation_generic"
     assert misses[0]["line_index"] == 1
@@ -200,7 +209,7 @@ def test_a_comparison_reports_the_metric_deltas(
     deltas = {entry["name"]: entry for entry in body["metric_deltas"]}
 
     assert set(deltas) == {"precision", "recall", "f1"}
-    assert deltas["recall"]["baseline"] == "0.947368"
+    assert deltas["recall"]["baseline"] == "0.974359"
     assert deltas["recall"]["delta"] == "0.000000"
     assert deltas["recall"]["decreased"] is False
 

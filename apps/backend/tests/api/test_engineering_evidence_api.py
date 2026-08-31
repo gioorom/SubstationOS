@@ -92,7 +92,7 @@ def test_the_result_reports_the_source_and_the_policy(
     evidence_set = _extract(api_client, document_id).json()["evidence_set"]
 
     assert evidence_set["segmentation_version"] == "1.0"
-    assert evidence_set["extraction_policy_version"] == "1.0"
+    assert evidence_set["extraction_policy_version"] == "2.0"
     assert evidence_set["content_checksum"]
 
 
@@ -177,7 +177,7 @@ def test_the_evidence_can_be_read_back_with_full_provenance(
     item = body["evidence"][0]
 
     assert item["rule_id"]
-    assert item["rule_version"] == "1.0"
+    assert item["rule_version"] in {"1.0", "2.0"}
     assert item["provenance"]["page_number"] == 1
     assert item["provenance"]["spans"]
     assert (

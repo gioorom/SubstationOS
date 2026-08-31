@@ -89,6 +89,24 @@ class ExpectedObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class ReferenceSource:
+    """
+    Where a real corpus line came from (EPIC 32.E2).
+
+    Enough to find the line again in the original drawing, and nothing
+    that ties the corpus to one machine: a **document code** as printed
+    on the drawing, the page it was read from, and the SHA-256 of the
+    file it was read out of. No filesystem path - a corpus that recorded
+    ``C:\\Users\\...`` would be reproducible on exactly one computer.
+    """
+
+    document_code: str
+    page_number: int
+    checksum: str
+    note: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ReferenceDocument:
     """
     One annotated document.
@@ -102,12 +120,26 @@ class ReferenceDocument:
     ``expected`` is what a human says should be found. An empty tuple is
     a meaningful annotation: "this document contains nothing these rules
     should observe", which is exactly how false positives are caught.
+
+    ``source`` names the real engineering document a line was copied
+    from, when there is one (EPIC 32.E2). A corpus entry whose lines were
+    transcribed from a real drawing and one that was written to exercise
+    a rule are different kinds of evidence, and a metric that mixed them
+    would be measuring the extractor partly against itself.
     """
 
     document_ref: str
     title: str
     lines: tuple[str, ...]
     expected: tuple[ExpectedObservation, ...] = ()
+    source: "ReferenceSource | None" = None
+
+    @property
+    def is_real_source(self) -> bool:
+        """Whether these lines were transcribed from a real engineering
+        document rather than authored for the corpus."""
+
+        return self.source is not None
 
     @property
     def expected_count(self) -> int:

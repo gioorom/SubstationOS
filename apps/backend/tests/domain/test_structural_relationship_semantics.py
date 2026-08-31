@@ -170,17 +170,35 @@ def test_a_product_within_a_product_is_not_a_location() -> None:
     ] == ["-QA1-XB2"]
 
 
-def test_a_bare_location_designation_produces_no_location_aspect() -> None:
+def test_a_bare_location_aspect_is_observed_as_a_location() -> None:
     """
-    ``+E01`` alone is already recorded as a designation. Recording it a
-    second time under another name would be two entities for one string
-    and no relationship between them - the location aspect is worth
-    observing precisely when it is written *inside* something else.
+    **Behaviour changed by EPIC 32.E2, on real evidence.**
+
+    Milestone 32.P1 asserted the opposite: that ``+E01`` alone produced
+    no location aspect, because "``+E01`` alone is already recorded as a
+    designation" and observing it twice would be two entities for one
+    string.
+
+    That reasoning was sound but rested on an assumption the corpus could
+    not test - 32.P1's only source line wrote the location *inside* a
+    compound token. EPIC 32.E1 then measured 41,739 tokens of real
+    an Italian DSO functional diagrams and found the standalone form is
+    not the exception but the **rule**: 268 standalone location aspects,
+    zero compounds.
+
+    So the premise inverted. Calling ``+GSH002`` an equipment
+    designation would have put 268 locations into the graph as assets.
+    The duplication 32.P1 feared is avoided instead by precedence - the
+    designation rule now declines a standalone location aspect, so the
+    token is observed once, as what it is.
     """
 
     result = _evidence("Cabina +E01")
 
-    assert result.of_type(EvidenceType.LOCATION_ASPECT) == ()
+    location = result.of_type(EvidenceType.LOCATION_ASPECT)
+
+    assert [item.observed_text for item in location] == ["+E01"]
+    assert result.of_type(EvidenceType.DESIGNATION) == ()
 
 
 def test_a_plain_designation_produces_no_location_aspect() -> None:
@@ -218,12 +236,20 @@ def test_two_locations_stay_two_entities() -> None:
     assert len(entities.of_type(EntityType.STRUCTURAL_LOCATION)) == 2
 
 
-def test_a_bare_designation_and_a_location_aspect_never_merge() -> None:
+def test_a_standalone_and_an_embedded_location_aspect_agree() -> None:
     """
-    ``+E01`` written alone is a designation; ``+E01`` written inside
-    ``+E01-QA1`` is a location aspect. Two different claims, two
-    entities - merging them on the strength of the string would be the
-    resolver deciding something no rule established.
+    **Behaviour changed by EPIC 32.E2** - see the test above for why.
+
+    ``+E01`` written alone and ``+E01`` written inside ``+E01-QA1`` are
+    now both location aspects, which is what they are. They resolve to
+    **one** structural location within a document, because the resolver
+    groups designation-valued observations by normalised value, status
+    and extraction rule version - and both observations now carry the
+    same rule.
+
+    That is the honest outcome: the same place, written twice in one
+    document, is one place. It remains document-scoped, so the same
+    string in another document is still a different governed location.
     """
 
     entities = _entities("Cabina +E01", "Interruttore +E01-QA1")
@@ -237,8 +263,8 @@ def test_a_bare_designation_and_a_location_aspect_never_merge() -> None:
         for entity in entities.of_type(EntityType.STRUCTURAL_LOCATION)
     }
 
-    assert "+E01" in designations
-    assert "+E01" in locations
+    assert designations == {"+E01-QA1"}
+    assert locations == {"+E01"}
     assert (
         len({entity.entity_key for entity in entities.entities})
         == len(entities.entities)

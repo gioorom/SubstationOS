@@ -429,7 +429,7 @@ def test_the_set_records_the_catalogue_that_produced_it() -> None:
     result = _evidence("Tensione 20 kV")
     item = result.evidence[0]
 
-    assert result.extraction_policy_version == "1.0"
+    assert result.extraction_policy_version == "2.0"
     assert result.segmentation_version == "1.0"
     assert item.rule_id == "voltage_value"
     assert item.rule_version == "1.0"
