@@ -37,6 +37,8 @@ class SqlAlchemyCanonicalTextRepository(CanonicalTextRepository):
 
     def save(self, segmentation: CanonicalTextDocument) -> None:
         record = CanonicalTextDocumentRecord(
+            artifact_identity=segmentation.artifact_identity,
+            upstream_identity=segmentation.upstream_identity,
             document_id=segmentation.document_id,
             content_checksum=segmentation.content_checksum,
             representation_version=segmentation.representation_version,
@@ -51,23 +53,16 @@ class SqlAlchemyCanonicalTextRepository(CanonicalTextRepository):
         self._session.add(record)
         self._session.commit()
 
-    def find_for_representation(
-        self,
-        document_id: int,
-        content_checksum: str,
-        segmentation_version: str,
+    def find_by_identity(
+        self, document_id: int, artifact_identity: str
     ) -> CanonicalTextDocument | None:
         record = (
             self._session.query(CanonicalTextDocumentRecord)
             .filter(
                 CanonicalTextDocumentRecord.document_id == document_id,
-                CanonicalTextDocumentRecord.content_checksum
-                == content_checksum,
-                CanonicalTextDocumentRecord.segmentation_version
-                == segmentation_version,
+                CanonicalTextDocumentRecord.artifact_identity == artifact_identity,
             )
-            .order_by(CanonicalTextDocumentRecord.id.desc())
-            .first()
+            .one_or_none()
         )
 
         return _to_domain(record) if record is not None else None
@@ -144,6 +139,8 @@ def _to_domain(
     record: CanonicalTextDocumentRecord,
 ) -> CanonicalTextDocument:
     return CanonicalTextDocument(
+        artifact_identity=record.artifact_identity,
+        upstream_identity=record.upstream_identity,
         document_id=record.document_id,
         content_checksum=record.content_checksum,
         representation_version=record.representation_version,

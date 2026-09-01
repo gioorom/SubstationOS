@@ -28,8 +28,20 @@ what the parser observed.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from dataclasses import dataclass
 
+from app.domain.artifact_identity.artifact_identity_builder import (
+    derive_identity,
+    source_identity,
+)
+from app.domain.artifact_identity.artifact_identity_models import (
+    ArtifactKind,
+)
+from app.domain.canonical_pdf.canonical_pdf_policy import (
+    CANONICAL_REPRESENTATION_VERSION,
+)
 from app.domain.canonical_pdf.canonical_pdf_failures import (
     CanonicalizationFailure,
     CanonicalizationFailureCode,
@@ -171,15 +183,35 @@ def canonicalize_document(
             detail=identity.detail,
         )
 
-    existing = repository.find_for_content(
-        document_id, identity.identity.checksum
+    # The identity of the representation these bytes produce under the
+    # current representation contract. Same bytes is not the same
+    # representation: the parser and the normalisation it applies are
+    # versioned separately from the document, so the contract is part of
+    # what is being asked for.
+    source = source_identity(
+        document_id=document_id,
+        content_checksum=identity.identity.checksum,
+        checksum_algorithm=identity.identity.checksum_algorithm,
+    )
+    expected_identity = derive_identity(
+        ArtifactKind.CANONICAL_PDF,
+        upstream=source,
+        local=(
+            ("representation_version", CANONICAL_REPRESENTATION_VERSION),
+            ("parser_name", parser.parser_name),
+            ("parser_version", parser.parser_version),
+        ),
+    )
+
+    existing = repository.find_by_identity(
+        document_id, expected_identity.value
     )
 
     if existing is not None:
-        # Identical bytes already have a representation. Re-parsing would
-        # produce an equal value and a second row saying the same thing;
-        # the stored one is returned instead, which is what makes
-        # re-running this safe.
+        # The same bytes under the same contract already have a
+        # representation. Re-parsing would produce an equal value and a
+        # second row saying the same thing; the stored one is returned
+        # instead, which is what makes re-running this safe.
         return CanonicalizationResult(
             succeeded=True, representation=existing, reused=True
         )
@@ -220,6 +252,47 @@ def canonicalize_document(
             "reading the pages as images would be OCR, which this "
             "milestone does not perform.",
         )
+
+    # Every component the identity was composed from, compared against
+    # what the parser actually produced. Stamping an identity onto a
+    # representation it does not describe would record a false claim,
+    # and everything below would inherit it.
+    if (
+        representation.document_id != document_id
+        or representation.content_checksum != identity.identity.checksum
+        or representation.checksum_algorithm
+        != identity.identity.checksum_algorithm
+        or representation.representation_version
+        != CANONICAL_REPRESENTATION_VERSION
+        or representation.parser_name != parser.parser_name
+        or representation.parser_version != parser.parser_version
+    ):
+        # The parser produced a reading under a contract this service did
+        # not look one up for, so the identity just computed does not
+        # describe what was built. Storing it would record a false
+        # provenance claim.
+        return _failed(
+            CanonicalizationFailureCode.PARSER_FAILURE,
+            "The parser produced a representation this service did "
+            "not look one up for: contract "
+            f"'{representation.representation_version}' via "
+            f"{representation.parser_name} "
+            f"{representation.parser_version}, where "
+            f"'{CANONICAL_REPRESENTATION_VERSION}' via "
+            f"{parser.parser_name} {parser.parser_version} was "
+            "expected.",
+            detail="The representation's identity could not be "
+            "established, and an artifact whose provenance is unknown "
+            "cannot be stored.",
+        )
+
+    representation = replace(
+        representation,
+        artifact_identity=expected_identity.value,
+        # The chain's first link, recorded rather than implied: the
+        # immutable source content this representation was parsed from.
+        upstream_identity=source.value,
+    )
 
     try:
         repository.save(representation)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from sqlalchemy.orm import Session
 
 from app.domain.canonical_pdf import canonical_pdf_factory
@@ -41,6 +43,8 @@ class SqlAlchemyCanonicalRepresentationRepository(
 
     def save(self, representation: CanonicalPdfDocument) -> None:
         record = CanonicalPdfRepresentation(
+            artifact_identity=representation.artifact_identity,
+            upstream_identity=representation.upstream_identity,
             document_id=representation.document_id,
             content_checksum=representation.content_checksum,
             checksum_algorithm=representation.checksum_algorithm,
@@ -91,18 +95,17 @@ class SqlAlchemyCanonicalRepresentationRepository(
         self._session.add(record)
         self._session.commit()
 
-    def find_for_content(
-        self, document_id: int, content_checksum: str
+    def find_by_identity(
+        self, document_id: int, artifact_identity: str
     ) -> CanonicalPdfDocument | None:
         record = (
             self._session.query(CanonicalPdfRepresentation)
             .filter(
                 CanonicalPdfRepresentation.document_id == document_id,
-                CanonicalPdfRepresentation.content_checksum
-                == content_checksum,
+                CanonicalPdfRepresentation.artifact_identity
+                == artifact_identity,
             )
-            .order_by(CanonicalPdfRepresentation.id.desc())
-            .first()
+            .one_or_none()
         )
 
         return self._to_domain(record) if record is not None else None
@@ -125,7 +128,7 @@ class SqlAlchemyCanonicalRepresentationRepository(
     def _to_domain(
         record: CanonicalPdfRepresentation,
     ) -> CanonicalPdfDocument:
-        return canonical_pdf_factory.build_document(
+        built = canonical_pdf_factory.build_document(
             document_id=record.document_id,
             content_checksum=record.content_checksum,
             checksum_algorithm=record.checksum_algorithm,
@@ -173,4 +176,12 @@ class SqlAlchemyCanonicalRepresentationRepository(
                 )
                 for page in record.pages
             ),
+        )
+
+        # The factory validates the representation; identity is
+        # provenance recorded about it, not something it validates.
+        return replace(
+            built,
+            artifact_identity=record.artifact_identity,
+            upstream_identity=record.upstream_identity,
         )

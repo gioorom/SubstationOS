@@ -35,6 +35,16 @@ from __future__ import annotations
 
 import hashlib
 
+from app.domain.artifact_identity.artifact_identity_models import (
+    ArtifactIdentity,
+    ArtifactKind,
+)
+from app.domain.artifact_identity.artifact_identity_policy import (
+    ARTIFACT_IDENTITY_CONTRACT_VERSION,
+)
+from app.domain.engineering_semantics.semantic_identity import (
+    semantic_set_identity,
+)
 from app.domain.engineering_facts.fact_models import (
     EngineeringFact,
     EngineeringFactSet,
@@ -91,10 +101,36 @@ def interpret_facts(
         statements.extend(rule_statements)
         diagnostics.extend(rule_diagnostics)
 
+    # The identity chain, carried forward where the derivation happens.
+    # The upstream artifact already knows its own identity; this one is
+    # composed from it and this stage's own contract, so anything built
+    # through the domain knows what it came from.
+    upstream = (
+        None
+        if fact_set.artifact_identity is None
+        else ArtifactIdentity(
+            value=fact_set.artifact_identity,
+            kind=ArtifactKind.FACT_SET,
+            contract_version=ARTIFACT_IDENTITY_CONTRACT_VERSION,
+        )
+    )
+    identity = (
+        None
+        if upstream is None
+        else semantic_set_identity(
+            fact_set=upstream,
+            semantic_policy_version=semantic_policy_version,
+            semantic_contract_version=SEMANTIC_CONTRACT_VERSION,
+        )
+    )
+
     return EngineeringSemanticSet(
+        artifact_identity=None if identity is None else identity.value,
+        upstream_identity=fact_set.artifact_identity,
         document_id=fact_set.document_id,
         project_id=fact_set.project_id,
         content_checksum=fact_set.content_checksum,
+        extraction_policy_version=fact_set.extraction_policy_version,
         resolution_policy_version=fact_set.resolution_policy_version,
         fact_policy_version=fact_set.fact_policy_version,
         semantic_policy_version=semantic_policy_version,

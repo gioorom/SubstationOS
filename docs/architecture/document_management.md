@@ -588,11 +588,18 @@ reports this as `reused: true` with `200` rather than `201`, so the
 distinction is observable rather than merely claimed.
 
 Changed bytes carry a different checksum and therefore produce a **new**
-representation alongside - never on top of - the old one. Historical
-representations stay readable, so a conclusion drawn from last year's
-revision remains explainable. A unique constraint on
-`(document_id, content_checksum, representation_version)` is the
-persistence-level backstop.
+representation alongside - never on top of - the old one. So does the
+same source re-parsed under a raised representation contract or a
+different parser: all three are inputs to the representation's
+deterministic identity, and a change in any of them is a different
+artifact rather than an overwrite. Historical representations stay
+readable, so a conclusion drawn from last year's revision remains
+explainable.
+
+A unique constraint on `(document_id, artifact_identity)` is the
+persistence-level backstop, and the lookup that decides reuse compares
+exactly that identity. See
+[ADR-0032](adr/0032-upstream-identity-in-derived-set-reuse.md).
 
 ### Persistence
 
@@ -815,13 +822,24 @@ say nothing - indistinguishable from one that genuinely does.
 
 ### Idempotency
 
-The stored key is `(document_id, content_checksum, segmentation_version)`.
+The stored key is `(document_id, artifact_identity)` - the deterministic
+identity of the computation that produced the segmentation: the identity
+of the **canonical representation** it segmented, plus this stage's own
+segmentation contract.
+
 Re-running finds the existing segmentation and re-uses it - nothing is
 recomputed and no second row appears, reported as `reused: true` with
-`200` rather than `201`. A new checksum (the document changed) or a new
-segmentation version (the rules changed) produces a new segmentation
-**alongside** the old one, so a conclusion drawn under last year's rules
-stays explainable.
+`200` rather than `201`. A changed document, a re-parse under a raised
+representation contract, or a new segmentation version each yields a
+different identity and therefore a new segmentation **alongside** the
+old one, so a conclusion drawn under last year's rules stays
+explainable.
+
+Note that the representation is named by *identity*, not by checksum:
+the same bytes parsed under a raised representation contract are a
+different representation, and a segmentation over the old one must not
+answer for the new. See
+[ADR-0032](adr/0032-upstream-identity-in-derived-set-reuse.md).
 
 ### Persistence
 

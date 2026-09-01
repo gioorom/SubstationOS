@@ -51,21 +51,23 @@ class EngineeringEvidenceRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def find_for_source(
-        self,
-        document_id: int,
-        content_checksum: str,
-        extraction_policy_version: str,
+    def find_by_identity(
+        self, document_id: int, artifact_identity: str
     ) -> EngineeringEvidenceSet | None:
         """
-        The set extracted from exactly this canonical source under
-        exactly this policy, if one exists.
+        The evidence set with exactly this deterministic identity, if one
+        exists.
 
-        This is what makes extraction idempotent: the same source and the
-        same policy find the stored result rather than producing a
-        second, equivalent one. A new checksum - the document changed -
-        or a new policy version - the rules changed - is a different set,
-        stored alongside.
+        **This is the reuse decision.** The identity already carries
+        everything that could make a stored artifact incompatible: the
+        identity of the artifact it was derived from, and every version
+        this stage owns. Matching it is therefore a proof of equivalence
+        rather than a guess, and no caller has to know - or copy - the
+        version constants of the stages above.
+
+        A legacy artifact stored before the identity chain existed has
+        no identity and can never match here. That is deliberate: unknown
+        provenance is not compatible provenance.
         """
 
         raise NotImplementedError

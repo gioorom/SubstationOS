@@ -205,6 +205,8 @@ def test_the_representation_carries_no_timestamp() -> None:
         "parser_name",
         "parser_version",
         "pages",
+        "artifact_identity",
+        "upstream_identity",
     }
 
 

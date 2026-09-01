@@ -41,6 +41,16 @@ from __future__ import annotations
 import hashlib
 from decimal import Decimal
 
+from app.domain.artifact_identity.artifact_identity_models import (
+    ArtifactIdentity,
+    ArtifactKind,
+)
+from app.domain.artifact_identity.artifact_identity_policy import (
+    ARTIFACT_IDENTITY_CONTRACT_VERSION,
+)
+from app.domain.engineering_evidence.evidence_identity import (
+    evidence_set_identity,
+)
 from app.domain.canonical_text.canonical_text_models import (
     CanonicalTextDocument,
     CanonicalTextLine,
@@ -129,7 +139,31 @@ def extract_evidence(
                     )
                 )
 
+    # The identity chain, carried forward where the derivation happens.
+    # The upstream artifact already knows its own identity; this one is
+    # composed from it and this stage's own contract, so anything built
+    # through the domain knows what it came from.
+    upstream = (
+        None
+        if canonical_text.artifact_identity is None
+        else ArtifactIdentity(
+            value=canonical_text.artifact_identity,
+            kind=ArtifactKind.CANONICAL_TEXT,
+            contract_version=ARTIFACT_IDENTITY_CONTRACT_VERSION,
+        )
+    )
+    identity = (
+        None
+        if upstream is None
+        else evidence_set_identity(
+            canonical_text=upstream,
+            extraction_policy_version=extraction_policy_version,
+        )
+    )
+
     return EngineeringEvidenceSet(
+        artifact_identity=None if identity is None else identity.value,
+        upstream_identity=canonical_text.artifact_identity,
         document_id=canonical_text.document_id,
         project_id=project_id,
         content_checksum=canonical_text.content_checksum,

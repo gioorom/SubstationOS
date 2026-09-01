@@ -500,6 +500,11 @@ def test_af_amb_002_the_outcome_is_computed_before_any_limit() -> None:
 #: engineering truth, the judgement recorded about it, and the governed
 #: projection, retrieval and context assembly built on both.
 DETERMINISTIC_CONTEXTS = (
+    # EPIC 32.E2.4. The shared identity primitive every deterministic
+    # stage composes its identity with. It knows canonicalisation,
+    # hashing and artifact kinds - and must never learn anything that
+    # could make an identity depend on a guess.
+    "artifact_identity",
     "canonical_pdf",
     "canonical_text",
     "engineering_evidence",

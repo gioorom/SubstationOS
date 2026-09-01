@@ -46,9 +46,14 @@ class SqlAlchemyEngineeringSemanticRepository(
 
     def save(self, semantic_set: EngineeringSemanticSet) -> None:
         record = EngineeringSemanticSetRecord(
+            artifact_identity=semantic_set.artifact_identity,
+            upstream_identity=semantic_set.upstream_identity,
             document_id=semantic_set.document_id,
             project_id=semantic_set.project_id,
             content_checksum=semantic_set.content_checksum,
+            extraction_policy_version=(
+                semantic_set.extraction_policy_version
+            ),
             resolution_policy_version=(
                 semantic_set.resolution_policy_version
             ),
@@ -68,29 +73,16 @@ class SqlAlchemyEngineeringSemanticRepository(
         self._session.add(record)
         self._session.commit()
 
-    def find_for_source(
-        self,
-        document_id: int,
-        content_checksum: str,
-        resolution_policy_version: str,
-        fact_policy_version: str,
-        semantic_policy_version: str,
+    def find_by_identity(
+        self, document_id: int, artifact_identity: str
     ) -> EngineeringSemanticSet | None:
         record = (
             self._session.query(EngineeringSemanticSetRecord)
             .filter(
                 EngineeringSemanticSetRecord.document_id == document_id,
-                EngineeringSemanticSetRecord.content_checksum
-                == content_checksum,
-                EngineeringSemanticSetRecord.resolution_policy_version
-                == resolution_policy_version,
-                EngineeringSemanticSetRecord.fact_policy_version
-                == fact_policy_version,
-                EngineeringSemanticSetRecord.semantic_policy_version
-                == semantic_policy_version,
+                EngineeringSemanticSetRecord.artifact_identity == artifact_identity,
             )
-            .order_by(EngineeringSemanticSetRecord.id.desc())
-            .first()
+            .one_or_none()
         )
 
         return _to_domain(record) if record is not None else None
@@ -151,9 +143,12 @@ def _to_domain(
     record: EngineeringSemanticSetRecord,
 ) -> EngineeringSemanticSet:
     return EngineeringSemanticSet(
+        artifact_identity=record.artifact_identity,
+        upstream_identity=record.upstream_identity,
         document_id=record.document_id,
         project_id=record.project_id,
         content_checksum=record.content_checksum,
+        extraction_policy_version=record.extraction_policy_version,
         resolution_policy_version=record.resolution_policy_version,
         fact_policy_version=record.fact_policy_version,
         semantic_policy_version=record.semantic_policy_version,

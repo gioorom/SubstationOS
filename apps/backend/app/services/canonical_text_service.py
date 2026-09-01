@@ -21,6 +21,8 @@ blocks, lines, tokens - and nothing about what any of it means.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from dataclasses import dataclass
 
 from app.domain.canonical_pdf.canonical_pdf_exceptions import (
@@ -28,6 +30,15 @@ from app.domain.canonical_pdf.canonical_pdf_exceptions import (
 )
 from app.domain.canonical_pdf.canonical_representation_repository import (
     CanonicalRepresentationRepository,
+)
+from app.domain.artifact_identity.artifact_identity_exceptions import (  # noqa: E501
+    InvalidArtifactIdentityError,
+)
+from app.domain.canonical_pdf.canonical_pdf_identity import (
+    representation_identity,
+)
+from app.domain.canonical_text.canonical_text_identity import (
+    segmentation_identity,
 )
 from app.domain.canonical_text.canonical_text_failures import (
     SegmentationFailure,
@@ -128,10 +139,61 @@ def segment_document(
             ),
         )
 
-    existing = text_repository.find_for_representation(
-        document_id,
-        representation.content_checksum,
-        segmentation_version,
+    # A representation's identity is a pure function of provenance the
+    # representation itself carries, so it is recomputed here rather
+    # than trusted blindly. A row stored before the identity chain
+    # existed therefore needs no refusal and no guess: its identity is
+    # *proven* from immutable persisted fields, not assumed.
+    try:
+        upstream_identity = representation_identity(
+            document_id=representation.document_id,
+            content_checksum=representation.content_checksum,
+            checksum_algorithm=representation.checksum_algorithm,
+            representation_version=representation.representation_version,
+            parser_name=representation.parser_name,
+            parser_version=representation.parser_version,
+        )
+    except InvalidArtifactIdentityError as error:
+        # NOT NULL still permits an empty string, so a row can carry
+        # provenance that cannot identify anything. A typed refusal, not
+        # an exception crossing the boundary.
+        return _failed(
+            SegmentationFailureCode.INVALID_CANONICAL_REPRESENTATION,
+            f"The canonical representation of document '{document_id}' "
+            "carries provenance that cannot identify it.",
+            detail=f"{type(error).__name__}: {error}",
+        )
+
+    if (
+        representation.artifact_identity is not None
+        and representation.artifact_identity != upstream_identity.value
+    ):
+        # The stored identity disagrees with the provenance stored
+        # beside it. One of them is a lie, and nothing derived from a
+        # corrupt artifact could be trusted.
+        return _failed(
+            SegmentationFailureCode.INVALID_CANONICAL_REPRESENTATION,
+            f"The canonical representation of document '{document_id}' "
+            "carries an identity its own provenance does not produce.",
+            detail="Recorded "
+            f"'{representation.artifact_identity}', provenance yields "
+            f"'{upstream_identity.value}'. This is corruption rather "
+            "than ambiguity, and segmenting it would propagate a false "
+            "claim.",
+        )
+
+    # What this stage produces from *that* representation under its own
+    # segmentation contract. A representation rebuilt under a raised
+    # representation version is a different artifact with a different
+    # identity, so its segmentation is a different artifact too - and
+    # this layer never had to learn what a representation version is.
+    expected_identity = segmentation_identity(
+        representation=upstream_identity,
+        segmentation_version=segmentation_version,
+    )
+
+    existing = text_repository.find_by_identity(
+        document_id, expected_identity.value
     )
 
     if existing is not None:
@@ -169,6 +231,12 @@ def segment_document(
             detail="Its canonical representation carries text spans, and "
             "none of them contain characters that survive tokenisation.",
         )
+
+    segmentation = replace(
+        segmentation,
+        artifact_identity=expected_identity.value,
+        upstream_identity=upstream_identity.value,
+    )
 
     try:
         text_repository.save(segmentation)

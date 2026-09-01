@@ -403,8 +403,8 @@ def test_the_historical_semantic_set_remains_unchanged(
 
     historical = SqlAlchemyEngineeringSemanticRepository(
         db_session
-    ).find_for_source(
-        document.id, first.content_checksum, "1.0", "1.0", "1.0"
+    ).find_by_identity(
+        document.id, first.artifact_identity
     )
 
     assert historical == first
@@ -457,14 +457,8 @@ def test_a_storage_failure_is_reported_as_a_persistence_failure(
         def save(self, semantic_set):
             raise RuntimeError("the disk is full")
 
-        def find_for_source(
-            self,
-            document_id,
-            content_checksum,
-            resolution_policy_version,
-            fact_policy_version,
-            semantic_policy_version,
-        ):
+
+        def find_by_identity(self, document_id, artifact_identity):
             return None
 
         def find_latest_for_document(self, document_id):

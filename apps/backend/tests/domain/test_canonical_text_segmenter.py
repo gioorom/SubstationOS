@@ -464,6 +464,8 @@ def test_the_segmentation_carries_no_timestamp() -> None:
         "representation_version",
         "segmentation_version",
         "sections",
+        "artifact_identity",
+        "upstream_identity",
     }
 
 

@@ -41,6 +41,8 @@ class SqlAlchemyEngineeringEntityRepository(EngineeringEntityRepository):
 
     def save(self, entity_set: EngineeringEntitySet) -> None:
         record = EngineeringEntitySetRecord(
+            artifact_identity=entity_set.artifact_identity,
+            upstream_identity=entity_set.upstream_identity,
             document_id=entity_set.document_id,
             project_id=entity_set.project_id,
             content_checksum=entity_set.content_checksum,
@@ -59,23 +61,16 @@ class SqlAlchemyEngineeringEntityRepository(EngineeringEntityRepository):
         self._session.add(record)
         self._session.commit()
 
-    def find_for_source(
-        self,
-        document_id: int,
-        content_checksum: str,
-        resolution_policy_version: str,
+    def find_by_identity(
+        self, document_id: int, artifact_identity: str
     ) -> EngineeringEntitySet | None:
         record = (
             self._session.query(EngineeringEntitySetRecord)
             .filter(
                 EngineeringEntitySetRecord.document_id == document_id,
-                EngineeringEntitySetRecord.content_checksum
-                == content_checksum,
-                EngineeringEntitySetRecord.resolution_policy_version
-                == resolution_policy_version,
+                EngineeringEntitySetRecord.artifact_identity == artifact_identity,
             )
-            .order_by(EngineeringEntitySetRecord.id.desc())
-            .first()
+            .one_or_none()
         )
 
         return _to_domain(record) if record is not None else None
@@ -142,6 +137,8 @@ def _to_domain(
     record: EngineeringEntitySetRecord,
 ) -> EngineeringEntitySet:
     return EngineeringEntitySet(
+        artifact_identity=record.artifact_identity,
+        upstream_identity=record.upstream_identity,
         document_id=record.document_id,
         project_id=record.project_id,
         content_checksum=record.content_checksum,

@@ -40,17 +40,16 @@ class EngineeringSemanticSetRecord(Base):
     __tablename__ = "engineering_semantic_sets"
 
     __table_args__ = (
-        # The idempotency backstop. One set per document per upstream
-        # source per semantic policy: re-running cannot produce a second
-        # row, while new facts or new rules produce a new row alongside -
-        # never over - the old one.
+        # The idempotency backstop, and the whole reuse rule in one
+        # line: one artifact per deterministic identity per document.
+        # Re-deriving the same computation cannot produce a second row,
+        # while any change upstream or in this stage's own contract is a
+        # different identity and therefore a new row alongside - never
+        # over - the old one.
         UniqueConstraint(
             "document_id",
-            "content_checksum",
-            "resolution_policy_version",
-            "fact_policy_version",
-            "semantic_policy_version",
-            name="uq_engineering_semantic_set_source_policy",
+            "artifact_identity",
+            name="uq_engineering_semantic_set_artifact_identity",
         ),
         Index(
             "ix_engineering_semantic_sets_document_created",
@@ -79,6 +78,18 @@ class EngineeringSemanticSetRecord(Base):
         index=True,
     )
 
+    # Nullable for one reason only: rows stored before this provenance
+    # was recorded. Their true extraction policy cannot be reconstructed
+    # from anything durable, so it stays unknown rather than guessed -
+    # and an unknown row can never satisfy a reuse lookup.
+    #
+    # A newly interpreted set always has one: interpretation over a
+    # fact set of unknown provenance is refused rather than stored.
+    extraction_policy_version: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
     resolution_policy_version: Mapped[str] = mapped_column(
         String(20), nullable=False
     )
@@ -97,6 +108,27 @@ class EngineeringSemanticSetRecord(Base):
         DateTime,
         default=datetime.utcnow,
         nullable=False,
+    )
+
+
+    # The deterministic identity of this artifact, and of the artifact it
+    # was derived from. Together they are what makes reuse a provable
+    # claim rather than a guess: a change anywhere upstream changes the
+    # upstream identity, which changes this one.
+    #
+    # Nullable for one reason only: rows stored before the identity chain
+    # existed. Their identity cannot be reconstructed from anything
+    # durable, so it stays unknown rather than guessed, and an unknown
+    # row can never satisfy a reuse lookup.
+    artifact_identity: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
+
+    upstream_identity: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
     )
 
     statements: Mapped[list["EngineeringSemanticStatementRecord"]] = (

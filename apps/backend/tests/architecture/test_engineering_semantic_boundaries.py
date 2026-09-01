@@ -209,6 +209,14 @@ def test_the_semantic_domain_depends_only_on_facts() -> None:
             if module.startswith("app.domain.engineering_facts."):
                 continue
 
+            # The shared identity primitive (EPIC 32.E2.4). It knows
+            # canonicalisation, hashing and artifact kinds - and nothing
+            # about engineering. Every deterministic stage composes its
+            # own identity with it, which is what replaced each layer
+            # copying the layer above it.
+            if module.startswith("app.domain.artifact_identity."):
+                continue
+
             offenders.append(
                 f"{path.relative_to(APP_ROOT.parent)} imports '{module}'"
             )
@@ -539,7 +547,7 @@ def test_the_repository_port_is_insert_only() -> None:
         EngineeringSemanticRepository.__abstractmethods__
     ) == {
         "save",
-        "find_for_source",
+        "find_by_identity",
         "find_latest_for_document",
     }
 

@@ -397,7 +397,9 @@ def test_the_historical_fact_set_remains_unchanged(
 
     historical = SqlAlchemyEngineeringFactRepository(
         db_session
-    ).find_for_source(document.id, first.content_checksum, "1.0", "1.0")
+    ).find_by_identity(
+        document.id, first.artifact_identity
+    )
 
     assert historical == first
 
@@ -426,7 +428,9 @@ def test_fact_history_survives_a_newer_entity_set(
 
     historical = SqlAlchemyEngineeringFactRepository(
         db_session
-    ).find_for_source(document.id, first.content_checksum, "1.0", "1.0")
+    ).find_by_identity(
+        document.id, first.artifact_identity
+    )
 
     assert historical == first
     assert historical.facts
@@ -511,7 +515,11 @@ def test_a_source_identity_mismatch_is_refused(
         .filter(EngineeringEvidenceSetRecord.document_id == document.id)
         .one()
     )
-    stored.content_checksum = "d" * 64
+    # A different evidence artifact entirely - not merely one that
+    # disagrees about a field. Lineage is what the guard compares, so
+    # this is the honest way to express "these entities did not come
+    # from this evidence".
+    stored.artifact_identity = "d" * 64
     db_session.commit()
 
     result = _construct(db_session, document.id)
@@ -528,13 +536,8 @@ def test_a_storage_failure_is_reported_as_a_persistence_failure(
         def save(self, fact_set):
             raise RuntimeError("the disk is full")
 
-        def find_for_source(
-            self,
-            document_id,
-            content_checksum,
-            resolution_policy_version,
-            fact_policy_version,
-        ):
+
+        def find_by_identity(self, document_id, artifact_identity):
             return None
 
         def find_latest_for_document(self, document_id):

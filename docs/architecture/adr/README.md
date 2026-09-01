@@ -107,3 +107,4 @@ one.
 | [0029](0029-deterministic-engineering-reasoning-foundation.md) | Deterministic Engineering Reasoning Foundation | Accepted |
 | [0030](0030-governed-structural-relationship-semantics.md) | Governed Structural Relationship Semantics Foundation | Accepted |
 | [0031](0031-deterministic-shared-structural-location-reasoning.md) | Deterministic Shared Structural Location Reasoning | Accepted |
+| [0032](0032-upstream-identity-in-derived-set-reuse.md) | Upstream Identity in Derived-Set Reuse | Amended (32.E2.4) |

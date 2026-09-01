@@ -226,11 +226,36 @@ Four tables added by migration `7300ff6a7531`:
 `engineering_semantic_statement_support`,
 `engineering_semantic_diagnostics`.
 
-The stored key is `(document_id, content_checksum,
-resolution_policy_version, fact_policy_version,
-semantic_policy_version)` - the **whole upstream source identity**,
-because a re-resolution or re-construction is a different source even
-when the document has not changed.
+The stored key is `(document_id, artifact_identity)`.
+
+`artifact_identity` is the deterministic identity of the computation
+that produced this semantic set: a digest over the identity contract, the
+artifact kind, **the identity of the artifact it was derived from**, and
+the versions this stage owns. Re-running the same computation finds the
+stored result; any change upstream, or in this stage's own contract, is
+a different identity and therefore a new artifact stored **alongside**
+the old one - so a statements set drawn under last year's rules stays
+explainable.
+
+Nothing here restates the versions of the stages above: they reach this
+identity through the upstream one. That is the whole point - the earlier
+model copied them down by hand, and the copy drifted six times. See
+[ADR-0032](adr/0032-upstream-identity-in-derived-set-reuse.md) and its
+EPIC 32.E2.4 amendment.
+
+Every explicit provenance column stays readable beside the digest -
+which policy, which contract, which checksum. Identity compresses; it
+does not replace explanation. Rows stored before the identity chain
+existed carry `NULL`, can never satisfy a lookup, and are recomputed
+rather than trusted.
+
+`extraction_policy_version` is **provenance, not identity**. It records
+which reading of the document these results ultimately rest on, so the
+artifact can explain itself without anyone reversing a digest - but the
+reuse decision is the identity above, which reaches the extraction
+policy through the upstream chain rather than by naming it here. It was
+added by migration `c1f80d54ea27` and is nullable for rows stored before
+it existed.
 
 Entities and facts are referenced by **deterministic key, not foreign
 key**: upstream re-runs produce new sets, and a foreign key would either

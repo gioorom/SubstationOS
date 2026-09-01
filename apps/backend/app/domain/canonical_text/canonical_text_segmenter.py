@@ -33,6 +33,12 @@ from app.domain.canonical_pdf.canonical_pdf_models import (
     CanonicalPdfPage,
     CanonicalPdfSpan,
 )
+from app.domain.canonical_pdf.canonical_pdf_identity import (
+    representation_identity,
+)
+from app.domain.canonical_text.canonical_text_identity import (
+    segmentation_identity,
+)
 from app.domain.canonical_text.canonical_text_models import (
     CanonicalTextDocument,
     CanonicalTextLine,
@@ -63,7 +69,41 @@ def segment_canonical_document(
     is looking at. The same holds for a block that tokenises to nothing.
     """
 
+    # The identity chain is carried forward here, where the derivation
+    # actually happens: the representation's identity is recomputed from
+    # the provenance it carries, and this segmentation's identity is
+    # composed from it and this stage's own contract. Anything built
+    # through the domain therefore knows what it came from, whether a
+    # service or a test built it.
+    #
+    # A representation not bound to a stored document - one materialised
+    # in memory to exercise the rules, as the evidence corpus does - is
+    # not a persisted artifact and has no identity to carry. It is given
+    # none rather than a fabricated one.
+    upstream = (
+        representation_identity(
+            document_id=representation.document_id,
+            content_checksum=representation.content_checksum,
+            checksum_algorithm=representation.checksum_algorithm,
+            representation_version=representation.representation_version,
+            parser_name=representation.parser_name,
+            parser_version=representation.parser_version,
+        )
+        if representation.document_id > 0
+        else None
+    )
+    identity = (
+        None
+        if upstream is None
+        else segmentation_identity(
+            representation=upstream,
+            segmentation_version=segmentation_version,
+        )
+    )
+
     return CanonicalTextDocument(
+        artifact_identity=None if identity is None else identity.value,
+        upstream_identity=None if upstream is None else upstream.value,
         document_id=representation.document_id,
         content_checksum=representation.content_checksum,
         representation_version=representation.representation_version,

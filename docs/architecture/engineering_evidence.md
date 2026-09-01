@@ -328,12 +328,28 @@ version.
 
 ## Idempotency
 
-The stored key is
-`(document_id, content_checksum, extraction_policy_version)`. Re-running
-finds the existing set and re-uses it - reported as `reused: true` with
-`200` rather than `201`. A changed document (new checksum) or a changed
-catalogue (new policy version) produces a **new** set alongside the old
-one, so a conclusion drawn under last year's rules stays explainable.
+The stored key is `(document_id, artifact_identity)`.
+
+`artifact_identity` is the deterministic identity of the computation
+that produced this evidence set: a digest over the identity contract, the
+artifact kind, **the identity of the artifact it was derived from**, and
+the versions this stage owns. Re-running the same computation finds the
+stored result; any change upstream, or in this stage's own contract, is
+a different identity and therefore a new artifact stored **alongside**
+the old one - so a evidence set drawn under last year's rules stays
+explainable.
+
+Nothing here restates the versions of the stages above: they reach this
+identity through the upstream one. That is the whole point - the earlier
+model copied them down by hand, and the copy drifted six times. See
+[ADR-0032](adr/0032-upstream-identity-in-derived-set-reuse.md) and its
+EPIC 32.E2.4 amendment.
+
+Every explicit provenance column stays readable beside the digest -
+which policy, which contract, which checksum. Identity compresses; it
+does not replace explanation. Rows stored before the identity chain
+existed carry `NULL`, can never satisfy a lookup, and are recomputed
+rather than trusted.
 
 Each item additionally carries a deterministic `evidence_key` - SHA-256
 over document, checksum, rule, type and provenance - which makes a

@@ -39,6 +39,7 @@ from app.infrastructure.document_ingestion.sqlalchemy_ingestion_repository impor
 from app.infrastructure.engineering_index.sqlalchemy_document_metadata import (
     SqlAlchemyDocumentMetadataRepository,
 )
+from app.domain.canonical_pdf.pdf_parser_port import PdfParserPort
 from app.models.canonical_pdf import CanonicalPdfRepresentation
 from app.models.document import Document as DocumentRecord
 from app.models.document import DocumentCategory, DocumentFormat
@@ -131,9 +132,10 @@ def _canonicalize(
     document_id: int,
     *,
     repository: CanonicalRepresentationRepository | None = None,
+    parser: PdfParserPort | None = None,
 ):
     return canonical_pdf_service.canonicalize_document(
-        PyMuPdfParser(),
+        parser or PyMuPdfParser(),
         repository or SqlAlchemyCanonicalRepresentationRepository(db),
         FilesystemDocumentContentAdapter(),
         SqlAlchemyDocumentStorageLocation(db),
@@ -366,8 +368,8 @@ def test_the_historical_representation_stays_readable(
     _canonicalize(db_session, document.id)
 
     repository = SqlAlchemyCanonicalRepresentationRepository(db_session)
-    historical = repository.find_for_content(
-        document.id, first.content_checksum
+    historical = repository.find_by_identity(
+        document.id, first.artifact_identity
     )
 
     assert historical == first
@@ -532,7 +534,8 @@ def test_a_storage_failure_is_reported_as_a_persistence_failure(
         def save(self, representation):
             raise RuntimeError("the disk is full")
 
-        def find_for_content(self, document_id, content_checksum):
+
+        def find_by_identity(self, document_id, artifact_identity):
             return None
 
         def find_latest_for_document(self, document_id):
@@ -602,3 +605,89 @@ def test_the_flow_is_reproducible_across_runs(
     assert representation.pages[0].blocks[0].spans[0].text == (
         "Rated voltage 145 kV"
     )
+
+
+def test_a_legacy_representation_is_recomputed_not_reconstructed(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    """
+    The canonical PDF stage reconstructs **nothing** (EPIC 32.E2.4).
+
+    It composes the identity it is looking for from the live source
+    identity, the current representation contract and the current
+    parser - never from a stored column. A row written before the
+    identity chain existed therefore carries `NULL`, cannot match, and
+    is re-parsed into a new fully identified representation stored
+    alongside it. Nothing is written back to the old row, and no
+    provenance is invented for it.
+    """
+
+    document = _ready_document(db_session, tmp_path)
+    stored = _canonicalize(db_session, document.id).representation
+
+    record = (
+        db_session.query(CanonicalPdfRepresentation)
+        .filter(CanonicalPdfRepresentation.document_id == document.id)
+        .one()
+    )
+    record.artifact_identity = None
+    record.upstream_identity = None
+    db_session.commit()
+
+    result = _canonicalize(db_session, document.id)
+
+    assert result.succeeded is True
+    assert result.reused is False, "a legacy row answered as current"
+    assert result.representation.artifact_identity == (
+        stored.artifact_identity
+    ), "the recomputed identity is deterministic"
+
+    rows = (
+        db_session.query(CanonicalPdfRepresentation)
+        .filter(CanonicalPdfRepresentation.document_id == document.id)
+        .order_by(CanonicalPdfRepresentation.id)
+        .all()
+    )
+
+    assert [row.artifact_identity for row in rows] == [
+        None,
+        stored.artifact_identity,
+    ], "the legacy row must be left exactly as it was"
+
+
+def test_a_representation_the_identity_does_not_describe_is_refused(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    """
+    The identity is composed *before* the parse, from the source and the
+    contracts this service expects. If the parser then produces
+    something those inputs do not describe - a different contract, a
+    different library, different bytes - stamping that identity on it
+    would record a claim about a derivation that never happened.
+
+    Refused instead, and nothing is stored.
+    """
+
+    class WrongContractParser(PyMuPdfParser):
+        @property
+        def parser_version(self) -> str:
+            return "impossible-version"
+
+    document = _ready_document(db_session, tmp_path)
+
+    result = _canonicalize(
+        db_session, document.id, parser=WrongContractParser()
+    )
+
+    assert result.succeeded is False
+    assert result.failure.code is (
+        CanonicalizationFailureCode.PARSER_FAILURE
+    )
+    assert (
+        db_session.query(CanonicalPdfRepresentation)
+        .filter(CanonicalPdfRepresentation.document_id == document.id)
+        .count()
+        == 0
+    ), "a representation whose identity is unknown must not be stored"

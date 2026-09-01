@@ -42,21 +42,23 @@ class EngineeringFactRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def find_for_source(
-        self,
-        document_id: int,
-        content_checksum: str,
-        resolution_policy_version: str,
-        fact_policy_version: str,
+    def find_by_identity(
+        self, document_id: int, artifact_identity: str
     ) -> EngineeringFactSet | None:
         """
-        The set constructed from exactly this entity source under exactly
-        these rules, if one exists.
+        The fact set with exactly this deterministic identity, if one
+        exists.
 
-        This is what makes construction idempotent. The key includes the
-        **entity source identity** as well as the fact policy, because a
-        re-resolution under new entity rules is a different source even
-        when the document has not changed.
+        **This is the reuse decision.** The identity already carries
+        everything that could make a stored artifact incompatible: the
+        identity of the artifact it was derived from, and every version
+        this stage owns. Matching it is therefore a proof of equivalence
+        rather than a guess, and no caller has to know - or copy - the
+        version constants of the stages above.
+
+        A legacy artifact stored before the identity chain existed has
+        no identity and can never match here. That is deliberate: unknown
+        provenance is not compatible provenance.
         """
 
         raise NotImplementedError

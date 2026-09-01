@@ -24,6 +24,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.domain.artifact_identity.artifact_identity_exceptions import (  # noqa: E501
+    InvalidArtifactIdentityError,
+)
+from app.domain.artifact_identity.artifact_identity_models import (
+    ArtifactIdentity,
+    ArtifactKind,
+)
+from app.domain.artifact_identity.artifact_identity_policy import (
+    ARTIFACT_IDENTITY_CONTRACT_VERSION,
+)
+from app.domain.engineering_semantics.semantic_policy import (
+    SEMANTIC_CONTRACT_VERSION,
+)
+from app.domain.engineering_semantics.semantic_identity import (
+    semantic_set_identity,
+)
 from app.domain.engineering_facts.engineering_fact_repository import (
     EngineeringFactRepository,
 )
@@ -130,12 +146,40 @@ def interpret_document_facts(
             ),
         )
 
-    existing = semantic_repository.find_for_source(
-        document_id,
-        fact_set.content_checksum,
-        fact_set.resolution_policy_version,
-        fact_set.fact_policy_version,
-        semantic_policy_version,
+    if fact_set.artifact_identity is None:
+        return _failed(
+            SemanticInterpretationFailureCode.INCONSISTENT_SOURCE_IDENTITY,
+            f"The fact set of document '{document_id}' was stored "
+            "before the derivation identity chain existed.",
+            detail="Its provenance cannot be reconstructed, so anything "
+            "derived from it could never prove its own reuse is valid, "
+            "and nothing could deduplicate it. Re-run the fact construction "
+            "stage to give it a current identity.",
+        )
+
+    # What this stage produces from that artifact under its own
+    # contract. Everything further upstream reaches this digest through
+    # the upstream identity; this layer names no other layer's versions.
+    try:
+        expected_identity = semantic_set_identity(
+            fact_set=ArtifactIdentity(
+                value=fact_set.artifact_identity,
+                kind=ArtifactKind.FACT_SET,
+                contract_version=ARTIFACT_IDENTITY_CONTRACT_VERSION,
+            ),
+            semantic_policy_version=semantic_policy_version,
+            semantic_contract_version=SEMANTIC_CONTRACT_VERSION,
+        )
+    except InvalidArtifactIdentityError as error:
+        return _failed(
+            SemanticInterpretationFailureCode.INCONSISTENT_SOURCE_IDENTITY,
+            f"The fact set of document '{document_id}' carries a "
+            "malformed derivation identity.",
+            detail=f"{type(error).__name__}: {error}",
+        )
+
+    existing = semantic_repository.find_by_identity(
+        document_id, expected_identity.value
     )
 
     if existing is not None:

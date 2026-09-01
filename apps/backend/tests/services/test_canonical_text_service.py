@@ -400,7 +400,9 @@ def test_the_historical_segmentation_stays_readable(
 
     historical = SqlAlchemyCanonicalTextRepository(
         db_session
-    ).find_for_representation(document.id, CHECKSUM, "1.0")
+    ).find_by_identity(
+        document.id, first.artifact_identity
+    )
 
     assert historical == first
 
@@ -551,9 +553,8 @@ def test_a_storage_failure_is_reported_as_a_persistence_failure(
         def save(self, segmentation: CanonicalTextDocument) -> None:
             raise RuntimeError("the disk is full")
 
-        def find_for_representation(
-            self, document_id, content_checksum, segmentation_version
-        ):
+
+        def find_by_identity(self, document_id, artifact_identity):
             return None
 
         def find_latest_for_document(self, document_id):
@@ -598,3 +599,72 @@ def test_segmentation_works_with_no_file_on_disk(
 
     assert result.succeeded
     assert result.segmentation.token_count == 7
+
+
+def test_a_legacy_segmentation_is_recomputed_from_a_proven_upstream(
+    db_session: Session,
+) -> None:
+    """
+    The canonical text stage is the one that **reconstructs**
+    (EPIC 32.E2.4) - and it reconstructs its *upstream*, not itself.
+
+    The representation's identity is recomposed from six columns that
+    have always been NOT NULL on its row: document, checksum, checksum
+    algorithm, representation contract, parser name and parser version.
+    That is a deterministic proof from immutable persisted state, not a
+    guess, so a representation stored before the identity chain existed
+    does not block segmentation.
+
+    The segmentation's *own* legacy row follows the ordinary rule: it
+    carries `NULL`, cannot match, and is recomputed into a new fully
+    identified row stored alongside. Nothing is written back, and no
+    provenance is invented.
+    """
+
+    document = _prepared(db_session)
+    stored = _segment(db_session, document.id).segmentation
+
+    representation = (
+        db_session.query(CanonicalPdfRepresentation)
+        .filter(CanonicalPdfRepresentation.document_id == document.id)
+        .one()
+    )
+    record = (
+        db_session.query(CanonicalTextDocumentRecord)
+        .filter(CanonicalTextDocumentRecord.document_id == document.id)
+        .one()
+    )
+    # Both rows made to look pre-identity-chain.
+    representation.artifact_identity = None
+    record.artifact_identity = None
+    record.upstream_identity = None
+    db_session.commit()
+
+    result = _segment(db_session, document.id)
+
+    assert result.succeeded is True, (
+        "a legacy representation blocked segmentation"
+    )
+    assert result.reused is False, "a legacy row answered as current"
+    assert result.segmentation.artifact_identity == (
+        stored.artifact_identity
+    ), "the reconstructed upstream yields the same identity"
+
+    rows = (
+        db_session.query(CanonicalTextDocumentRecord)
+        .filter(CanonicalTextDocumentRecord.document_id == document.id)
+        .order_by(CanonicalTextDocumentRecord.id)
+        .all()
+    )
+
+    assert [row.artifact_identity for row in rows] == [
+        None,
+        stored.artifact_identity,
+    ], "the legacy row must be left exactly as it was"
+
+    # The half of the no-backfill claim this path actually concerns:
+    # reconstructing a representation's identity must not write it back.
+    db_session.refresh(representation)
+
+    assert representation.artifact_identity is None
+    assert representation.upstream_identity is None

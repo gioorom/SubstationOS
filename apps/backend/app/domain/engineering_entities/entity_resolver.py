@@ -33,6 +33,16 @@ from __future__ import annotations
 
 import hashlib
 
+from app.domain.artifact_identity.artifact_identity_models import (
+    ArtifactIdentity,
+    ArtifactKind,
+)
+from app.domain.artifact_identity.artifact_identity_policy import (
+    ARTIFACT_IDENTITY_CONTRACT_VERSION,
+)
+from app.domain.engineering_entities.entity_identity import (
+    entity_set_identity,
+)
 from app.domain.engineering_entities.entity_models import (
     EngineeringEntity,
     EngineeringEntitySet,
@@ -106,7 +116,32 @@ def resolve_entities(
         )
     )
 
+    # The identity chain, carried forward where the derivation happens.
+    # The upstream artifact already knows its own identity; this one is
+    # composed from it and this stage's own contract, so anything built
+    # through the domain knows what it came from.
+    upstream = (
+        None
+        if evidence_set.artifact_identity is None
+        else ArtifactIdentity(
+            value=evidence_set.artifact_identity,
+            kind=ArtifactKind.EVIDENCE_SET,
+            contract_version=ARTIFACT_IDENTITY_CONTRACT_VERSION,
+        )
+    )
+    identity = (
+        None
+        if upstream is None
+        else entity_set_identity(
+            evidence_set=upstream,
+            resolution_policy_version=resolution_policy_version,
+            entity_model_version=ENTITY_MODEL_VERSION,
+        )
+    )
+
     return EngineeringEntitySet(
+        artifact_identity=None if identity is None else identity.value,
+        upstream_identity=evidence_set.artifact_identity,
         document_id=evidence_set.document_id,
         project_id=evidence_set.project_id,
         content_checksum=evidence_set.content_checksum,

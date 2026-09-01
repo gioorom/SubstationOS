@@ -42,17 +42,23 @@ class CanonicalRepresentationRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def find_for_content(
-        self, document_id: int, content_checksum: str
+    def find_by_identity(
+        self, document_id: int, artifact_identity: str
     ) -> CanonicalPdfDocument | None:
         """
-        The representation built from exactly these bytes, if one exists.
+        The canonical representation with exactly this deterministic identity, if one
+        exists.
 
-        This is what makes canonicalisation idempotent: identical bytes
-        find the existing representation and re-use it rather than
-        producing a second, equivalent one. Changed bytes produce a
-        different checksum and therefore a new representation, alongside
-        - never on top of - the old.
+        **This is the reuse decision.** The identity already carries
+        everything that could make a stored artifact incompatible: the
+        identity of the artifact it was derived from, and every version
+        this stage owns. Matching it is therefore a proof of equivalence
+        rather than a guess, and no caller has to know - or copy - the
+        version constants of the stages above.
+
+        A legacy artifact stored before the identity chain existed has
+        no identity and can never match here. That is deliberate: unknown
+        provenance is not compatible provenance.
         """
 
         raise NotImplementedError

@@ -29,6 +29,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.domain.artifact_identity.artifact_identity_exceptions import (  # noqa: E501
+    InvalidArtifactIdentityError,
+)
+from app.domain.artifact_identity.artifact_identity_models import (
+    ArtifactIdentity,
+    ArtifactKind,
+)
+from app.domain.artifact_identity.artifact_identity_policy import (
+    ARTIFACT_IDENTITY_CONTRACT_VERSION,
+)
+from app.domain.engineering_facts.fact_policy import (
+    FACT_CONTRACT_VERSION,
+)
+from app.domain.engineering_facts.fact_identity import (
+    fact_set_identity,
+)
 from app.domain.engineering_entities.engineering_entity_repository import (
     EngineeringEntityRepository,
 )
@@ -141,13 +157,21 @@ def construct_document_facts(
             "check.",
         )
 
-    if evidence_set.content_checksum != entity_set.content_checksum:
+    # The entities must have been resolved from *this* evidence set, not
+    # merely from one that shares a checksum. Comparing lineage rather
+    # than provenance fields settles it for every axis at once: a
+    # different representation, segmentation or extraction policy is a
+    # different evidence identity, and entities carrying another one
+    # would be associated using observations that never produced them.
+    if entity_set.upstream_identity != evidence_set.artifact_identity:
         return _failed(
             FactConstructionFailureCode.INCONSISTENT_SOURCE_IDENTITY,
             f"The entities and the evidence for document "
-            f"'{document_id}' describe different document versions.",
+            f"'{document_id}' describe different readings of the "
+            "document.",
             detail="Continuing would associate entities from one "
-            "revision using observations from another.",
+            "revision using observations from another. Re-resolve the "
+            "entities from the current evidence first.",
         )
 
     missing = _unresolvable_support(entity_set, evidence_set)
@@ -160,11 +184,40 @@ def construct_document_facts(
             detail=f"First unresolvable evidence key: {missing[:12]}.",
         )
 
-    existing = fact_repository.find_for_source(
-        document_id,
-        entity_set.content_checksum,
-        entity_set.resolution_policy_version,
-        fact_policy_version,
+    if entity_set.artifact_identity is None:
+        return _failed(
+            FactConstructionFailureCode.INCONSISTENT_SOURCE_IDENTITY,
+            f"The entity set of document '{document_id}' was stored "
+            "before the derivation identity chain existed.",
+            detail="Its provenance cannot be reconstructed, so anything "
+            "derived from it could never prove its own reuse is valid, "
+            "and nothing could deduplicate it. Re-run the entity resolution "
+            "stage to give it a current identity.",
+        )
+
+    # What this stage produces from that artifact under its own
+    # contract. Everything further upstream reaches this digest through
+    # the upstream identity; this layer names no other layer's versions.
+    try:
+        expected_identity = fact_set_identity(
+            entity_set=ArtifactIdentity(
+                value=entity_set.artifact_identity,
+                kind=ArtifactKind.ENTITY_SET,
+                contract_version=ARTIFACT_IDENTITY_CONTRACT_VERSION,
+            ),
+            fact_policy_version=fact_policy_version,
+            fact_contract_version=FACT_CONTRACT_VERSION,
+        )
+    except InvalidArtifactIdentityError as error:
+        return _failed(
+            FactConstructionFailureCode.INCONSISTENT_SOURCE_IDENTITY,
+            f"The upstream artifact of document '{document_id}' "
+            "carries a malformed derivation identity.",
+            detail=f"{type(error).__name__}: {error}",
+        )
+
+    existing = fact_repository.find_by_identity(
+        document_id, expected_identity.value
     )
 
     if existing is not None:

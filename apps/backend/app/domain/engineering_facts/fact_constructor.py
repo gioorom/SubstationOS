@@ -49,6 +49,16 @@ from __future__ import annotations
 
 import hashlib
 
+from app.domain.artifact_identity.artifact_identity_models import (
+    ArtifactIdentity,
+    ArtifactKind,
+)
+from app.domain.artifact_identity.artifact_identity_policy import (
+    ARTIFACT_IDENTITY_CONTRACT_VERSION,
+)
+from app.domain.engineering_facts.fact_identity import (
+    fact_set_identity,
+)
 from app.domain.engineering_entities.entity_models import (
     EngineeringEntity,
     EngineeringEntitySet,
@@ -116,10 +126,36 @@ def construct_facts(
         facts.extend(rule_facts)
         diagnostics.extend(rule_diagnostics)
 
+    # The identity chain, carried forward where the derivation happens.
+    # The upstream artifact already knows its own identity; this one is
+    # composed from it and this stage's own contract, so anything built
+    # through the domain knows what it came from.
+    upstream = (
+        None
+        if entity_set.artifact_identity is None
+        else ArtifactIdentity(
+            value=entity_set.artifact_identity,
+            kind=ArtifactKind.ENTITY_SET,
+            contract_version=ARTIFACT_IDENTITY_CONTRACT_VERSION,
+        )
+    )
+    identity = (
+        None
+        if upstream is None
+        else fact_set_identity(
+            entity_set=upstream,
+            fact_policy_version=fact_policy_version,
+            fact_contract_version=FACT_CONTRACT_VERSION,
+        )
+    )
+
     return EngineeringFactSet(
+        artifact_identity=None if identity is None else identity.value,
+        upstream_identity=entity_set.artifact_identity,
         document_id=entity_set.document_id,
         project_id=entity_set.project_id,
         content_checksum=entity_set.content_checksum,
+        extraction_policy_version=entity_set.extraction_policy_version,
         resolution_policy_version=entity_set.resolution_policy_version,
         fact_policy_version=fact_policy_version,
         facts=tuple(facts),

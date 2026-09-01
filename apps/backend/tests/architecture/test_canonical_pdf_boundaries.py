@@ -446,7 +446,7 @@ def test_the_representation_port_offers_no_route_to_the_original_pdf(
         CanonicalRepresentationRepository.__abstractmethods__
     ) == {
         "save",
-        "find_for_content",
+        "find_by_identity",
         "find_latest_for_document",
     }
 

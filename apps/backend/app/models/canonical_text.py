@@ -34,16 +34,16 @@ class CanonicalTextDocumentRecord(Base):
     __tablename__ = "canonical_text_documents"
 
     __table_args__ = (
-        # The idempotency backstop. One segmentation per document per
-        # representation per set of rules: re-running cannot produce a
-        # second row whatever the caller does, while a new checksum (the
-        # document changed) or a new segmentation version (the rules
-        # changed) is a new row alongside - never over - the old one.
+        # The idempotency backstop, and the whole reuse rule in one
+        # line: one artifact per deterministic identity per document.
+        # Re-deriving the same computation cannot produce a second row,
+        # while any change upstream or in this stage's own contract is a
+        # different identity and therefore a new row alongside - never
+        # over - the old one.
         UniqueConstraint(
             "document_id",
-            "content_checksum",
-            "segmentation_version",
-            name="uq_canonical_text_document_checksum_version",
+            "artifact_identity",
+            name="uq_canonical_text_artifact_identity",
         ),
         Index(
             "ix_canonical_text_documents_document_created",
@@ -84,6 +84,27 @@ class CanonicalTextDocumentRecord(Base):
         DateTime,
         default=datetime.utcnow,
         nullable=False,
+    )
+
+
+    # The deterministic identity of this artifact, and of the artifact it
+    # was derived from. Together they are what makes reuse a provable
+    # claim rather than a guess: a change anywhere upstream changes the
+    # upstream identity, which changes this one.
+    #
+    # Nullable for one reason only: rows stored before the identity chain
+    # existed. Their identity cannot be reconstructed from anything
+    # durable, so it stays unknown rather than guessed, and an unknown
+    # row can never satisfy a reuse lookup.
+    artifact_identity: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
+
+    upstream_identity: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
     )
 
     sections: Mapped[list["CanonicalTextSectionRecord"]] = relationship(

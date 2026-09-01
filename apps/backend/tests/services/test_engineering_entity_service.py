@@ -14,9 +14,6 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.domain.canonical_text.canonical_text_segmenter import (
-    segment_canonical_document,
-)
 from app.domain.engineering_entities.engineering_entity_repository import (
     EngineeringEntityRepository,
 )
@@ -24,106 +21,17 @@ from app.domain.engineering_entities.entity_failures import (
     EntityResolutionFailureCode,
 )
 from app.domain.engineering_entities.entity_models import EntityType
-from app.domain.engineering_evidence.evidence_extractor import (
-    extract_evidence,
-)
-from app.domain.project.project_document_scope import DocumentScope
 from app.infrastructure.engineering_entities.sqlalchemy_engineering_entity_repository import (  # noqa: E501
     SqlAlchemyEngineeringEntityRepository,
 )
 from app.infrastructure.engineering_evidence.sqlalchemy_engineering_evidence_repository import (  # noqa: E501
     SqlAlchemyEngineeringEvidenceRepository,
 )
-from app.models.document import Document as DocumentRecord
-from app.models.document import DocumentCategory, DocumentFormat
 from app.models.engineering_entities import EngineeringEntitySetRecord
 from app.services import engineering_entity_service
-from tests.domain._canonical_text_support import (
-    page,
-    representation,
-    span,
-    text_block,
-)
-
-SUBSTATION_LINES = (
-    "Trasformatore T1 - potenza 630 kVA",
-    "Il trasformatore (T1) alimenta il quadro",
-    "Interruttore 52-Q1, tensione 20 kV",
-)
-
-
-def _document(db: Session, filename: str = "schema.pdf") -> DocumentRecord:
-    document = DocumentRecord(
-        filename=filename,
-        file_path=f"/storage/{filename}",
-        file_format=DocumentFormat.PDF,
-        category=DocumentCategory.FUNCTIONAL_SCHEMATIC,
-        revision="02",
-        project_name="Alpha Substation",
-        scope=DocumentScope.CANONICAL_LIBRARY,
-    )
-    db.add(document)
-    db.commit()
-    db.refresh(document)
-
-    return document
-
-
-def _store_evidence(
-    db: Session, document_id: int, *lines: str, **overrides
-) -> None:
-    """Real extraction over real canonical text, stored through the real
-    evidence repository."""
-
-    from dataclasses import replace
-
-    source = representation(
-        page(
-            1,
-            text_block(
-                0,
-                *[
-                    span(index, index, text)
-                    for index, text in enumerate(
-                        lines or SUBSTATION_LINES
-                    )
-                ],
-            ),
-        ),
-        **overrides,
-    )
-    evidence = extract_evidence(
-        segment_canonical_document(source), project_id=3
-    )
-
-    SqlAlchemyEngineeringEvidenceRepository(db).save(
-        replace(
-            evidence,
-            document_id=document_id,
-            evidence=tuple(
-                item for item in evidence.evidence if item.is_persistable
-            ),
-        )
-    )
-
-
-def _prepared(db: Session, *lines: str, **overrides) -> DocumentRecord:
-    document = _document(db, overrides.pop("filename", "schema.pdf"))
-    _store_evidence(db, document.id, *lines, **overrides)
-
-    return document
-
-
-def _resolve(db: Session, document_id: int, **kwargs):
-    return engineering_entity_service.resolve_document_entities(
-        SqlAlchemyEngineeringEvidenceRepository(db),
-        kwargs.pop(
-            "entity_repository", SqlAlchemyEngineeringEntityRepository(db)
-        ),
-        document_id=document_id,
-        **kwargs,
-    )
-
+from tests.services._entity_support import document as _document
+from tests.services._entity_support import prepared as _prepared
+from tests.services._entity_support import resolve as _resolve
 
 # --- The happy path --------------------------------------------------------------
 
@@ -399,7 +307,9 @@ def test_the_historical_set_remains_unchanged(
 
     historical = SqlAlchemyEngineeringEntityRepository(
         db_session
-    ).find_for_source(document.id, first.content_checksum, "1.0")
+    ).find_by_identity(
+        document.id, first.artifact_identity
+    )
 
     assert historical == first
 
@@ -463,9 +373,8 @@ def test_a_storage_failure_is_reported_as_a_persistence_failure(
         def save(self, entity_set):
             raise RuntimeError("the disk is full")
 
-        def find_for_source(
-            self, document_id, content_checksum, resolution_policy_version
-        ):
+
+        def find_by_identity(self, document_id, artifact_identity):
             return None
 
         def find_latest_for_document(self, document_id):

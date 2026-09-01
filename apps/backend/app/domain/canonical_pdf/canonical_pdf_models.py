@@ -222,6 +222,14 @@ class CanonicalPdfDocument:
     parser_version: str
     pages: tuple[CanonicalPdfPage, ...] = ()
 
+    #: This artifact's deterministic identity, and the identity of the
+    #: artifact it was derived from. ``None`` only for a row stored
+    #: before the identity chain existed: unknown is not a value, and an
+    #: artifact that cannot say what it was derived from can never prove
+    #: a reuse is valid. See ``app/domain/artifact_identity``.
+    artifact_identity: str | None = None
+    upstream_identity: str | None = None
+
     @property
     def page_count(self) -> int:
         return len(self.pages)

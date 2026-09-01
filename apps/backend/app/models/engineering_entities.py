@@ -40,16 +40,16 @@ class EngineeringEntitySetRecord(Base):
     __tablename__ = "engineering_entity_sets"
 
     __table_args__ = (
-        # The idempotency backstop. One set per document per evidence
-        # source per resolution policy: re-resolving cannot produce a
-        # second row whatever the caller does, while new evidence (a new
-        # checksum) or new rules (a new policy version) is a new row
-        # alongside - never over - the old one.
+        # The idempotency backstop, and the whole reuse rule in one
+        # line: one artifact per deterministic identity per document.
+        # Re-deriving the same computation cannot produce a second row,
+        # while any change upstream or in this stage's own contract is a
+        # different identity and therefore a new row alongside - never
+        # over - the old one.
         UniqueConstraint(
             "document_id",
-            "content_checksum",
-            "resolution_policy_version",
-            name="uq_engineering_entity_set_source_policy",
+            "artifact_identity",
+            name="uq_engineering_entity_set_artifact_identity",
         ),
         Index(
             "ix_engineering_entity_sets_document_created",
@@ -94,6 +94,27 @@ class EngineeringEntitySetRecord(Base):
         DateTime,
         default=datetime.utcnow,
         nullable=False,
+    )
+
+
+    # The deterministic identity of this artifact, and of the artifact it
+    # was derived from. Together they are what makes reuse a provable
+    # claim rather than a guess: a change anywhere upstream changes the
+    # upstream identity, which changes this one.
+    #
+    # Nullable for one reason only: rows stored before the identity chain
+    # existed. Their identity cannot be reconstructed from anything
+    # durable, so it stays unknown rather than guessed, and an unknown
+    # row can never satisfy a reuse lookup.
+    artifact_identity: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
+
+    upstream_identity: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
     )
 
     entities: Mapped[list["EngineeringEntityRecord"]] = relationship(

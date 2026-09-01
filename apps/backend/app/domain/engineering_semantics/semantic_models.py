@@ -127,8 +127,15 @@ class EngineeringSemanticSet:
     Every statement interpreted from one fact set.
 
     The version fields identify the exact source and rules: which
-    document, which bytes, which resolution and construction policies
-    produced the facts, and which semantic policy interpreted them. A set
+    document, which bytes, which extraction policy read them, which
+    resolution and construction policies produced the facts, and which
+    semantic policy interpreted them.
+
+    ``extraction_policy_version`` is ``None`` only for a set stored
+    before that provenance was recorded, or interpreted from a fact set
+    that is itself unknown. Unknown is not a value: such a set can never
+    prove a later reuse is valid, and is recomputed rather than
+    trusted. A set
     whose provenance is unknown could not be trusted by the milestone
     that turns interpreted knowledge into a graph.
 
@@ -139,11 +146,20 @@ class EngineeringSemanticSet:
     document_id: int
     project_id: int | None
     content_checksum: str
+    extraction_policy_version: str | None
     resolution_policy_version: str
     fact_policy_version: str
     semantic_policy_version: str
     statements: tuple[EngineeringSemanticStatement, ...] = ()
     diagnostics: tuple[SemanticInterpretationDiagnostic, ...] = ()
+
+    #: This artifact's deterministic identity, and the identity of the
+    #: artifact it was derived from. ``None`` only for a row stored
+    #: before the identity chain existed: unknown is not a value, and an
+    #: artifact that cannot say what it was derived from can never prove
+    #: a reuse is valid. See ``app/domain/artifact_identity``.
+    artifact_identity: str | None = None
+    upstream_identity: str | None = None
 
     @property
     def statement_count(self) -> int:

@@ -19,8 +19,23 @@ and this one deliberately stops short of it.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from dataclasses import dataclass
 
+from app.domain.artifact_identity.artifact_identity_exceptions import (  # noqa: E501
+    InvalidArtifactIdentityError,
+)
+from app.domain.artifact_identity.artifact_identity_models import (
+    ArtifactIdentity,
+    ArtifactKind,
+)
+from app.domain.artifact_identity.artifact_identity_policy import (
+    ARTIFACT_IDENTITY_CONTRACT_VERSION,
+)
+from app.domain.engineering_evidence.evidence_identity import (
+    evidence_set_identity,
+)
 from app.domain.canonical_text.canonical_text_repository import (
     CanonicalTextRepository,
 )
@@ -134,10 +149,39 @@ def extract_document_evidence(
             ),
         )
 
-    existing = evidence_repository.find_for_source(
-        document_id,
-        canonical_text.content_checksum,
-        extraction_policy_version,
+    if canonical_text.artifact_identity is None:
+        return _failed(
+            EvidenceFailureCode.INCONSISTENT_SOURCE_IDENTITY,
+            f"The canonical text of document '{document_id}' was stored "
+            "before the derivation identity chain existed.",
+            detail="Its provenance cannot be reconstructed, so evidence "
+            "read from it could never prove its own reuse is valid. "
+            "Re-run segmentation to give it a current identity.",
+        )
+
+    # What this stage produces from that text under its own extraction
+    # policy. Everything further upstream - the segmentation, the
+    # representation, the bytes - reaches this digest through the text's
+    # identity, so this layer names none of them.
+    try:
+        expected_identity = evidence_set_identity(
+            canonical_text=ArtifactIdentity(
+                value=canonical_text.artifact_identity,
+                kind=ArtifactKind.CANONICAL_TEXT,
+                contract_version=ARTIFACT_IDENTITY_CONTRACT_VERSION,
+            ),
+            extraction_policy_version=extraction_policy_version,
+        )
+    except InvalidArtifactIdentityError as error:
+        return _failed(
+            EvidenceFailureCode.INCONSISTENT_SOURCE_IDENTITY,
+            f"The canonical text of document '{document_id}' carries a "
+            "malformed derivation identity.",
+            detail=f"{type(error).__name__}: {error}",
+        )
+
+    existing = evidence_repository.find_by_identity(
+        document_id, expected_identity.value
     )
 
     if existing is not None:
@@ -181,6 +225,12 @@ def extract_document_evidence(
         evidence=tuple(
             item for item in extracted.evidence if item.is_persistable
         ),
+    )
+
+    persistable = replace(
+        persistable,
+        artifact_identity=expected_identity.value,
+        upstream_identity=canonical_text.artifact_identity,
     )
 
     try:

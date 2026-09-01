@@ -43,21 +43,23 @@ class CanonicalTextRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def find_for_representation(
-        self,
-        document_id: int,
-        content_checksum: str,
-        segmentation_version: str,
+    def find_by_identity(
+        self, document_id: int, artifact_identity: str
     ) -> CanonicalTextDocument | None:
         """
-        The segmentation built from exactly this representation under
-        exactly these rules, if one exists.
+        The canonical text segmentation with exactly this deterministic identity, if one
+        exists.
 
-        This is what makes segmentation idempotent: the same
-        representation and the same version find the stored result rather
-        than producing a second, equivalent one. A new checksum - the
-        document changed - or a new segmentation version - the rules
-        changed - is a different segmentation, stored alongside.
+        **This is the reuse decision.** The identity already carries
+        everything that could make a stored artifact incompatible: the
+        identity of the artifact it was derived from, and every version
+        this stage owns. Matching it is therefore a proof of equivalence
+        rather than a guess, and no caller has to know - or copy - the
+        version constants of the stages above.
+
+        A legacy artifact stored before the identity chain existed has
+        no identity and can never match here. That is deliberate: unknown
+        provenance is not compatible provenance.
         """
 
         raise NotImplementedError

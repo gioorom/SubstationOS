@@ -41,16 +41,16 @@ class CanonicalPdfRepresentation(Base):
     __tablename__ = "canonical_pdf_representations"
 
     __table_args__ = (
-        # The idempotency backstop. One representation per document per
-        # checksum per representation version: re-canonicalising
-        # unchanged bytes cannot produce a second row, whatever the
-        # caller does. Changed bytes carry a different checksum and are
-        # therefore a new row rather than an overwrite.
+        # The idempotency backstop, and the whole reuse rule in one
+        # line: one artifact per deterministic identity per document.
+        # Re-deriving the same computation cannot produce a second row,
+        # while any change upstream or in this stage's own contract is a
+        # different identity and therefore a new row alongside - never
+        # over - the old one.
         UniqueConstraint(
             "document_id",
-            "content_checksum",
-            "representation_version",
-            name="uq_canonical_pdf_document_checksum_version",
+            "artifact_identity",
+            name="uq_canonical_pdf_artifact_identity",
         ),
         Index(
             "ix_canonical_pdf_representations_document_created",
@@ -88,6 +88,32 @@ class CanonicalPdfRepresentation(Base):
     parser_version: Mapped[str] = mapped_column(String(50), nullable=False)
 
     page_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # The deterministic identity of this artifact, and of the artifact it
+    # was derived from. Together they are what makes reuse a provable
+    # claim rather than a guess: a change anywhere upstream changes the
+    # upstream identity, which changes this one.
+    #
+    # Nullable for one reason only: rows stored before the identity chain
+    # existed. An unknown row can never satisfy a reuse lookup, so it is
+    # recomputed rather than trusted, and nothing is written back to it.
+    #
+    # This table is the one whose identity *is* reconstructible - it is a
+    # pure function of the six provenance columns beside it, which have
+    # always been NOT NULL. The canonical text stage relies on exactly
+    # that to recompose a representation's identity without guessing.
+    # The column is still not backfilled: a migration recording an
+    # identity would be asserting a derivation it never observed.
+    artifact_identity: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
+
+    upstream_identity: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

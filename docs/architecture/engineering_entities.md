@@ -189,11 +189,35 @@ Three tables added by migration `46ec4e0fe42f` (purely additive):
 `engineering_entity_sets`, `engineering_entities`,
 `engineering_entity_evidence`.
 
-The stored key is
-`(document_id, content_checksum, resolution_policy_version)`. Re-running
-finds the existing set and re-uses it; new evidence or new rules produce
-a new set **alongside** the old one, so a hypothesis drawn under last
-year's rules stays explainable.
+The stored key is `(document_id, artifact_identity)`.
+
+`artifact_identity` is the deterministic identity of the computation
+that produced this entity set: a digest over the identity contract, the
+artifact kind, **the identity of the artifact it was derived from**, and
+the versions this stage owns. Re-running the same computation finds the
+stored result; any change upstream, or in this stage's own contract, is
+a different identity and therefore a new artifact stored **alongside**
+the old one - so a entities set drawn under last year's rules stays
+explainable.
+
+Nothing here restates the versions of the stages above: they reach this
+identity through the upstream one. That is the whole point - the earlier
+model copied them down by hand, and the copy drifted six times. See
+[ADR-0032](adr/0032-upstream-identity-in-derived-set-reuse.md) and its
+EPIC 32.E2.4 amendment.
+
+Every explicit provenance column stays readable beside the digest -
+which policy, which contract, which checksum. Identity compresses; it
+does not replace explanation. Rows stored before the identity chain
+existed carry `NULL`, can never satisfy a lookup, and are recomputed
+rather than trusted.
+
+`resolution_policy_version` and `entity_model_version` are this
+stage's own derivation identity, and they are independent causes of
+change: one versions the rules that *group* observations, the other the
+shape they are grouped into. Neither implies the other, and neither is
+derived from the other - nor from anything upstream, which reaches the
+identity through the evidence set it names.
 
 Nothing here references or modifies the evidence tables, canonical text,
 the document row, the Engineering Index or the Knowledge Graph.

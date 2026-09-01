@@ -51,6 +51,8 @@ class SqlAlchemyEngineeringEvidenceRepository(EngineeringEvidenceRepository):
         )
 
         record = EngineeringEvidenceSetRecord(
+            artifact_identity=evidence_set.artifact_identity,
+            upstream_identity=evidence_set.upstream_identity,
             document_id=evidence_set.document_id,
             project_id=evidence_set.project_id,
             content_checksum=evidence_set.content_checksum,
@@ -67,23 +69,16 @@ class SqlAlchemyEngineeringEvidenceRepository(EngineeringEvidenceRepository):
         self._session.add(record)
         self._session.commit()
 
-    def find_for_source(
-        self,
-        document_id: int,
-        content_checksum: str,
-        extraction_policy_version: str,
+    def find_by_identity(
+        self, document_id: int, artifact_identity: str
     ) -> EngineeringEvidenceSet | None:
         record = (
             self._session.query(EngineeringEvidenceSetRecord)
             .filter(
                 EngineeringEvidenceSetRecord.document_id == document_id,
-                EngineeringEvidenceSetRecord.content_checksum
-                == content_checksum,
-                EngineeringEvidenceSetRecord.extraction_policy_version
-                == extraction_policy_version,
+                EngineeringEvidenceSetRecord.artifact_identity == artifact_identity,
             )
-            .order_by(EngineeringEvidenceSetRecord.id.desc())
-            .first()
+            .one_or_none()
         )
 
         return _to_domain(record) if record is not None else None
@@ -156,6 +151,8 @@ def _to_domain(
     record: EngineeringEvidenceSetRecord,
 ) -> EngineeringEvidenceSet:
     return EngineeringEvidenceSet(
+        artifact_identity=record.artifact_identity,
+        upstream_identity=record.upstream_identity,
         document_id=record.document_id,
         project_id=record.project_id,
         content_checksum=record.content_checksum,
