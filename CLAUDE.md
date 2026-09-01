@@ -14,6 +14,44 @@ made to protect long-term clarity over short-term speed.
 
 ---
 
+## 0. Finding Your Way Around
+
+Read this manual once at task entry — it binds everything below. Then, unless
+the change is small and in code you already know, start at
+[`docs/ai-context/README.md`](docs/ai-context/README.md) and load **only** the
+maps that task needs. Do not read all of them for a one-line fix, and do not
+bounce between instructions and maps.
+
+Work in this order: **MAP → SEARCH → READ → TRACE → IMPLEMENT → VERIFY.** The
+maps exist so you read *less* of the repository, never as an excuse to preload
+it.
+
+**Navigation is not authority.** `docs/ai-context/` is a derived layer. It does
+not override this manual, the executable architecture tests, accepted ADRs,
+current domain and persistence contracts, migrations, the tests that prove
+behavior, or the long-form references in `docs/architecture/`. Where a map and
+the repository disagree, the repository wins: investigate, implement against
+current authoritative evidence, and say so in your report rather than quietly
+following the map. Each map names the baseline it was derived from; when
+current code differs materially, re-verify the affected claims before relying
+on them (§11 covers keeping the layer current).
+
+**Trace before you change.** For unfamiliar or architecture-significant work,
+establish who owns the responsibility, what it consumes and who consumes it,
+its ports and adapters, what persists it and under which migration, the ADRs
+governing it, the fitness functions guarding it, and the tests proving it.
+Never speculate about code you have not opened.
+
+**A context pack is a starting set**, not proof that nothing else is affected
+(see
+[`docs/ai-context/CONTEXT_LOADING_STRATEGY.md`](docs/ai-context/CONTEXT_LOADING_STRATEGY.md));
+dependency discovery is still yours to do.
+
+Nested instructions still apply where they exist: frontend work also follows
+`apps/frontend/CLAUDE.md`.
+
+---
+
 ## 1. Project Vision
 
 SubstationOS is an **Engineering Operating System** for High-Voltage and
@@ -361,6 +399,10 @@ Testing is not optional and not an afterthought. The domain must be provable.
 - **README.md** — minimal quick start only.
 - **docs/** — long-form architecture notes, decision records, and domain
   references.
+- **docs/ai-context/** — derived navigation for finding your way around the
+  repository (§0). It is regenerated from the codebase rather than maintained
+  as a spec, so stale navigation is reported and refreshed when a material
+  architecture change lands, not patched inside unrelated work.
 - **Docstrings** document *intent and contract*, not mechanics: what a thing is,
   what it guarantees, what it raises. Ports document the contract implementers must
   honor.
@@ -372,7 +414,9 @@ Testing is not optional and not an afterthought. The domain must be provable.
   (a new bounded context, a persistence choice, an external dependency) are recorded
   in `docs/` with context, decision, and consequences.
 - When code and documentation disagree, that is a bug — fix whichever is wrong in
-  the same change.
+  the same change. The one exception is `docs/ai-context/`, which is derived
+  rather than authored: report its drift instead of patching it inside
+  unrelated work.
 
 ---
 
@@ -409,7 +453,8 @@ Before **every** commit, verify all of the following:
 8. **The commit is atomic** — one logical change, refactor separated from behavior.
 9. **The message is clear** — imperative subject describing intent.
 10. **Docs updated** — if a convention, contract, or structure changed, this manual
-    or `docs/` reflects it.
+    or `docs/` reflects it. `docs/ai-context/` is excepted: it is refreshed when
+    a material architecture change lands, not inside every commit.
 
 If any item fails, the commit is not ready.
 
