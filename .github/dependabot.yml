@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Only the actions ecosystem, and only because this repository pins actions
+  # to commit SHAs. A SHA never updates itself, so pinning without an update
+  # mechanism trades tag mutability for permanent staleness - including
+  # through an action's own security fixes. Dependabot understands the
+  # `@<sha> # vX.Y.Z` form and rewrites both parts.
+  #
+  # `npm` and `pip` are deliberately absent.
+  #
+  # npm has a standing advisory backlog whose remedy - upgrading Next.js - is
+  # out of scope for this milestone. Enabling it now would open a queue of
+  # pull requests that cannot be merged, which is a worse signal on a public
+  # repository than no Dependabot at all.
+  #
+  # pip has no lockfile, so the only thing Dependabot could edit is the lower
+  # bounds in pyproject.toml. Those bounds record what was actually verified,
+  # not what is newest; bumping them mechanically would convert tested claims
+  # into untested ones. It becomes meaningful once there is a lock to bump.
+  - package-ecosystem: "github-actions"
+    # For this ecosystem "/" means .github/workflows, not the repository root.
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3

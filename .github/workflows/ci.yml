@@ -1,0 +1,134 @@
+name: CI
+
+# The pull request is the gate. `push: main` is not redundant: a pull request
+# is tested against a merge preview, not against the commit that actually
+# lands, so without it `main` itself is never verified. `workflow_dispatch`
+# exists because the backend has no dependency lockfile - a green run is a
+# statement about today's resolution, not a permanent one - and re-checking
+# that should not require inventing a commit.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Nothing here writes anything: no comment, no annotation, no status, no
+# package, no release. The only privileged operation is reading this
+# repository. Declared at workflow level so it is a ceiling every future job
+# inherits, and so it overrides whatever the repository default happens to be.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    name: Backend (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Every step below executes code from the pull request - build
+          # backends, test files. Leaving the token in .git/config would hand
+          # that code a credential no step here has any use for.
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          # The floor declared by pyproject.toml. Day-to-day development runs
+          # on 3.14, so CI covers the end of the supported range that nothing
+          # else exercises. A [3.13, 3.14] matrix would spend double the
+          # compute re-proving what a developer machine proves hourly.
+          python-version: "3.13"
+          cache: pip
+          # Caches pip's download directory only. It pins nothing - there is
+          # no lockfile and pip re-resolves every run - so a cache hit cannot
+          # change which versions are installed.
+          cache-dependency-path: apps/backend/pyproject.toml
+
+      - name: Install the backend
+        run: pip install -e ".[dev,server]"
+
+      - name: Run the test suite
+        # Includes the executable architecture invariants: pytest.ini sets
+        # testpaths = tests, and tests/architecture/ is inside it.
+        run: python -m pytest
+
+      - name: Verify a single migration head
+        # `alembic heads` reads migrations/versions through ScriptDirectory
+        # and never executes env.py, so it needs no database and no
+        # connection string. What it proves is that the migration graph has
+        # not branched - the failure mode merging two branches produces
+        # silently. It exits 0 even when it prints several heads, so the
+        # count is the assertion.
+        run: |
+          heads="$(python -m alembic heads)"
+          printf '%s\n' "$heads"
+          test "$(printf '%s\n' "$heads" | grep -c '(head)')" -eq 1
+
+      - name: Check the OpenAPI snapshot is current
+        # apps/backend/openapi.json is a committed contract, not a build
+        # artefact: the frontend asserts its enums against it. Regenerating
+        # and diffing is what stops a backend enum change from reaching main
+        # without the client transcription being reviewed alongside it.
+        #
+        # Two details are load-bearing. The step runs from the repository
+        # root because export_openapi.py only resolves from there. The
+        # pathspec is repository-root-relative (`:/`) because a plain path
+        # is resolved against the current directory - a gate that silently
+        # matches nothing and exits 0 is worse than no gate.
+        working-directory: .
+        run: |
+          python scripts/export_openapi.py
+          git diff --exit-code -- ':/apps/backend/openapi.json'
+
+  frontend:
+    name: Frontend (Node 24)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - name: Check out the repository
+        # The whole repository, deliberately: tests/contracts.test.ts reads
+        # ../backend/openapi.json from disk, so a checkout scoped to
+        # apps/frontend would break the contract test.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Read from the file so .nvmrc stays the single source of truth for
+          # developers and CI alike.
+          node-version-file: apps/frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install dependencies
+        # `ci`, never `install`: it installs exactly the lockfile and fails if
+        # package.json and package-lock.json disagree.
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run the test suite
+        run: npm test
+
+      - name: Build
+        run: npm run build
