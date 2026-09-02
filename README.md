@@ -327,7 +327,7 @@ Full notes in [`docs/developer_setup.md`](docs/developer_setup.md).
 | `tests/architecture/` | Executable architecture invariants (26 files) |
 | `apps/frontend/tests/` | Component behaviour plus a contract test against the exported OpenAPI |
 
-**3523 backend tests and 312 frontend tests**, all deterministic — no network, no AI
+**3528 backend tests and 314 frontend tests**, all deterministic — no network, no AI
 provider, no wall clock.
 
 The architecture suite is the part worth reading. Numbered invariants are asserted

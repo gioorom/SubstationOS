@@ -95,7 +95,7 @@ def load_llm_configuration_from_env() -> LLMConfiguration:
     temperature_raw = os.getenv(LLM_TEMPERATURE_ENV_VAR)
 
     return LLMConfiguration(
-        provider_id=os.getenv(LLM_PROVIDER_ENV_VAR, DEFAULT_PROVIDER_ID),
+        provider_id=_env_str(LLM_PROVIDER_ENV_VAR, DEFAULT_PROVIDER_ID),
         model_identifier=os.getenv(LLM_MODEL_ENV_VAR, ""),
         default_max_output_tokens=(
             int(max_output_tokens_raw)
@@ -107,6 +107,28 @@ def load_llm_configuration_from_env() -> LLMConfiguration:
         ),
         request_preparation_policy_version=REQUEST_PREPARATION_POLICY_VERSION,
     )
+
+
+def _env_str(name: str, default: str) -> str:
+    """
+    A blank value means "not configured", not "configured as empty".
+
+    ``.env.example`` ships every variable present and blank, and says so:
+    a reader is told they may copy it and leave every line alone. But
+    ``os.getenv(name, default)`` returns its default only when the name is
+    **absent**, so a blank line in a ``.env`` silently overrides the
+    default with an empty string - and an empty provider id then fails a
+    credential lookup for a provider called "".
+
+    Every other reader in this module already treats blank as unset. This
+    is the same rule, given a name.
+    """
+
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+
+    return raw.strip()
 
 
 def _env_bool(name: str, default: bool) -> bool:

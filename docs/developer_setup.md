@@ -16,40 +16,60 @@ frontend's design, see
 
 ## Backend
 
-No dependency manifest exists yet (tracked as technical debt in the
-Development Plan). Install into a virtual environment by hand:
-
-```
-fastapi  sqlalchemy  alembic  python-dotenv  anthropic
-pytest  httpx  uvicorn  pymupdf  pyyaml
-```
-
-Then:
+Dependencies are declared in `apps/backend/pyproject.toml`.
 
 ```bash
 cd apps/backend
+python -m venv .venv
+source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -e ".[dev,server]"
+
 alembic upgrade head          # `alembic stamp head` for an existing dev database
-uvicorn app.main:app --reload # serves on http://127.0.0.1:8000
-python -m pytest              # 3523 tests, all deterministic
+python -m pytest              # 3528 tests, all deterministic
+uvicorn app.main:app --reload --host localhost    # http://localhost:8000
 ```
+
+`dev` adds pytest; `server` adds uvicorn, which is how the application is
+served rather than something its code imports. Run backend commands from
+`apps/backend/`: the development database is `sqlite:///./substationos.db`,
+resolved against the working directory, so where you stand decides which
+database you are talking to.
+
+**Serve the API on `localhost`, not `127.0.0.1`** — the reason is two
+hundred lines below, under *The dev origin matters*, and it is worth
+reading before you lose an afternoon to it.
 
 The schema is managed by Alembic, never by application startup: a
 database that has not been migrated fails loudly at first query rather
 than being silently patched into shape. See
 [`database_migrations.md`](architecture/database_migrations.md).
 
-`ANTHROPIC_API_KEY` is **not** required. It is used only by the legacy
-LLM-backed Knowledge Graph extractor on the upload path; the entire
-deterministic pipeline — canonical representation, text, evidence,
-entities, facts, semantics — runs without any AI provider.
+`ANTHROPIC_API_KEY` is **not** required. It is read only on the answering
+path, behind `LlmProviderPort`; the entire deterministic pipeline —
+canonical representation, text, evidence, entities, facts, semantics,
+review, promotion, retrieval, context assembly and reasoning — runs with
+no AI provider configured, and `LLM_RUNTIME_ENABLED` defaults to `false`.
+
+You may copy `.env.example` to `.env` and leave every line blank. A blank
+value means *not configured*, not *configured as empty* — which is a
+promise the code now keeps and a test now pins, after a copied
+`.env.example` was found to turn seventeen API tests red.
 
 ## Frontend
 
 ```bash
 cd apps/frontend
-npm install
+npm ci                        # `npm install` only when changing dependencies
 npm run dev                   # serves on http://localhost:3000
+
+npm test                      # vitest, 314 tests
+npm run typecheck             # tsc --noEmit
+npm run lint                  # eslint
+npm run build                 # next build
 ```
+
+Those four are what CI runs; a change that breaks any of them breaks the
+pipeline.
 
 ### Configuration
 
@@ -57,12 +77,12 @@ One variable, read in `config/env.ts`:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | `http://127.0.0.1:8000` | Where the backend is |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | Where the backend is |
 
 Put overrides in `apps/frontend/.env.local` (git-ignored):
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
 The backend's CORS policy allows `http://localhost:3000` (see
@@ -74,7 +94,7 @@ that list — a backend change, so make it deliberately.
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm test            # vitest, 312 tests
+npm test            # vitest, 314 tests
 npm run build       # next build
 ```
 
