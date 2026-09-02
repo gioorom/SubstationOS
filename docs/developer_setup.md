@@ -143,7 +143,7 @@ Every list endpoint takes `page` (1-based, default 1) and `page_size`
 never clamped.
 
 ```bash
-curl "http://127.0.0.1:8000/documents/?page=2&page_size=50"
+curl "http://localhost:8000/documents/?page=2&page_size=50"
 ```
 
 Responses are `{"items": [...], "pagination": {...}}`, where
@@ -177,12 +177,12 @@ anything else is a 422.
 ### Documents
 
 ```bash
-curl http://127.0.0.1:8000/documents/1            # DocumentDetailRead
-curl -OJ http://127.0.0.1:8000/documents/1/content  # the original bytes
+curl http://localhost:8000/documents/1            # DocumentDetailRead
+curl -OJ http://localhost:8000/documents/1/content  # the original bytes
 
 # One page of the canonical representation (EPIC 30.2) - what the
 # Engineering Workspace's page map draws, at the parser's own coordinates
-curl http://127.0.0.1:8000/documents/1/canonical-representation/pages/1
+curl http://localhost:8000/documents/1/canonical-representation/pages/1
 ```
 
 **No public schema carries a storage location.** `file_path` is private

@@ -44,9 +44,18 @@ config = context.config
 # invocation - e.g. generating/testing a migration against a scratch
 # database without touching the real one, or pointing at a different
 # environment's database. Never required for normal use.
+# A blank value means "not overridden", not "overridden with nothing".
+# `.env.example` ships this variable present and blank, and tells the
+# reader they may copy it and change nothing - so an empty string here has
+# to fall through to the default, exactly as it does everywhere in
+# `app/application/config/llm_configuration.py`. Without this an empty
+# export fails with `Could not parse SQLAlchemy URL from given URL
+# string`, which says nothing about where the empty string came from.
+_database_url_override = os.environ.get("SUBSTATIONOS_DATABASE_URL", "")
+
 config.set_main_option(
     "sqlalchemy.url",
-    os.environ.get("SUBSTATIONOS_DATABASE_URL", DATABASE_URL),
+    _database_url_override.strip() or DATABASE_URL,
 )
 
 # Interpret the config file for Python logging.
