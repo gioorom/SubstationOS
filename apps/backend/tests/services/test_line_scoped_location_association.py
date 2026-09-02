@@ -34,9 +34,10 @@ from tests.services._derived_set_support import (
     run_pipeline,
 )
 
-# LINEE AT, sha256 835469be… - a terminal block and the location it is
-# in, written the way the drawing writes it: two separate tokens.
-REAL_LINE = "MORSETTIERA -E.AM +GSH002"
+# TR, REF-A-S-027_01, sha256 22f27637…, p.6 - a
+# terminal block and the location it is in, written the way the drawing
+# writes it: two separate tokens. CP Alfa 150/20 kV.
+REAL_LINE = "MORSETTIERA -E.AM +GSH003"
 
 
 def _fact_rows(db: Session, document_id: int) -> list:
@@ -109,7 +110,7 @@ def test_the_persisted_fact_keeps_both_sides_of_its_provenance(
         "-E.AM"
     }
     assert {support.observed_text for support in fact.object_support} == {
-        "+GSH002"
+        "+GSH003"
     }
     assert fact.subject_support[0].location == fact.object_support[0].location
 

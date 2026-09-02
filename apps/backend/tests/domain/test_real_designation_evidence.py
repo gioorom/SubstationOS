@@ -12,7 +12,7 @@ was not to solve one by broadening a regex until the others break:
 
 A. dot-qualified product designations - ``-E1.L``
 B. bare product designations - ``-E``, ``-TA``
-C. location aspects, alphanumeric and word-form - ``+GSH002``, ``+TELAIO``
+C. location aspects, alphanumeric and word-form - ``+GSH003``, ``+TELAIO``
 D. false-positive rejection - ``SF6``
 
 The load-bearing decision this file protects is that a dot-qualified
@@ -40,23 +40,40 @@ from tests.domain._canonical_text_support import (
 
 # --- Real source lines, verbatim -----------------------------------------
 #
-# LINEE AT   sha256 835469be… p.5 / p.3
-# TR PUG     sha256 22f27637… p.6
+# All lines below are transcribed from the CP Alfa 150/20 kV corpus
+# (EPIC 32.E4). The CP Beta drawing they previously came from was
+# retired with that milestone.
+#
+# LINEA AT  REF-A-S-025_01  sha256 bd313cef… p.6 / p.3
+# TR        REF-A-S-027_01  sha256 22f27637… p.6
 REAL_DOT_PRODUCT_LINES = (
-    "MORSETTIERA -E.AM +GSH002",
-    "MORSETTIERA -E.TAL +GSH002",
-    "MORSETTIERA -EV.TVL +GSH002",
-    "MORSETTIERA -E.L +GSH002",
-    "MORSETTIERA -E1.L +GSH002",
-    "MORSETTIERA -E1.SB +GSH002",
+    "MORSETTIERA -E1.L +189L",
+    "MORSETTIERA -E1.T +189L",
+    "MORSETTIERA -EV.TV +CASS_TV",
+    "MORSETTIERA -E1.SB +189SB",
+    "MORSETTIERA -E1.SS +189SS",
 )
 REAL_DOT_PRODUCT_FORMS = (
-    "-E.AM",
-    "-E.TAL",
-    "-EV.TVL",
-    "-E.L",
     "-E1.L",
+    "-E1.T",
+    "-EV.TV",
     "-E1.SB",
+    "-E1.SS",
+)
+#: The mounting references on those same lines - ``+189L``, ``+189SB``,
+#: ``+189SS``, ``+CASS_TV``. EPIC 32.E4 measured that the governed
+#: location rule recognises only letter-leading forms, so none of these
+#: is observed. Pinned as a **measured gap**, not annotated as evidence.
+REAL_UNGOVERNED_LOCATION_FORMS = (
+    "+189L",
+    "+189SB",
+    "+189SS",
+    "+CASS_TV",
+)
+#: The one dot-qualified line in the corpus whose location aspect *is*
+#: governed - the transformer sheet index rather than the HV-line one.
+REAL_DOT_PRODUCT_LOCATED_LINES = (
+    "MORSETTIERA -E.AM +GSH003",
 )
 REAL_BARE_PRODUCT_LINES = (
     "MORSETTIERA -E +GSH001",
@@ -70,10 +87,10 @@ REAL_LOCATION_LINES = (
     "MORSETTIERA A/COM +DQ1910",
 )
 REAL_SF6_LINES = (
-    "IBRIDO AT - BASSA PRESSIONE SF6 (P1 GAS)",
-    "IBRIDO AT - BASSA PRESSIONE SF6 (P4 GAS)",
-    "TA AT - ALLARMI SF6 TA (63GTAAL)",
-    "RIO 3 - ALLARMI SF6 TA",
+    "INTERRUTTORE AT – BASSA PRESSIONE SF6 (P1 GAS)",
+    "INTERRUTTORE AT – BASSA PRESSIONE SF6 (P4 GAS)",
+    "TA AT – ALLARMI SF6 TA (63GTAAL)",
+    "RIO 3 – ALLARMI SF6 TA",
 )
 
 
@@ -124,38 +141,38 @@ def test_a_dot_qualified_designation_is_one_atomic_observation() -> None:
     hierarchy implies co-location.
     """
 
-    result = _evidence("MORSETTIERA -E1.L +GSH002")
+    result = _evidence("MORSETTIERA -E.AM +GSH003")
     designations = result.of_type(EvidenceType.DESIGNATION)
 
-    assert [item.observed_text for item in designations] == ["-E1.L"]
-    assert "-E1" not in [item.observed_text for item in designations]
-    assert "L" not in [item.observed_text for item in designations]
+    assert [item.observed_text for item in designations] == ["-E.AM"]
+    assert "-E" not in [item.observed_text for item in designations]
+    assert "AM" not in [item.observed_text for item in designations]
 
 
 def test_a_dot_qualified_designation_creates_no_second_asset() -> None:
     """No prefix synthesis and no suffix synthesis - one observation,
     one asset."""
 
-    entities = resolve_entities(_evidence("MORSETTIERA -E1.L +GSH002"))
+    entities = resolve_entities(_evidence("MORSETTIERA -E.AM +GSH003"))
     assets = entities.of_type(EntityType.EQUIPMENT_DESIGNATION)
 
-    assert [entity.label for entity in assets] == ["-E1.L"]
+    assert [entity.label for entity in assets] == ["-E.AM"]
 
 
 def test_the_dot_qualified_span_covers_the_whole_token() -> None:
     """Atomic means the evidence points at all of it - a span covering
     only ``-E1`` would be recording a decomposition by other means."""
 
-    item = _evidence("MORSETTIERA -E1.L +GSH002").of_type(
+    item = _evidence("MORSETTIERA -E.AM +GSH003").of_type(
         EvidenceType.DESIGNATION
     )[0]
     span_reference = item.provenance.spans[0]
 
-    line = "MORSETTIERA -E1.L +GSH002"
-    start = line.index("-E1.L")
+    line = "MORSETTIERA -E.AM +GSH003"
+    start = line.index("-E.AM")
 
     assert span_reference.character_start == start
-    assert span_reference.character_end == start + len("-E1.L")
+    assert span_reference.character_end == start + len("-E.AM")
 
 
 # --- B. Bare product designations ----------------------------------------
@@ -204,16 +221,16 @@ def test_a_standalone_location_is_not_also_a_designation() -> None:
     put 268 places into the graph as assets.
     """
 
-    result = _evidence("MORSETTIERA -E1.L +GSH002")
+    result = _evidence("MORSETTIERA -E.AM +GSH003")
 
     assert [
         item.observed_text
         for item in result.of_type(EvidenceType.DESIGNATION)
-    ] == ["-E1.L"]
+    ] == ["-E.AM"]
     assert [
         item.observed_text
         for item in result.of_type(EvidenceType.LOCATION_ASPECT)
-    ] == ["+GSH002"]
+    ] == ["+GSH003"]
 
 
 def test_a_standalone_location_resolves_to_a_structural_location() -> None:
@@ -258,7 +275,9 @@ def test_the_compound_location_form_still_works() -> None:
 
 
 def test_a_telephone_number_is_not_a_location() -> None:
-    """``T+390000000`` appears in every real title block. Requiring a
+    """A ``T+39…`` switchboard number appears in every real title block.
+    The digits here are a reserved placeholder, not the real number - the
+    rule under test is about the shape, so nothing is lost. Requiring a
     letter after the ``+`` is what keeps it out."""
 
     result = _evidence("Roma-Italia T+390000000")
@@ -368,7 +387,7 @@ def test_rule_precedence_is_deterministic_for_every_real_shape() -> None:
     expected = {
         "-E1.L": ("designation", None),
         "-E": ("designation", None),
-        "+GSH002": (None, "location_aspect"),
+        "+GSH003": (None, "location_aspect"),
         "+TELAIO": (None, "location_aspect"),
         "+E01-QA1": ("designation", "location_aspect"),
         # A known false positive - see the SF6 tests below.

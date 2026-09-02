@@ -304,9 +304,14 @@ it:
 
 | Source | Location aspects | Compound tokens |
 |---|---|---|
-| `REF-B-S-025_00 LINEE AT` (171 pp, committed) | 52 | **0** |
+| `REF-B-S-025_00 LINEE AT` (171 pp) | 52 | **0** |
 | `real_linee_at_terminal_blocks` (corpus) | 5 | **0** |
 | `real_tr_terminal_blocks` (corpus) | 4 | **0** |
+
+*(Measured at P2, against the corpus as it stood then. EPIC 32.E4 later
+replaced the CP Beta sources with CP Alfa and re-measured the
+whole ten-drawing corpus: 630 pages, still **zero** compound tokens.
+The conclusion held; the sources behind these two corpus rows changed.)*
 
 Every real location is written as its own token beside the designation
 it belongs to:

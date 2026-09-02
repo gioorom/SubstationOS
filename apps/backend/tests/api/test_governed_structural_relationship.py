@@ -459,13 +459,14 @@ def test_the_same_location_in_two_documents_is_two_governed_locations(
 # same edge kind, same provenance shape.
 #
 # Verbatim from a committed an Italian DSO HV/MV functional diagram
-# (LINEE AT, sha256 835469be…): a terminal block and the location it
-# sits in, written as two separate tokens on one line.
-REAL_TERMINAL_BLOCK = "MORSETTIERA -E.AM +GSH002"
+# (TR, REF-A-S-027_01, sha256 22f27637…, p.6):
+# a terminal block and the location it sits in, written as two separate
+# tokens on one line. CP Alfa 150/20 kV.
+REAL_TERMINAL_BLOCK = "MORSETTIERA -E.AM +GSH003"
 
 #: Two terminal blocks and one location on one line. The line does not
 #: say which block is where, so it must yield no relationship at all.
-REAL_AMBIGUOUS_LINE = "MORSETTIERA -E.AM -E.TAL +GSH002"
+REAL_AMBIGUOUS_LINE = "MORSETTIERA -E.AM -E.TAL +GSH003"
 
 
 @pytest.fixture()
@@ -551,7 +552,7 @@ def test_an_approved_real_line_becomes_the_existing_governed_edge(
 
     assert nodes[edges[0]["subject_node_id"]]["kind"] == "engineering_asset"
     assert nodes[edges[0]["object_node_id"]]["kind"] == "structural_location"
-    assert nodes[edges[0]["object_node_id"]]["label"] == "+GSH002"
+    assert nodes[edges[0]["object_node_id"]]["label"] == "+GSH003"
     assert nodes[edges[0]["subject_node_id"]]["label"] == "-E.AM"
 
 

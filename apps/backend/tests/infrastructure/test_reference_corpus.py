@@ -60,7 +60,7 @@ def test_the_corpus_declares_its_versions(
 ) -> None:
     corpus = repository.load(REFERENCE_CORPUS)
 
-    assert corpus.corpus_version == "2.0"
+    assert corpus.corpus_version == "3.0"
     assert corpus.annotated_against_policy_version == "2.0"
     assert corpus.annotated_rule_versions
 
@@ -263,7 +263,7 @@ def test_the_reference_corpus_records_the_current_measured_baseline(
     The baseline this milestone measured, pinned so a rule change that
     moves it has to move this number deliberately.
 
-    38 of 39 annotations are matched exactly - text, value, status and
+    33 of 34 annotations are matched exactly - text, value, status and
     full provenance - alongside **three false positives that the corpus
     exists to measure**. The single miss is ``TR-1`` in
     ``designation_variants``, a **known and deliberately annotated
@@ -283,6 +283,24 @@ def test_the_reference_corpus_records_the_current_measured_baseline(
     documents from a single Italian DSO's drawings: dot-qualified product
     designations, bare product designations, word-form location aspects,
     and the SF6 gas-alarm lines.
+
+    EPIC 32.E4 replaced the CP Beta real sources with CP Alfa and
+    moved it to 33/34. The **five fewer** matches are all location
+    aspects, and losing them is the finding rather than a regression:
+    Alfa's HV-line terminal blocks are written ``-E1.L +189L``, and
+    the governed location rule recognises only letter-leading forms, so
+    ``+189L``, ``+189SB``, ``+189SS`` and ``+CASS_TV`` are not observed
+    at all. They are deliberately **not** annotated - asserting them
+    would commit a location vocabulary no engineer has reviewed. Word
+    and alphanumeric location aspects stay measured through
+    ``real_tr_terminal_blocks``, which was already Alfa-derived and
+    is unchanged.
+
+    Precision fell from 0.926829 to 0.916667 and recall from 0.974359
+    to 0.970588. Both moved only because the denominator shrank by the
+    five withdrawn annotations; the same three SF6 false positives and
+    the same single ``TR-1`` miss are still the only defects, so no rule
+    got worse.
 
     The three false positives are all ``SF6``, and they are deliberate.
     An earlier draft suppressed the token with a catalogue and reported
@@ -309,7 +327,7 @@ def test_the_reference_corpus_records_the_current_measured_baseline(
         false_positives += metrics.false_positives
         false_negatives += metrics.false_negatives
 
-    assert (true_positives, false_positives, false_negatives) == (38, 3, 1)
+    assert (true_positives, false_positives, false_negatives) == (33, 3, 1)
 
 
 def test_the_known_defects_are_the_only_misses(

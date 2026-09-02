@@ -40,7 +40,7 @@ def test_evaluating_the_reference_corpus_returns_201(
     body = response.json()
     assert body["succeeded"] is True
     assert body["report"]["corpus_id"] == REFERENCE_CORPUS
-    assert body["report"]["corpus_version"] == "2.0"
+    assert body["report"]["corpus_version"] == "3.0"
 
 
 def test_the_report_carries_exact_metrics(api_client: TestClient) -> None:
@@ -49,12 +49,12 @@ def test_the_report_carries_exact_metrics(api_client: TestClient) -> None:
 
     metrics = _evaluate(api_client).json()["report"]["metrics"]
 
-    assert metrics["true_positives"] == 38
+    assert metrics["true_positives"] == 33
     assert metrics["false_positives"] == 3
     assert metrics["false_negatives"] == 1
-    assert metrics["precision"] == "0.926829"
-    assert metrics["recall"] == "0.974359"
-    assert metrics["f1"] == "0.950000"
+    assert metrics["precision"] == "0.916667"
+    assert metrics["recall"] == "0.970588"
+    assert metrics["f1"] == "0.942857"
 
 
 def test_the_report_breaks_metrics_down_by_type_and_rule(
@@ -209,7 +209,7 @@ def test_a_comparison_reports_the_metric_deltas(
     deltas = {entry["name"]: entry for entry in body["metric_deltas"]}
 
     assert set(deltas) == {"precision", "recall", "f1"}
-    assert deltas["recall"]["baseline"] == "0.974359"
+    assert deltas["recall"]["baseline"] == "0.970588"
     assert deltas["recall"]["delta"] == "0.000000"
     assert deltas["recall"]["decreased"] is False
 

@@ -1,18 +1,27 @@
 corpus_id: substation_reference
-corpus_version: "2.0"
+corpus_version: "3.0"
 description: >-
   Reference annotations for the deterministic engineering evidence
   rules. Written by reading the document text, not by recording what
   the extractor produced - a corpus derived from the extractor could
   never find a fault in it.
 
-  Version 2.0 (EPIC 32.E2) adds three documents whose lines are
+  Version 2.0 (EPIC 32.E2) added three documents whose lines are
   transcribed verbatim from a single Italian DSO's HV/MV functional
   diagrams, each carrying the drawing's document code, page and file
   checksum. Documents carrying a `source:` block are REAL evidence;
   the others were authored to exercise a rule, and the two are kept
   distinguishable so a metric cannot quietly measure the extractor
   against itself.
+
+  Version 3.0 (EPIC 32.E4) makes every real source one installation:
+  **Cabina Primaria ALFA 150/20 kV**, an Italian DSO project
+  the reference works order. The CP Beta drawing the HV-line and gas-alarm samples came
+  from was retired with that milestone; the transformer sample was
+  already Alfa and is unchanged. A corpus drawn from one plant is
+  what lets a cross-document question be asked at all, and the source
+  documents themselves stay outside this repository - only their
+  identity, checksum, page and transcribed lines are recorded here.
 annotated_against_policy_version: "2.0"
 annotated_rule_versions:
   designation_generic: "2.0"
@@ -449,137 +458,29 @@ documents:
               character_end: 18
           source_text: "TR-1"
   - document_ref: real_linee_at_terminal_blocks
-    title: Sheet index - terminal blocks (LINEE AT, real source)
+    title: Sheet index - terminal blocks (LINEA AT, real source)
     source:
-      document_code: "REF-B-S-025_00 LINEE AT - SCHEMA FUNZIONALE"
-      page_number: 5
-      checksum: "835469be09ab822ba2c53cbdae13f6fef889b589b6fa4a5b131409f7aa3fe728"
+      document_code: "REF-A-S-025_01 LINEA AT SCHEMA FUNZIONALE"
+      page_number: 6
+      checksum: "bd313cef1e8b9b5124a488f20f612cb3f241a26202cb2c7cd095edbcb1b62f0b"
       note: >-
-        Transcribed verbatim from the sheet index. Dot-qualified product
-        designations with a standalone alphanumeric location aspect - the
-        commonest real shape, and one the pre-32.E2 rules saw as a
-        location-only line.
+        Transcribed verbatim from the sheet index of the CP Alfa HV-line
+        functional diagram. Dot-qualified product designations - the family
+        EPIC 32.E2 made atomic - each written beside its mounting reference.
+
+        The `+189L`, `+189SB`, `+189SS` and `+CASS_TV` tokens on these lines
+        are deliberately NOT annotated. EPIC 32.E4 measured that the governed
+        location-aspect rule recognises only letter-leading forms, so these
+        digit-leading and underscore forms are not observed at all. Annotating
+        them would assert a location vocabulary no one has reviewed; the gap is
+        recorded as an E4 finding for a future extraction milestone instead.
     lines:
-      - "MORSETTIERA -E.AM +GSH002"
-      - "MORSETTIERA -E.TAL +GSH002"
-      - "MORSETTIERA -EV.TVL +GSH002"
-      - "MORSETTIERA -E1.L +GSH002"
-      - "MORSETTIERA -E1.SB +GSH002"
+      - "MORSETTIERA -E1.L +189L"
+      - "MORSETTIERA -E1.T +189L"
+      - "MORSETTIERA -EV.TV +CASS_TV"
+      - "MORSETTIERA -E1.SB +189SB"
+      - "MORSETTIERA -E1.SS +189SS"
     expected:
-      - evidence_type: designation
-        observed_text: "-E.AM"
-        status: observed
-        rule_id: designation_generic
-        rule_version: "2.0"
-        designation: "-E.AM"
-        provenance:
-          page_number: 1
-          section_index: 0
-          paragraph_index: 0
-          block_reading_order: 0
-          line_index: 0
-          token_start: 1
-          token_end: 2
-          spans:
-            - span_reading_order: 0
-              character_start: 12
-              character_end: 17
-          source_text: "-E.AM"
-      - evidence_type: location_aspect
-        observed_text: "+GSH002"
-        status: observed
-        rule_id: location_aspect_iec_81346
-        rule_version: "2.0"
-        designation: "+GSH002"
-        provenance:
-          page_number: 1
-          section_index: 0
-          paragraph_index: 0
-          block_reading_order: 0
-          line_index: 0
-          token_start: 2
-          token_end: 3
-          spans:
-            - span_reading_order: 0
-              character_start: 18
-              character_end: 25
-          source_text: "+GSH002"
-      - evidence_type: designation
-        observed_text: "-E.TAL"
-        status: observed
-        rule_id: designation_generic
-        rule_version: "2.0"
-        designation: "-E.TAL"
-        provenance:
-          page_number: 1
-          section_index: 0
-          paragraph_index: 0
-          block_reading_order: 0
-          line_index: 1
-          token_start: 1
-          token_end: 2
-          spans:
-            - span_reading_order: 1
-              character_start: 12
-              character_end: 18
-          source_text: "-E.TAL"
-      - evidence_type: location_aspect
-        observed_text: "+GSH002"
-        status: observed
-        rule_id: location_aspect_iec_81346
-        rule_version: "2.0"
-        designation: "+GSH002"
-        provenance:
-          page_number: 1
-          section_index: 0
-          paragraph_index: 0
-          block_reading_order: 0
-          line_index: 1
-          token_start: 2
-          token_end: 3
-          spans:
-            - span_reading_order: 1
-              character_start: 19
-              character_end: 26
-          source_text: "+GSH002"
-      - evidence_type: designation
-        observed_text: "-EV.TVL"
-        status: observed
-        rule_id: designation_generic
-        rule_version: "2.0"
-        designation: "-EV.TVL"
-        provenance:
-          page_number: 1
-          section_index: 0
-          paragraph_index: 0
-          block_reading_order: 0
-          line_index: 2
-          token_start: 1
-          token_end: 2
-          spans:
-            - span_reading_order: 2
-              character_start: 12
-              character_end: 19
-          source_text: "-EV.TVL"
-      - evidence_type: location_aspect
-        observed_text: "+GSH002"
-        status: observed
-        rule_id: location_aspect_iec_81346
-        rule_version: "2.0"
-        designation: "+GSH002"
-        provenance:
-          page_number: 1
-          section_index: 0
-          paragraph_index: 0
-          block_reading_order: 0
-          line_index: 2
-          token_start: 2
-          token_end: 3
-          spans:
-            - span_reading_order: 2
-              character_start: 20
-              character_end: 27
-          source_text: "+GSH002"
       - evidence_type: designation
         observed_text: "-E1.L"
         status: observed
@@ -591,39 +492,77 @@ documents:
           section_index: 0
           paragraph_index: 0
           block_reading_order: 0
-          line_index: 3
+          line_index: 0
           token_start: 1
           token_end: 2
           spans:
-            - span_reading_order: 3
+            - span_reading_order: 0
               character_start: 12
               character_end: 17
           source_text: "-E1.L"
-      - evidence_type: location_aspect
-        observed_text: "+GSH002"
+      - evidence_type: designation
+        observed_text: "-E1.T"
         status: observed
-        rule_id: location_aspect_iec_81346
+        rule_id: designation_generic
         rule_version: "2.0"
-        designation: "+GSH002"
+        designation: "-E1.T"
         provenance:
           page_number: 1
           section_index: 0
           paragraph_index: 0
           block_reading_order: 0
-          line_index: 3
-          token_start: 2
-          token_end: 3
+          line_index: 1
+          token_start: 1
+          token_end: 2
           spans:
-            - span_reading_order: 3
-              character_start: 18
-              character_end: 25
-          source_text: "+GSH002"
+            - span_reading_order: 1
+              character_start: 12
+              character_end: 17
+          source_text: "-E1.T"
+      - evidence_type: designation
+        observed_text: "-EV.TV"
+        status: observed
+        rule_id: designation_generic
+        rule_version: "2.0"
+        designation: "-EV.TV"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 2
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 2
+              character_start: 12
+              character_end: 18
+          source_text: "-EV.TV"
       - evidence_type: designation
         observed_text: "-E1.SB"
         status: observed
         rule_id: designation_generic
         rule_version: "2.0"
         designation: "-E1.SB"
+        provenance:
+          page_number: 1
+          section_index: 0
+          paragraph_index: 0
+          block_reading_order: 0
+          line_index: 3
+          token_start: 1
+          token_end: 2
+          spans:
+            - span_reading_order: 3
+              character_start: 12
+              character_end: 18
+          source_text: "-E1.SB"
+      - evidence_type: designation
+        observed_text: "-E1.SS"
+        status: observed
+        rule_id: designation_generic
+        rule_version: "2.0"
+        designation: "-E1.SS"
         provenance:
           page_number: 1
           section_index: 0
@@ -636,26 +575,7 @@ documents:
             - span_reading_order: 4
               character_start: 12
               character_end: 18
-          source_text: "-E1.SB"
-      - evidence_type: location_aspect
-        observed_text: "+GSH002"
-        status: observed
-        rule_id: location_aspect_iec_81346
-        rule_version: "2.0"
-        designation: "+GSH002"
-        provenance:
-          page_number: 1
-          section_index: 0
-          paragraph_index: 0
-          block_reading_order: 0
-          line_index: 4
-          token_start: 2
-          token_end: 3
-          spans:
-            - span_reading_order: 4
-              character_start: 19
-              character_end: 26
-          source_text: "+GSH002"
+          source_text: "-E1.SS"
   - document_ref: real_tr_terminal_blocks
     title: Sheet index - terminal blocks (TR PUG, real source)
     source:
@@ -826,25 +746,28 @@ documents:
               character_end: 22
           source_text: "+TELAIO"
   - document_ref: real_gas_alarm_prose
-    title: Gas alarm sheet titles - SF6 false-positive probe (LINEE AT, real source)
+    title: Gas alarm sheet titles - SF6 false-positive probe (LINEA AT, real source)
     source:
-      document_code: "REF-B-S-025_00 LINEE AT - SCHEMA FUNZIONALE"
+      document_code: "REF-A-S-025_01 LINEA AT SCHEMA FUNZIONALE"
       page_number: 3
-      checksum: "835469be09ab822ba2c53cbdae13f6fef889b589b6fa4a5b131409f7aa3fe728"
+      checksum: "bd313cef1e8b9b5124a488f20f612cb3f241a26202cb2c7cd095edbcb1b62f0b"
       note: >-
-        Transcribed verbatim. SF6 is sulphur hexafluoride, the
-        insulating gas, and is NOT annotated as a designation because it
-        is not one. The extractor observes it anyway: it is shaped
-        exactly like the real designations MI1, MO2 and Q8 in the same
-        drawings, so no grammar separates them, and on review neither a
-        token catalogue nor a two-word context rule was defensible.
-        These lines therefore MEASURE a known false positive instead of
-        hiding it. P1 and P4 on the same lines ARE designations and are
-        annotated as such.
+        Transcribed verbatim. SF6 is sulphur hexafluoride, the insulating gas,
+        and is NOT annotated as a designation because it is not one. The
+        extractor observes it anyway: it is shaped exactly like the real
+        designations MI1, MO2 and Q8 in the same drawings, so no grammar
+        separates them, and on review neither a token catalogue nor a two-word
+        context rule was defensible. These lines therefore MEASURE a known
+        false positive instead of hiding it. P1 and P4 on the same lines ARE
+        designations and are annotated as such.
+
+        Migrated from the CP Beta drawing to CP Alfa by EPIC 32.E4: the
+        same sheet-index wording occurs in both, so the probe survives the
+        corpus replacement unchanged in intent.
     lines:
-      - "IBRIDO AT - BASSA PRESSIONE SF6 (P1 GAS)"
-      - "IBRIDO AT - BASSA PRESSIONE SF6 (P4 GAS)"
-      - "TA AT - ALLARMI SF6 TA (63GTAAL)"
+      - "INTERRUTTORE AT – BASSA PRESSIONE SF6 (P1 GAS)"
+      - "INTERRUTTORE AT – BASSA PRESSIONE SF6 (P4 GAS)"
+      - "TA AT – ALLARMI SF6 TA (63GTAAL)"
     expected:
       - evidence_type: designation
         observed_text: "P1"
@@ -862,8 +785,8 @@ documents:
           token_end: 7
           spans:
             - span_reading_order: 0
-              character_start: 33
-              character_end: 35
+              character_start: 39
+              character_end: 41
           source_text: "P1"
       - evidence_type: designation
         observed_text: "P4"
@@ -881,6 +804,6 @@ documents:
           token_end: 7
           spans:
             - span_reading_order: 1
-              character_start: 33
-              character_end: 35
+              character_start: 39
+              character_end: 41
           source_text: "P4"

@@ -73,7 +73,7 @@ def test_the_report_records_every_version_it_ran_under(
     report = _evaluate(db_session).stored.report
 
     assert report.corpus_id == REFERENCE_CORPUS
-    assert report.corpus_version == "2.0"
+    assert report.corpus_version == "3.0"
     assert report.extraction_policy_version == "2.0"
     assert report.provenance_policy is ProvenanceMatchPolicy.EXACT
     assert dict(report.rule_versions)["designation_generic"] == "2.0"
@@ -88,10 +88,10 @@ def test_the_measured_metrics_are_exact(db_session: Session) -> None:
         metrics.true_positives,
         metrics.false_positives,
         metrics.false_negatives,
-    ) == (38, 3, 1)
-    assert metrics.precision == Decimal("0.926829")
-    assert metrics.recall == Decimal("0.974359")
-    assert metrics.f1 == Decimal("0.950000")
+    ) == (33, 3, 1)
+    assert metrics.precision == Decimal("0.916667")
+    assert metrics.recall == Decimal("0.970588")
+    assert metrics.f1 == Decimal("0.942857")
 
 
 def test_metrics_are_broken_down_by_document_type_and_rule(

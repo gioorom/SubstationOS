@@ -82,14 +82,14 @@ def test_a_dot_qualified_designation_yields_one_observation() -> None:
     )
 
     source = representation(
-        page(1, text_block(0, span(0, 0, "MORSETTIERA -E1.L +GSH002")))
+        page(1, text_block(0, span(0, 0, "MORSETTIERA -E.AM +GSH003")))
     )
     result = extract_evidence(segment_canonical_document(source))
 
     assert [
         item.observed_text
         for item in result.of_type(EvidenceType.DESIGNATION)
-    ] == ["-E1.L"]
+    ] == ["-E.AM"]
 
 
 def test_no_module_decomposes_a_designation_on_the_dot() -> None:

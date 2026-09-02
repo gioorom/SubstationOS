@@ -320,8 +320,9 @@ def test_context_assembly_is_deterministic(
 # an opinion about it.
 #
 # Verbatim from a committed an Italian DSO HV/MV functional diagram
-# (LINEE AT, sha256 835469be…).
-REAL_TERMINAL_BLOCK = "MORSETTIERA -E.AM +GSH002"
+# (TR, REF-A-S-027_01, sha256 22f27637…, p.6).
+# CP Alfa 150/20 kV.
+REAL_TERMINAL_BLOCK = "MORSETTIERA -E.AM +GSH003"
 
 
 @pytest.fixture()
@@ -349,7 +350,7 @@ def test_a_line_scoped_relationship_is_retrievable_by_kind(
     assert relationship.subject.kind is GraphNodeKind.ENGINEERING_ASSET
     assert relationship.subject.label == "-E.AM"
     assert relationship.object.kind is GraphNodeKind.STRUCTURAL_LOCATION
-    assert relationship.object.label == "+GSH002"
+    assert relationship.object.label == "+GSH003"
 
 
 def test_a_line_scoped_relationship_reaches_the_context_package(
@@ -365,7 +366,7 @@ def test_a_line_scoped_relationship_reaches_the_context_package(
 
     selected = package.selected_relationships[0]
 
-    assert selected.result.relationship.object.label == "+GSH002"
+    assert selected.result.relationship.object.label == "+GSH003"
     assert selected.result.provenance.statement_key
     assert selected.result.provenance.review_id > 0
 

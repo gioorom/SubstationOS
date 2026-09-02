@@ -5,12 +5,12 @@ EPIC 32.P1 built the whole structural-location path - evidence, entity,
 fact, statement, review, promotion, graph, retrieval, reasoning - on a
 fact rule scoped to **one token**: the ``+E01`` inside ``+E01-QA1``.
 
-No real drawing in this repository writes that form. The committed
-functional diagram carries 52 location aspects across 171 pages and
-**not one** is compound; every one of them stands as its own token
-beside the designation it belongs to:
+No real drawing in this repository writes that form. EPIC 32.E4
+measured the whole CP Alfa corpus - ten drawings, 630 pages - and
+found **not one** compound token in any of them; every location aspect
+stands as its own token beside the designation it belongs to:
 
-    MORSETTIERA -E.AM +GSH002
+    MORSETTIERA -E.AM +GSH003
 
 So the relationship P1 shipped was unreachable from real evidence. This
 milestone adds one construction rule for that shape, and these tests are
@@ -48,6 +48,9 @@ from app.domain.engineering_evidence.evidence_extractor import (
     extract_evidence,
 )
 from app.domain.engineering_evidence.evidence_models import EvidenceType
+from app.domain.engineering_evidence.evidence_rules import (
+    match_location_aspect,
+)
 from app.domain.engineering_facts.fact_construction_rules import (
     COMPOUND_REFERENCE_DESIGNATION_RULE,
     SAME_LINE_ASSOCIATION_RULE,
@@ -75,7 +78,10 @@ from tests.domain._canonical_text_support import (
     text_block,
 )
 from tests.domain.test_real_designation_evidence import (
+    REAL_BARE_PRODUCT_LINES,
     REAL_DOT_PRODUCT_LINES,
+    REAL_DOT_PRODUCT_LOCATED_LINES,
+    REAL_UNGOVERNED_LOCATION_FORMS,
 )
 
 
@@ -154,12 +160,12 @@ def test_every_real_source_line_now_produces_a_location_fact() -> None:
     """
     The point of the milestone, on the lines that motivated it.
 
-    Each of these is verbatim from a committed an Italian DSO functional
-    diagram - see ``test_real_designation_evidence`` for the document
-    codes and checksums. Before P2 every one of them produced nothing.
+    Each of these is verbatim from the CP Alfa corpus - see
+    ``test_real_designation_evidence`` for the document codes and
+    checksums. Before P2 every one of them produced nothing.
     """
 
-    for line in REAL_DOT_PRODUCT_LINES:
+    for line in REAL_BARE_PRODUCT_LINES + REAL_DOT_PRODUCT_LOCATED_LINES:
         facts = _location_facts(line)
 
         assert len(facts) == 1, line
@@ -168,8 +174,35 @@ def test_every_real_source_line_now_produces_a_location_fact() -> None:
         )
 
 
+def test_the_hv_line_terminal_blocks_are_a_measured_extraction_gap(
+) -> None:
+    """
+    **EPIC 32.E4 finding, pinned so it cannot be forgotten.**
+
+    The HV-line sheet index writes its terminal blocks in exactly P2's
+    shape - ``MORSETTIERA -E1.L +189L`` - one designation and one
+    mounting reference as separate tokens on one line. P2 still produces
+    nothing, and the reason is upstream of it: the governed location
+    rule recognises only letter-leading aspects, so ``+189L`` is never
+    observed as evidence at all.
+
+    This is an *extraction* gap, not an association gap, and the
+    distinction is the whole point. Widening P2 would not help; widening
+    the location rule is a separate milestone with its own false-positive
+    problem (the same corpus writes ``+110V`` and ``+24V`` for supply
+    rails, and a phone number as ``+390000000``).
+    """
+
+    for line in REAL_DOT_PRODUCT_LINES:
+        assert _location_facts(line) == [], line
+
+    # And the reason: not one of those mounting references is observed.
+    for form in REAL_UNGOVERNED_LOCATION_FORMS:
+        assert match_location_aspect(form) is None, form
+
+
 def test_a_real_source_line_produces_the_governed_statement() -> None:
-    statements = _located_in("MORSETTIERA -E.AM +GSH002")
+    statements = _located_in("MORSETTIERA -E.AM +GSH003")
 
     assert len(statements) == 1
     assert statements[0].statement_type is SemanticStatementType.IS_LOCATED_IN
@@ -183,24 +216,24 @@ def test_the_statement_names_the_designation_and_the_location() -> None:
     """Exact subject and object identity - the fact must not have paired
     the location with the word ``MORSETTIERA`` or with itself."""
 
-    entities = _entities("MORSETTIERA -E.AM +GSH002")
+    entities = _entities("MORSETTIERA -E.AM +GSH003")
     by_key = {
         entity.entity_key: entity.label for entity in entities.entities
     }
-    statement = _located_in("MORSETTIERA -E.AM +GSH002")[0]
+    statement = _located_in("MORSETTIERA -E.AM +GSH003")[0]
 
     assert by_key[statement.subject_entity_key] == "-E.AM"
-    assert by_key[statement.object_entity_key] == "+GSH002"
+    assert by_key[statement.object_entity_key] == "+GSH003"
 
 
 def test_the_real_locations_stay_unclassified_structural_objects() -> None:
-    """``+GSH002`` is a designated location. Not a bay, panel or room -
+    """``+GSH003`` is a designated location. Not a bay, panel or room -
     P2 assigns no physical semantics it did not have."""
 
-    entities = _entities("MORSETTIERA -E.AM +GSH002")
+    entities = _entities("MORSETTIERA -E.AM +GSH003")
     locations = entities.of_type(EntityType.STRUCTURAL_LOCATION)
 
-    assert [entity.label for entity in locations] == ["+GSH002"]
+    assert [entity.label for entity in locations] == ["+GSH003"]
 
 
 # --- Provenance ----------------------------------------------------------
@@ -208,12 +241,12 @@ def test_the_real_locations_stay_unclassified_structural_objects() -> None:
 
 def test_the_fact_cites_both_observations_that_put_the_pair_together(
 ) -> None:
-    fact = _location_facts("MORSETTIERA -E.AM +GSH002")[0]
+    fact = _location_facts("MORSETTIERA -E.AM +GSH003")[0]
 
     assert len(fact.subject_support) == 1
     assert len(fact.object_support) == 1
     assert fact.subject_support[0].observed_text == "-E.AM"
-    assert fact.object_support[0].observed_text == "+GSH002"
+    assert fact.object_support[0].observed_text == "+GSH003"
     assert fact.subject_support[0].role is SupportRole.SUBJECT
     assert fact.object_support[0].role is SupportRole.OBJECT
 
@@ -225,7 +258,7 @@ def test_the_support_locates_both_observations_on_one_line() -> None:
     agree.
     """
 
-    fact = _location_facts("MORSETTIERA -E.AM +GSH002")[0]
+    fact = _location_facts("MORSETTIERA -E.AM +GSH003")[0]
     subject = fact.subject_support[0]
     obj = fact.object_support[0]
 
@@ -238,7 +271,7 @@ def test_the_support_shows_the_two_observations_were_different_tokens(
     """What separates this rule from the compound one, visible on the
     stored fact rather than only in the catalogue."""
 
-    fact = _location_facts("MORSETTIERA -E.AM +GSH002")[0]
+    fact = _location_facts("MORSETTIERA -E.AM +GSH003")[0]
     subject = fact.subject_support[0]
     obj = fact.object_support[0]
 
@@ -249,7 +282,7 @@ def test_the_support_shows_the_two_observations_were_different_tokens(
 
 
 def test_the_fact_names_the_rule_and_version_that_built_it() -> None:
-    fact = _location_facts("MORSETTIERA -E.AM +GSH002")[0]
+    fact = _location_facts("MORSETTIERA -E.AM +GSH003")[0]
 
     assert fact.construction_rule_id == "same_line_location_association"
     assert fact.construction_rule_version == "1.0"
@@ -261,13 +294,13 @@ def test_the_fact_names_the_rule_and_version_that_built_it() -> None:
 
 def test_two_designations_and_one_location_produce_no_fact() -> None:
     """
-    Which block ``+GSH002`` belongs to is exactly what the line does not
+    Which block ``+GSH003`` belongs to is exactly what the line does not
     say. Guessing would put a terminal block in the wrong place.
     """
 
-    result = _facts("MORSETTIERA -E.AM -E.TAL +GSH002")
+    result = _facts("MORSETTIERA -E.AM -E.TAL +GSH003")
 
-    assert _location_facts("MORSETTIERA -E.AM -E.TAL +GSH002") == []
+    assert _location_facts("MORSETTIERA -E.AM -E.TAL +GSH003") == []
     assert any(
         diagnostic.reason is AmbiguityReason.MULTIPLE_SUBJECTS
         for diagnostic in result.diagnostics
@@ -278,7 +311,7 @@ def test_one_designation_and_two_locations_produce_no_fact() -> None:
     """The document contradicted itself about where the block is, and
     this rule does not choose a side."""
 
-    assert _location_facts("MORSETTIERA -E.AM +GSH002 +GSH003") == []
+    assert _location_facts("MORSETTIERA -E.AM +GSH001 +GSH003") == []
 
 
 def test_one_designation_and_two_locations_is_recorded_as_a_refusal(
@@ -294,7 +327,7 @@ def test_one_designation_and_two_locations_is_recorded_as_a_refusal(
     two places.
     """
 
-    result = _facts("MORSETTIERA -E.AM +GSH002 +GSH003")
+    result = _facts("MORSETTIERA -E.AM +GSH001 +GSH003")
 
     assert [
         diagnostic.reason for diagnostic in result.diagnostics
@@ -321,7 +354,7 @@ def test_one_designation_and_many_quantities_is_not_a_refusal() -> None:
 def test_two_designations_and_two_locations_produce_no_fact() -> None:
     """No cartesian product, and no pairing by order or proximity."""
 
-    assert _location_facts("-E.AM -E.TAL +GSH002 +GSH003") == []
+    assert _location_facts("-E.AM -E.TAL +GSH001 +GSH003") == []
 
 
 def test_a_designation_and_a_location_on_different_lines_do_not_associate(
@@ -329,11 +362,11 @@ def test_a_designation_and_a_location_on_different_lines_do_not_associate(
     """Same page, same block, adjacent lines. A line is the unit, and
     nothing widens it."""
 
-    assert _location_facts("MORSETTIERA -E.AM", "+GSH002") == []
+    assert _location_facts("MORSETTIERA -E.AM", "+GSH003") == []
 
 
 def test_a_location_with_no_designation_produces_no_fact() -> None:
-    assert _location_facts("MORSETTIERA +GSH002") == []
+    assert _location_facts("MORSETTIERA +GSH003") == []
 
 
 def test_a_designation_with_no_location_produces_no_fact() -> None:
@@ -344,13 +377,13 @@ def test_the_nearest_location_is_not_chosen_on_an_ambiguous_line() -> None:
     """
     The mutation this file most needs to kill.
 
-    ``-E.AM`` is adjacent to ``+GSH002``; ``-E.TAL`` is four tokens away.
+    ``-E.AM`` is adjacent to ``+GSH003``; ``-E.TAL`` is four tokens away.
     An implementation that broke the tie by distance, by token order, or
     by taking the first subject would produce a fact here. The rule
     produces none.
     """
 
-    assert _location_facts("-E.AM +GSH002 e anche -E.TAL") == []
+    assert _location_facts("-E.AM +GSH003 e anche -E.TAL") == []
 
 
 def test_an_ambiguous_line_does_not_suppress_a_clean_one() -> None:
@@ -358,12 +391,12 @@ def test_an_ambiguous_line_does_not_suppress_a_clean_one() -> None:
     refused, and the diagnostic still records it."""
 
     facts = _location_facts(
-        "MORSETTIERA -E.AM -E.TAL +GSH002",
-        "MORSETTIERA -E1.L +GSH002",
+        "MORSETTIERA -E.AM -E.TAL +GSH003",
+        "MORSETTIERA -E.AM +GSH003",
     )
 
     assert len(facts) == 1
-    assert facts[0].object_support[0].observed_text == "+GSH002"
+    assert facts[0].object_support[0].observed_text == "+GSH003"
 
 
 # --- The overlap with the compound rule ----------------------------------
@@ -512,7 +545,7 @@ def test_a_designation_is_not_placed_in_a_location_by_a_quantity_rule(
     """The two line-scoped rules read different entity types and must not
     borrow each other's objects."""
 
-    facts = _facts("-E.AM +GSH002 630 kVA")
+    facts = _facts("-E.AM +GSH003 630 kVA")
     predicates = {fact.predicate for fact in facts.facts}
 
     assert predicates == {
@@ -528,7 +561,7 @@ def test_the_evidence_and_entity_layers_were_not_changed() -> None:
     evidence type and no new entity type appear anywhere in it.
     """
 
-    entities = _entities("MORSETTIERA -E.AM +GSH002")
+    entities = _entities("MORSETTIERA -E.AM +GSH003")
     evidence_types = {
         reference.evidence_type
         for entity in entities.entities
@@ -548,15 +581,21 @@ def test_the_evidence_and_entity_layers_were_not_changed() -> None:
 def test_no_hierarchy_is_derived_from_a_dot_qualified_designation(
 ) -> None:
     """
-    ``-E1.L`` and ``-E1.SB`` share a prefix and a location. P2 relates
-    each to ``+GSH002`` and **nothing** to each other, and neither to a
-    synthesised ``-E1``.
+    ``-E1.L`` and ``-E1.SB`` are both real CP Alfa forms and share
+    the ``-E1`` prefix. P2 relates each to ``+GSH003`` and **nothing**
+    to each other, and neither to a synthesised ``-E1``.
+
+    The shared prefix is the whole point of the case, so it must not be
+    optimised away: a pair that did not share one would assert nothing
+    about prefix synthesis.
     """
 
-    entities = _entities("MORSETTIERA -E1.L +GSH002", "MORSETTIERA -E1.SB +GSH002")
+    entities = _entities(
+        "MORSETTIERA -E1.L +GSH003", "MORSETTIERA -E1.SB +GSH003"
+    )
     labels = {entity.label for entity in entities.entities}
     statements = _located_in(
-        "MORSETTIERA -E1.L +GSH002", "MORSETTIERA -E1.SB +GSH002"
+        "MORSETTIERA -E1.L +GSH003", "MORSETTIERA -E1.SB +GSH003"
     )
 
     assert "-E1" not in labels
@@ -571,6 +610,6 @@ def test_no_hierarchy_is_derived_from_a_dot_qualified_designation(
 
 
 def test_determinism_over_the_whole_chain() -> None:
-    assert _located_in("MORSETTIERA -E.AM +GSH002") == _located_in(
-        "MORSETTIERA -E.AM +GSH002"
+    assert _located_in("MORSETTIERA -E.AM +GSH003") == _located_in(
+        "MORSETTIERA -E.AM +GSH003"
     )

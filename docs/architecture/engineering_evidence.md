@@ -540,7 +540,13 @@ improvement.
   extraction from assembled text; migrating it onto this layer is a later
   milestone, and an architecture test pins the current absence of that
   dependency so the change will be deliberate when it comes.
-- **The reference corpus is now part real** (EPIC 32.E2). Three of its
+- **The reference corpus is one real installation** (EPIC 32.E4).
+  Every `source:` block names CP Alfa 150/20 kV, an Italian DSO
+  project the reference works order, and the source drawings are external inputs rather
+  than repository files - the corpus records their identity, checksum
+  and page, and the lines transcribed from them.
+
+- **The reference corpus is part real** (EPIC 32.E2). Three of its
   eight documents are transcribed verbatim from a single Italian DSO's
   drawings and carry the document code, page and file checksum; the other
   five were written to exercise the rules. `ReferenceDocument.source`
