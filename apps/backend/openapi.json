@@ -14,7 +14,8 @@
    "AmbiguityReason": {
     "description": "Why a line that contained candidates produced no fact.\n\nRecorded as a **diagnostic**, never as a fact. Ambiguous layout must\nnot become a confirmed association, and a consumer reading facts must\nnot be able to see these at all - which is why they live in their own\ntable rather than as facts with a status.",
     "enum": [
-     "multiple_subjects"
+     "multiple_subjects",
+     "multiple_objects"
     ],
     "title": "AmbiguityReason",
     "type": "string"

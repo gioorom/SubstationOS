@@ -63,6 +63,8 @@ import {
   DEFAULT_PAGE_SIZE,
   SORT_DIRECTIONS,
   SEMANTIC_STATEMENT_STATUSES,
+  FACT_AMBIGUITY_REASONS,
+  SEMANTIC_AMBIGUITY_REASONS,
   SEMANTIC_STATEMENT_TYPES,
   SUPPORT_ROLES,
 } from "@/lib/contracts";
@@ -132,6 +134,13 @@ describe.runIf(schema !== null)("enums match the backend", () => {
     ["PromotionRefusal", PROMOTION_REFUSALS],
     ["SemanticStatementType", SEMANTIC_STATEMENT_TYPES],
     ["SemanticStatementStatus", SEMANTIC_STATEMENT_STATUSES],
+    // EPIC 33.R2. Both diagnostic vocabularies reach the client through
+    // FactSetRead.diagnostics / SemanticSetRead.diagnostics, and neither
+    // was checked here. A value added to the backend enum therefore
+    // rendered as an undefined label with nothing failing - which is
+    // exactly what happened to `multiple_objects`.
+    ["AmbiguityReason", FACT_AMBIGUITY_REASONS],
+    ["SemanticAmbiguityReason", SEMANTIC_AMBIGUITY_REASONS],
     // Milestone 30.1.3: the governed query vocabularies. A member here
     // that the backend does not declare is a filter the API refuses.
     ["ProjectSortField", PROJECT_SORT_FIELDS],

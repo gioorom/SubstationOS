@@ -484,7 +484,10 @@ export const SUPPORT_ROLES = ["subject", "object"] as const;
 
 export type SupportRole = (typeof SUPPORT_ROLES)[number];
 
-export const FACT_AMBIGUITY_REASONS = ["multiple_subjects"] as const;
+export const FACT_AMBIGUITY_REASONS = [
+  "multiple_subjects",
+  "multiple_objects",
+] as const;
 
 export type FactAmbiguityReason =
   (typeof FACT_AMBIGUITY_REASONS)[number];
@@ -492,6 +495,8 @@ export type FactAmbiguityReason =
 export const FACT_AMBIGUITY_LABELS: Record<FactAmbiguityReason, string> = {
   multiple_subjects:
     "La riga contiene più sigle: non dice a quale apparecchiatura appartiene la grandezza.",
+  multiple_objects:
+    "La riga associa più posizioni alla stessa sigla: il documento si contraddice e la regola non sceglie.",
 };
 
 export const FACT_CONSTRUCTION_FAILURE_CODES = [
