@@ -40,7 +40,7 @@ def test_evaluating_the_reference_corpus_returns_201(
     body = response.json()
     assert body["succeeded"] is True
     assert body["report"]["corpus_id"] == REFERENCE_CORPUS
-    assert body["report"]["corpus_version"] == "3.0"
+    assert body["report"]["corpus_version"] == "3.1"
 
 
 def test_the_report_carries_exact_metrics(api_client: TestClient) -> None:

@@ -73,7 +73,7 @@ def test_the_report_records_every_version_it_ran_under(
     report = _evaluate(db_session).stored.report
 
     assert report.corpus_id == REFERENCE_CORPUS
-    assert report.corpus_version == "3.0"
+    assert report.corpus_version == "3.1"
     assert report.extraction_policy_version == "2.0"
     assert report.provenance_policy is ProvenanceMatchPolicy.EXACT
     assert dict(report.rule_versions)["designation_generic"] == "2.0"

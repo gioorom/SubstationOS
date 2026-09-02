@@ -378,7 +378,9 @@ def test_search_is_case_insensitive_and_partial(
 ) -> None:
     _project(api_client, code="CP-001", name="Cabina Gamma")
 
-    for term in ("gamma", "GAMMA", "aler"):
+    # "amm" is an infix of "Gamma" - the point of the third term is that
+    # a match need not start at a word boundary.
+    for term in ("gamma", "GAMMA", "amm"):
         body = api_client.get("/projects/", params={"search": term}).json()
 
         assert len(body["items"]) == 1, term

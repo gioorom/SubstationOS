@@ -265,7 +265,9 @@ def _source(corpus_id: str, raw: dict | None) -> ReferenceSource | None:
     return ReferenceSource(
         document_code=str(_require(raw, "document_code", corpus_id)),
         page_number=int(_require(raw, "page_number", corpus_id)),
-        checksum=str(_require(raw, "checksum", corpus_id)),
+        source_ref_digest=str(
+            _require(raw, "source_ref_digest", corpus_id)
+        ),
         note=None if raw.get("note") is None else str(raw["note"]),
     )
 

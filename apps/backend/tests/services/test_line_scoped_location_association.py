@@ -9,7 +9,7 @@ decides; these prove that what it decides is what gets persisted, that
 the changed catalogue invalidates what it must, and that nothing older is
 quietly reused in its place.
 
-The source line is verbatim from a committed an Italian DSO HV/MV
+The source line is verbatim from a single Italian DSO's HV/MV
 functional diagram. It is the shape 32.P1's token-scoped rule could not
 read, and the reason this milestone exists.
 """
@@ -34,7 +34,7 @@ from tests.services._derived_set_support import (
     run_pipeline,
 )
 
-# TR, REF-A-S-027_01, sha256 22f27637…, p.6 - a
+# TR, REF-A-S-027_01, p.6 - a
 # terminal block and the location it is in, written the way the drawing
 # writes it: two separate tokens. CP Alfa 150/20 kV.
 REAL_LINE = "MORSETTIERA -E.AM +GSH003"

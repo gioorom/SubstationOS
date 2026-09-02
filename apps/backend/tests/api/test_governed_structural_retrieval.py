@@ -319,8 +319,8 @@ def test_context_assembly_is_deterministic(
 # beneath the statement - which is exactly why neither layer can develop
 # an opinion about it.
 #
-# Verbatim from a committed an Italian DSO HV/MV functional diagram
-# (TR, REF-A-S-027_01, sha256 22f27637…, p.6).
+# Verbatim from a single Italian DSO's HV/MV functional diagram
+# (TR, REF-A-S-027_01, p.6).
 # CP Alfa 150/20 kV.
 REAL_TERMINAL_BLOCK = "MORSETTIERA -E.AM +GSH003"
 

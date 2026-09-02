@@ -540,16 +540,23 @@ improvement.
   extraction from assembled text; migrating it onto this layer is a later
   milestone, and an architecture test pins the current absence of that
   dependency so the change will be deliberate when it comes.
-- **The reference corpus is one real installation** (EPIC 32.E4).
-  Every `source:` block names CP Alfa 150/20 kV, an Italian DSO
-  project the reference works order, and the source drawings are external inputs rather
-  than repository files - the corpus records their identity, checksum
-  and page, and the lines transcribed from them.
+- **The reference corpus is one real installation** (EPIC 32.E4),
+  pseudonymised for publication (EPIC 33.R1, ADR-0033). Every `source:`
+  block names CP Alfa 150/20 kV, a primary substation of a single
+  Italian DSO. The drawings are external inputs rather than repository
+  files, and the identities recorded here are **stable handles**
+  (`REF-A-S-025_01`) that resolve to a real document only through a
+  private map held outside this repository. What each block records is
+  that handle, its digest, the page, and the lines transcribed from it.
 
 - **The reference corpus is part real** (EPIC 32.E2). Three of its
   eight documents are transcribed verbatim from a single Italian DSO's
-  drawings and carry the document code, page and file checksum; the other
-  five were written to exercise the rules. `ReferenceDocument.source`
+  drawings and carry a source handle, a page and a `source_ref_digest`;
+  the other five were written to exercise the rules. The digest is
+  SHA-256 over the handle, **not** over any file - it proves the handle
+  has not drifted and gives two entries from one drawing one identifier;
+  it does not pin a byte-stream, because the bytes are deliberately not
+  here. `ReferenceDocument.source`
   keeps the two distinguishable, so a metric cannot quietly measure the
   extractor against strings written to make it pass.
 - **The real source set is dominated by functional diagrams.** Ten real

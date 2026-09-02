@@ -23,6 +23,7 @@ The three that matter most:
 from __future__ import annotations
 
 import ast
+import hashlib
 from pathlib import Path
 
 APP_ROOT = Path(__file__).resolve().parents[2] / "app"
@@ -324,7 +325,14 @@ def test_the_corpus_marks_which_documents_are_real() -> None:
         assert document.source is not None
         assert document.source.document_code
         assert document.source.page_number > 0
-        assert len(document.source.checksum) == 64
+        # Not a length check. Under ADR-0033 the digest is SHA-256
+        # over the handle, so this fails if either field is edited on
+        # its own - and it enforces the shared-source invariant that
+        # nothing else in the suite guards: two entries transcribed
+        # from one drawing carry one handle and therefore one digest.
+        assert document.source.source_ref_digest == hashlib.sha256(
+            document.source.document_code.encode("utf-8")
+        ).hexdigest()
 
 
 def test_a_real_corpus_document_records_no_local_path() -> None:

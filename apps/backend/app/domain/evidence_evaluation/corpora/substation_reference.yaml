@@ -1,5 +1,5 @@
 corpus_id: substation_reference
-corpus_version: "3.0"
+corpus_version: "3.1"
 description: >-
   Reference annotations for the deterministic engineering evidence
   rules. Written by reading the document text, not by recording what
@@ -15,13 +15,18 @@ description: >-
   against itself.
 
   Version 3.0 (EPIC 32.E4) makes every real source one installation:
-  **Cabina Primaria ALFA 150/20 kV**, an Italian DSO project
-  the reference works order. The CP Beta drawing the HV-line and gas-alarm samples came
-  from was retired with that milestone; the transformer sample was
-  already Alfa and is unchanged. A corpus drawn from one plant is
-  what lets a cross-document question be asked at all, and the source
-  documents themselves stay outside this repository - only their
-  identity, checksum, page and transcribed lines are recorded here.
+  **CP Alfa 150/20 kV**, a primary substation of a single Italian DSO.
+  The CP Beta drawing the HV-line and gas-alarm samples came from was
+  retired with that milestone; the transformer sample was already Alfa
+  and is unchanged. A corpus drawn from one plant is what lets a
+  cross-document question be asked at all.
+
+  Version 3.1 (EPIC 33.R1) pseudonymises the source metadata for public
+  release - see ADR-0033. Installation and drawing identities are stable
+  handles resolved through a private map; the drawings themselves are
+  external inputs and were never in this repository. **No transcribed
+  line and no annotation changed**, so what "correct" means is exactly
+  what it was under 3.0 and the measured baseline is unmoved.
 annotated_against_policy_version: "2.0"
 annotated_rule_versions:
   designation_generic: "2.0"
@@ -462,7 +467,7 @@ documents:
     source:
       document_code: "REF-A-S-025_01 LINEA AT SCHEMA FUNZIONALE"
       page_number: 6
-      checksum: "bd313cef1e8b9b5124a488f20f612cb3f241a26202cb2c7cd095edbcb1b62f0b"
+      source_ref_digest: "bd313cef1e8b9b5124a488f20f612cb3f241a26202cb2c7cd095edbcb1b62f0b"
       note: >-
         Transcribed verbatim from the sheet index of the CP Alfa HV-line
         functional diagram. Dot-qualified product designations - the family
@@ -577,11 +582,11 @@ documents:
               character_end: 18
           source_text: "-E1.SS"
   - document_ref: real_tr_terminal_blocks
-    title: Sheet index - terminal blocks (TR PUG, real source)
+    title: Sheet index - terminal blocks (TR, real source)
     source:
       document_code: "REF-A-S-027_01 TR SCHEMA FUNZIONALE"
       page_number: 6
-      checksum: "22f27637a096a458576705a8b2c088040aef49c6b6ada067a651002628311c8d"
+      source_ref_digest: "22f27637a096a458576705a8b2c088040aef49c6b6ada067a651002628311c8d"
       note: >-
         Transcribed verbatim. Bare product-aspect designations, a
         word-form location aspect (+TELAIO) and a letters-then-digits
@@ -750,7 +755,7 @@ documents:
     source:
       document_code: "REF-A-S-025_01 LINEA AT SCHEMA FUNZIONALE"
       page_number: 3
-      checksum: "bd313cef1e8b9b5124a488f20f612cb3f241a26202cb2c7cd095edbcb1b62f0b"
+      source_ref_digest: "bd313cef1e8b9b5124a488f20f612cb3f241a26202cb2c7cd095edbcb1b62f0b"
       note: >-
         Transcribed verbatim. SF6 is sulphur hexafluoride, the insulating gas,
         and is NOT annotated as a designation because it is not one. The

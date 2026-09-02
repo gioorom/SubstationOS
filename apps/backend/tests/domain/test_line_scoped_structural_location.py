@@ -161,8 +161,8 @@ def test_every_real_source_line_now_produces_a_location_fact() -> None:
     The point of the milestone, on the lines that motivated it.
 
     Each of these is verbatim from the CP Alfa corpus - see
-    ``test_real_designation_evidence`` for the document codes and
-    checksums. Before P2 every one of them produced nothing.
+    ``test_real_designation_evidence`` for the source handles and
+    pages. Before P2 every one of them produced nothing.
     """
 
     for line in REAL_BARE_PRODUCT_LINES + REAL_DOT_PRODUCT_LOCATED_LINES:

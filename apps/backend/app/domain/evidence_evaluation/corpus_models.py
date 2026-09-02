@@ -91,18 +91,33 @@ class ExpectedObservation:
 @dataclass(frozen=True, slots=True)
 class ReferenceSource:
     """
-    Where a real corpus line came from (EPIC 32.E2).
+    Where a real corpus line came from (EPIC 32.E2, pseudonymised by
+    EPIC 33.R1 - see ADR-0033).
 
-    Enough to find the line again in the original drawing, and nothing
-    that ties the corpus to one machine: a **document code** as printed
-    on the drawing, the page it was read from, and the SHA-256 of the
-    file it was read out of. No filesystem path - a corpus that recorded
-    ``C:\\Users\\...`` would be reproducible on exactly one computer.
+    Enough to identify the source **consistently**, and nothing that ties
+    the corpus either to one machine or to one client.
+
+    ``document_code`` is a **stable pseudonymous handle** in a
+    ``REF-<family>-<sheet>`` scheme, not the code printed on the drawing.
+    It resolves to a real document only through a private map held
+    outside this repository. The sheet suffix is kept because the
+    document *type* - an HV-line sheet index versus a transformer one -
+    is engineering signal the corpus makes claims about.
+
+    ``source_ref_digest`` is SHA-256 over that handle. It is **not** a
+    checksum of any file: the drawings are external inputs, and a digest
+    of bytes no reader can obtain would assert a provenance nobody could
+    check. What it does is prove the handle has not drifted, and give two
+    entries transcribed from one drawing one identifier - both
+    recomputable from this file alone.
+
+    No filesystem path - a corpus that recorded ``C:\\Users\\...``
+    would be reproducible on exactly one computer.
     """
 
     document_code: str
     page_number: int
-    checksum: str
+    source_ref_digest: str
     note: str | None = None
 
 

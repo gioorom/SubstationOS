@@ -60,7 +60,7 @@ def test_the_corpus_declares_its_versions(
 ) -> None:
     corpus = repository.load(REFERENCE_CORPUS)
 
-    assert corpus.corpus_version == "3.0"
+    assert corpus.corpus_version == "3.1"
     assert corpus.annotated_against_policy_version == "2.0"
     assert corpus.annotated_rule_versions
 

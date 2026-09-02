@@ -458,8 +458,8 @@ def test_the_same_location_in_two_documents_is_two_governed_locations(
 # change: same statement type, same review lifecycle, same promotion,
 # same edge kind, same provenance shape.
 #
-# Verbatim from a committed an Italian DSO HV/MV functional diagram
-# (TR, REF-A-S-027_01, sha256 22f27637…, p.6):
+# Verbatim from a single Italian DSO's HV/MV functional diagram
+# (TR, REF-A-S-027_01, p.6):
 # a terminal block and the location it sits in, written as two separate
 # tokens on one line. CP Alfa 150/20 kV.
 REAL_TERMINAL_BLOCK = "MORSETTIERA -E.AM +GSH003"

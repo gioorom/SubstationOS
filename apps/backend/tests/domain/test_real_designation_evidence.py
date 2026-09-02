@@ -41,11 +41,12 @@ from tests.domain._canonical_text_support import (
 # --- Real source lines, verbatim -----------------------------------------
 #
 # All lines below are transcribed from the CP Alfa 150/20 kV corpus
-# (EPIC 32.E4). The CP Beta drawing they previously came from was
-# retired with that milestone.
+# (EPIC 32.E4), a primary substation of a single Italian DSO. The CP
+# Beta drawing they previously came from was retired with that
+# milestone. Source handles are pseudonyms - see ADR-0033.
 #
-# LINEA AT  REF-A-S-025_01  sha256 bd313cef… p.6 / p.3
-# TR        REF-A-S-027_01  sha256 22f27637… p.6
+# LINEA AT  REF-A-S-025_01  p.6 / p.3
+# TR        REF-A-S-027_01  p.6
 REAL_DOT_PRODUCT_LINES = (
     "MORSETTIERA -E1.L +189L",
     "MORSETTIERA -E1.T +189L",
