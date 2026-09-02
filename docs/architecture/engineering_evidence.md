@@ -515,16 +515,25 @@ GET  /evidence-evaluation/reports/{baseline}/compare/{candidate}
 
 ### The measured baseline
 
-Against `substation_reference` version 1.0, at extraction policy 1.0:
+Against `substation_reference` version 3.1, at extraction policy 1.0:
 
 | Metric | Value |
 |---|---|
-| True positives | 17 |
-| False positives | 0 |
+| True positives | 33 |
+| False positives | 3 |
 | False negatives | 1 |
-| Precision | 1.000000 |
-| Recall | 0.944444 |
-| F1 | 0.971429 |
+| Precision | 0.916667 |
+| Recall | 0.970588 |
+| F1 | 0.942857 |
+
+These figures are pinned by `tests/infrastructure/test_reference_corpus.py`,
+which also records why each defect is still there.
+
+The three false positives are all `SF6`, and they are deliberate. An
+earlier draft suppressed the token with a catalogue and reported perfect
+precision; that was removed on review, because encoding "SF6 is never an
+engineering designation" as universal truth trades a visible false
+positive for an invisible false negative.
 
 The single miss is `TR-1` in `designation_variants`: the designation
 patterns recognise letters-then-digits, a numeric function code and an

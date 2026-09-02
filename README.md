@@ -330,7 +330,16 @@ Full notes in [`docs/developer_setup.md`](docs/developer_setup.md).
 **3528 backend tests and 314 frontend tests**, all deterministic — no network, no AI
 provider, no wall clock.
 
-The architecture suite is the part worth reading. Numbered invariants are asserted
+Continuous integration runs all of it on every push and pull request against `main`:
+both suites, the frontend type-check, lint and production build, an assertion that
+the migration graph has exactly one head, and a check that the committed OpenAPI
+snapshot still matches the code that generates it. Actions are pinned to commit
+SHAs and the workflow token is read-only.
+
+The architecture suite is the part worth reading — the register lives in
+[`docs/architecture/architecture_freeze_af01.md`](docs/architecture/architecture_freeze_af01.md)
+and names the test proving each invariant; the tests are in
+[`apps/backend/tests/architecture/`](apps/backend/tests/architecture/). Numbered invariants are asserted
 as code rather than described in prose, among them:
 
 - **AF-DET-002** — no deterministic context reaches an LLM. It walks every module of
@@ -386,8 +395,8 @@ Stated plainly, because a reader deserves to know what this does not do.
 
 ## Roadmap
 
-**Near term** — a dependency manifest and a continuous integration pipeline;
-spreadsheet sources as first-class evidence, beginning with cable schedules;
+**Near term** — spreadsheet sources as first-class evidence, beginning with cable
+schedules;
 cross-document entity identity within a project; wiring the Canonical Domain into
 the pipeline so a designation resolves to an equipment type.
 
@@ -412,9 +421,17 @@ engineering truth.
 content.** Uploaded documents live under `storage/`, which is excluded from version
 control, as are `.env` files and local databases. `.gitignore` additionally refuses
 PDF, spreadsheet and CAD formats anywhere in the tree as defence in depth. Where the
-reference corpus records real document text it records only transcribed lines, a
-page reference and a checksum — the source documents themselves stay outside the
-repository.
+reference corpus records real document text it records only transcribed lines and a
+page reference — the source documents themselves stay outside the repository.
+
+**The public reference corpus is pseudonymised.** It quotes transcribed lines from
+one real installation, but the installation, its client and its drawings appear
+under stable pseudonymous handles resolved through a private map held outside this
+repository. The digest recorded beside each line is taken over that handle, not over
+any file: it makes the handle tamper-evident without functioning as a confirmation
+oracle for anyone holding a candidate drawing. What was pseudonymised, what it costs
+and what was rejected instead are recorded in
+[ADR-0033](docs/architecture/adr/0033-pseudonymous-reference-corpus-provenance.md).
 
 Other properties worth stating:
 
@@ -427,7 +444,8 @@ Other properties worth stating:
   content leaves the process.
 - All external documents are treated as untrusted, and YAML is safe-loaded only.
 
-Please report security issues by email rather than opening a public issue.
+Please report security issues privately rather than opening a public issue —
+[`SECURITY.md`](SECURITY.md) says how.
 
 ---
 
@@ -435,7 +453,7 @@ Please report security issues by email rather than opening a public issue.
 
 Alpha, under active development by a single author.
 
-The architecture is frozen at **v1.0** and recorded as 32 Architecture Decision
+The architecture is frozen at **v1.0** and recorded as 33 Architecture Decision
 Records, each stating what was decided, what it costs and what was rejected instead.
 The freeze is not a claim of production readiness — it is an honest map of what is
 settled, what is partial and what is open, so later work builds on a documented
