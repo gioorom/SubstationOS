@@ -225,7 +225,11 @@ Placement rules:
 
 ## 6. Python Conventions
 
-Target runtime: **Python 3.14**.
+Supported runtime: **Python 3.13+**, declared by
+`apps/backend/pyproject.toml`. Development runs on 3.14; CI verifies the
+3.13 floor. The source itself needs nothing newer than 3.10 - the floor is
+set where it is because 3.13 is the oldest interpreter the suite has
+actually been run on, not because any syntax demands it.
 
 - **Always** start every module with `from __future__ import annotations`.
 - Use modern built-in generics and unions: `list[str]`, `dict[str, object]`,

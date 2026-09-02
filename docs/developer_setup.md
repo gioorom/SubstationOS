@@ -11,8 +11,8 @@ frontend's design, see
 
 | Tool | Version | Used by |
 |---|---|---|
-| Python | 3.14 | backend |
-| Node.js | 20+ | frontend |
+| Python | 3.13+ | backend |
+| Node.js | 24.15+ | frontend |
 
 ## Backend
 

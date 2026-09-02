@@ -208,7 +208,7 @@ timeline, a pipeline inspector and a project knowledge-graph view.
 
 | Layer | Choice |
 |---|---|
-| Backend | Python 3.14, FastAPI, SQLAlchemy, Alembic |
+| Backend | Python 3.13+, FastAPI, SQLAlchemy, Alembic |
 | PDF parsing | PyMuPDF, behind a domain-owned parser port |
 | Domain data | YAML, safe-loaded, reviewable without reading Python |
 | Database | SQL, schema owned by Alembic (17 migrations); SQLite in development |
@@ -236,7 +236,7 @@ apps/backend/            Python / FastAPI backend — the primary application
   tests/                 domain, services, api, infrastructure, architecture
 apps/frontend/           Next.js engineering workspace
 docs/architecture/       Architecture Freeze v1.0 and long-form references
-docs/architecture/adr/   32 Architecture Decision Records
+docs/architecture/adr/   33 Architecture Decision Records
 docs/ai-context/         derived navigation layer, regenerated rather than authored
 knowledge/               Canonical Knowledge Protocol and extraction methodology
 scripts/, tools/         operational scripts and PDF tooling
@@ -247,23 +247,35 @@ storage/                 local artifact storage — excluded from version contro
 
 ## Local setup
 
-**Prerequisites:** Python 3.14, Node.js 20+.
+| Prerequisite | Version | Why |
+|---|---|---|
+| Python | 3.13+ | Declared by `apps/backend/pyproject.toml`; the suite is verified on 3.13 and 3.14 |
+| Node.js | 24.15+ | Declared by `apps/frontend/package.json`; `jsdom` sets the floor |
 
-**Backend.** There is no dependency manifest yet — tracked technical debt, not an
-oversight. Install into a virtual environment:
+A green backend suite needs no database server, no AI credential and no network.
 
-```
-fastapi  sqlalchemy  alembic  pydantic  python-dotenv  anthropic
-pymupdf  pyyaml  pytest  httpx  uvicorn
-```
+**Backend.**
 
 ```bash
 cd apps/backend
-cp .env.example .env             # nothing has a fallback secret; blanks fail loudly
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -e ".[dev,server]"
+
+cp .env.example .env             # every line may stay blank
 alembic upgrade head             # `alembic stamp head` for an existing dev database
-uvicorn app.main:app --reload    # http://127.0.0.1:8000
 python -m pytest
+uvicorn app.main:app --reload --host localhost    # http://localhost:8000
 ```
+
+Run backend commands from `apps/backend/`. The development database is
+`sqlite:///./substationos.db`, resolved against the working directory, so the
+directory you are in decides which database you are talking to.
+
+**Serve the API on `localhost`, not `127.0.0.1`.** The session cookie is
+`SameSite=Lax`, and although ports are ignored, `localhost` and `127.0.0.1` are
+different hosts. Serve it from the host the frontend expects, or every request
+arrives anonymous with no error to read.
 
 The schema is owned by Alembic and never by application startup: an unmigrated
 database fails loudly at first query rather than being silently patched into shape.
@@ -278,14 +290,29 @@ enable it and supply a credential.
 
 ```bash
 cd apps/frontend
-npm install
+npm ci                           # `npm install` only when changing dependencies
 npm run dev                      # http://localhost:3000
+
 npm test                         # vitest
 npm run typecheck                # tsc --noEmit
+npm run lint                     # eslint
+npm run build                    # next build
 ```
 
 Configuration is one variable, `NEXT_PUBLIC_API_BASE_URL`, defaulting to
-`http://127.0.0.1:8000`. Full notes in [`docs/developer_setup.md`](docs/developer_setup.md).
+`http://localhost:8000`.
+
+**Verifying the API contract.** The frontend transcribes the backend's enums and
+asserts them against a committed OpenAPI snapshot. After changing any router,
+schema or enum, regenerate it from the repository root and re-run the frontend
+suite — a failure there means the client describes an API that no longer exists:
+
+```bash
+python scripts/export_openapi.py
+npm --prefix apps/frontend test
+```
+
+Full notes in [`docs/developer_setup.md`](docs/developer_setup.md).
 
 ---
 
@@ -349,7 +376,10 @@ Stated plainly, because a reader deserves to know what this does not do.
   persisted nowhere.
 - **Some pre-governed-graph surfaces are still live** — four contexts predate the
   governed graph and remain active during migration.
-- **No dependency manifest, no lockfile, no CI pipeline, no deployment tooling.**
+- **No dependency lockfile and no deployment tooling.** Dependencies are
+  declared with bounds in `pyproject.toml` and `package.json`, and the frontend
+  has `package-lock.json`, but the backend has no pinned lock — a clean install
+  resolves the latest compatible release rather than a byte-identical set.
   SQLite in development. Single author, alpha maturity.
 
 ---
@@ -421,10 +451,11 @@ the problem are welcome.
 
 | Document | Covers |
 |---|---|
+| [`docs/README.md`](docs/README.md) | **Start here** — an index to the 83 documents below |
 | [`CLAUDE.md`](CLAUDE.md) | Engineering manual: architecture, conventions, workflow, what must never be done |
 | [`PRODUCT_VISION.md`](PRODUCT_VISION.md) | Product vision, mission, modules, long-range narrative |
 | [`docs/architecture/`](docs/architecture/) | Architecture Freeze v1.0 and long-form references per context |
-| [`docs/architecture/adr/`](docs/architecture/adr/) | 32 Architecture Decision Records |
+| [`docs/architecture/adr/`](docs/architecture/adr/) | 33 Architecture Decision Records |
 | [`docs/developer_setup.md`](docs/developer_setup.md) | Local development setup |
 | [`docs/project/PRODUCT_DEVELOPMENT_PLAN.md`](docs/project/PRODUCT_DEVELOPMENT_PLAN.md) | Roadmap: status, EPICs, milestones |
 
