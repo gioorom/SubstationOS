@@ -105,7 +105,10 @@ CATALOGUE_PINS = {
     # ``test_a_rule_version_change_cannot_hide_behind_its_policy``.
     "extraction": ("2.0", "9cbc2819b4957551afe58ef551d7c36acc60daa1b253fd5bfe80c818b88aa6a4"),
     "resolution": ("1.0", "a4db9d527dc529d3f8bb0e290d426436e410c5b504b25d2f73d910cfffed2957"),
-    "fact": ("1.0", "ba13dcab495aaf0c399ab06a610ed8d8476c8b17e0b065ad5c8d16264813236b"),
+    # EPIC 32.P2 raised both together: ``same_line_location_association``
+    # joined the catalogue, so the policy version that identifies it moved
+    # to 1.1. That is this test working, not this test being edited around.
+    "fact": ("1.1", "1b83d6695b9edef6c95fcc4520f5efae80890a355313709c721416a0ff2ed214"),
     "semantic": ("1.0", "d0d0be3a4037b54cde7dd45489532f71c40131d8b0fd5d4c8477320e77eaa326"),
 }
 
@@ -254,9 +257,16 @@ def test_each_stage_declares_every_version_it_owns() -> None:
 
 def test_the_policy_and_contract_versions_are_independent() -> None:
     """
-    Nine versions, nine reasons to change. None is derived from another,
-    and this milestone raised none of them: it changed how invalidation
-    propagates, not what any rule means.
+    Nine versions, nine reasons to change. None is derived from
+    another, which is the property this test exists to hold.
+
+    EPIC 32.E2.4 raised none of them - it changed how invalidation
+    propagates, not what any rule means. EPIC 32.P2 raised exactly one:
+    the fact **policy**, because it added a construction rule. The fact
+    **contract** did not move beside it, and that is the point: a fact's
+    shape is unchanged, only the body of rules that produces facts grew.
+    A milestone that moved both without a shape change would be bumping
+    mechanically.
     """
 
     from app.domain.canonical_pdf.canonical_pdf_policy import (
@@ -286,7 +296,7 @@ def test_the_policy_and_contract_versions_are_independent() -> None:
     assert EXTRACTION_POLICY_VERSION == "2.0"
     assert RESOLUTION_POLICY_VERSION == "1.0"
     assert ENTITY_MODEL_VERSION == "1.0"
-    assert FACT_POLICY_VERSION == "1.0"
+    assert FACT_POLICY_VERSION == "1.1"
     assert FACT_CONTRACT_VERSION == "1.0"
     assert SEMANTIC_POLICY_VERSION == "1.0"
     assert SEMANTIC_CONTRACT_VERSION == "1.0"

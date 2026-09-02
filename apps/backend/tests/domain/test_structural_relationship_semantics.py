@@ -10,8 +10,18 @@ which strings produce a relationship, and which do not**.
 The relationship is read from IEC 81346-1, which assigns ``+`` to the
 location aspect and ``-`` to the product aspect. So ``+E01-QA1``
 designates an object in the context of location ``+E01``, and that
-reading - not proximity, not layout, not co-occurrence - is the whole of
-the claim.
+reading - not proximity, not layout - is the whole of the claim.
+
+**EPIC 32.P2 added a second way to establish the same association**, for
+the shape real drawings actually use: one designation and one location
+written as separate tokens on one line. It is governed by its own rule
+with its own strict cardinality, and it is tested in
+``test_line_scoped_structural_location``. What the two rules share is
+that neither chooses between candidates: the reading is exact or there
+is no fact.
+
+The tests below remain P1's - the compound form, and the refusals that
+still hold.
 """
 
 from __future__ import annotations
@@ -288,10 +298,12 @@ def test_a_compound_designation_produces_a_location_aspect_fact() -> None:
     assert facts[0].construction_rule_version == "1.0"
 
 
-def test_the_location_fact_is_scoped_to_one_token() -> None:
-    """Not a line rule, not a page rule. The two observations came from
-    the same characters, which is the strongest co-occurrence this
-    pipeline can record."""
+def test_the_compound_location_rule_is_scoped_to_one_token() -> None:
+    """
+    The two observations came from the same characters - the strongest
+    co-occurrence this pipeline can record, and unchanged by EPIC 32.P2,
+    which added a rule beside this one rather than widening it.
+    """
 
     assert COMPOUND_REFERENCE_DESIGNATION_RULE.scope is StructuralScope.TOKEN
     assert (
@@ -315,9 +327,18 @@ def test_the_location_fact_carries_both_sides_of_its_support() -> None:
 
 def test_a_designation_on_the_same_line_gets_no_location_fact() -> None:
     """
-    The rule that would be easiest to get wrong. ``TR1`` sits on the same
-    line as ``+E01-QA1`` and is **not** placed in ``+E01``: it was not
-    written inside it, and a line is not a place.
+    The rule that would be easiest to get wrong, and **the reason it
+    holds changed in EPIC 32.P2**.
+
+    Under P1 nothing could associate across tokens at all. P2 added a
+    line-scoped rule, so the guarantee now rests on that rule's
+    cardinality instead: this line carries two designations - ``TR1``
+    and ``+E01-QA1`` - and a rule that will not choose between subjects
+    produces nothing.
+
+    The outcome is unchanged and still the important one. ``TR1`` is not
+    placed in ``+E01`` on the strength of sharing a line with it, and
+    ``+E01-QA1`` keeps the containment it was actually written with.
     """
 
     fact_set = _facts("Trasformatore TR1 nel quadro +E01-QA1")

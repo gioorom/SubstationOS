@@ -162,7 +162,8 @@ def test_the_set_records_its_source_and_policies(
     assert fact_set.document_id == document.id
     assert fact_set.project_id == 3
     assert fact_set.resolution_policy_version == "1.0"
-    assert fact_set.fact_policy_version == "1.0"
+    # 1.1 since EPIC 32.P2 added a rule to the fact catalogue.
+    assert fact_set.fact_policy_version == "1.1"
 
 
 def test_a_document_with_nothing_associable_is_a_success(

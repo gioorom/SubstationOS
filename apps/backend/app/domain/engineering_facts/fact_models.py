@@ -76,10 +76,21 @@ class AmbiguityReason(str, Enum):
     table rather than as facts with a status.
     """
 
-    # Two or more designations and at least one quantity on one line.
-    # Which designation the quantity belongs to cannot be determined, and
-    # guessing would put a rating on the wrong equipment.
+    # Two or more designations and at least one object on one line.
+    # Which designation the object belongs to cannot be determined, and
+    # guessing would put a rating - or a location - on the wrong
+    # equipment.
     MULTIPLE_SUBJECTS = "multiple_subjects"
+
+    # One designation and two or more objects on one line, under a rule
+    # that permits exactly one. Recorded only for rules whose cardinality
+    # makes this a refusal: ``ONE_SUBJECT_MANY_OBJECTS`` treats the same
+    # shape as a data-sheet line and associates all of them.
+    #
+    # A designation written with two different location aspects is the
+    # case this exists for. The document disagreed with itself about
+    # where the equipment is, and a fact is not the place to settle it.
+    MULTIPLE_OBJECTS = "multiple_objects"
 
 
 @dataclass(frozen=True, slots=True)

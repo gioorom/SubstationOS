@@ -51,9 +51,12 @@ class FactPredicate(str, Enum):
     # association rule." Nothing about roles, properties or topology.
     HAS_ASSOCIATED_QUANTITY = "has_associated_quantity"
 
-    # "This designation was written with this location aspect inside
-    # it." The structural reading of one compound IEC 81346 reference
-    # designation - ``+E01-QA1`` carries ``+E01``.
+    # "The document wrote this designation together with this location
+    # aspect, in a structural position a declared rule accepts." Two
+    # shapes qualify: the location written *inside* the designation
+    # (``+E01-QA1`` carries ``+E01``), and the two written as separate
+    # tokens on one line (``MORSETTIERA -E.AM +GSH002``). Which rule
+    # produced a given fact is recorded on the fact itself.
     #
     # Deliberately not ``IS_LOCATED_IN``. This layer records what the
     # document *wrote*; that the equipment is therefore located there is

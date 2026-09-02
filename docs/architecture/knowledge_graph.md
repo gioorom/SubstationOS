@@ -137,9 +137,12 @@ is exactly what governed semantics produces.
 
 `is_located_in` is the **first governed relationship whose two endpoints
 are both structural objects**, and the reason EPIC 32.2 has anything to
-reason over. It comes from the location aspect of a compound IEC 81346
-reference designation: `+E01-QA1` designates an object in the context of
-location `+E01`, so the asset is located there.
+reason over. It comes from a governed association between a designation and a
+location aspect: `+E01-QA1` designates an object in the context of
+location `+E01`, and a drawing line reading `MORSETTIERA -E.AM +GSH002`
+says the same of `-E.AM`. Either way the asset is located there. The
+graph records the relationship, never which construction rule
+established it.
 
 It is containment, and containment only:
 

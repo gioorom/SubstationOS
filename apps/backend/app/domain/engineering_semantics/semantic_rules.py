@@ -36,12 +36,29 @@ stays absent.
 ## Why the location rule is not a proximity rule
 
 `IS_LOCATED_IN` is the first rule here whose object is not a quantity,
-and the first that could be mistaken for topology. It is not. Its
-supporting fact is `HAS_LOCATION_ASPECT`, which is produced only from a
-**single token** - the two entities came from the same characters, not
-from the same line, page or drawing. There is no window to widen and no
-threshold to tune, which is precisely what makes the standard's reading
-of the syntax the whole of the claim.
+and the first that could be mistaken for topology. It is not.
+
+Its supporting fact is `HAS_LOCATION_ASPECT`, and **this rule does not
+ask how that fact was constructed**. It cannot: only facts cross this
+boundary, and a rule that read extraction mechanics would be assigning
+meaning to how a drawing was typeset rather than to what it said. The
+governed reading is the same either way - IEC 81346 assigns ``+`` to the
+location aspect, so a designation written with one is designated in the
+context of that location.
+
+What keeps the rule out of proximity territory is therefore the fact
+catalogue, where it belongs. Both rules that can produce this predicate
+are exact: one requires the two observations to come from a single
+token, the other requires exactly one designation and exactly one
+location on a line. Neither has a window to widen or a threshold to
+tune, and neither will choose between candidates. EPIC 32.P2 added the
+second because the first, alone, could not reach a single real drawing
+in this repository.
+
+The caution that follows is unchanged and still controlling:
+`IS_LOCATED_IN` asserts the reference-designation association and
+nothing else. Not containment, not connectivity, not bay membership, not
+hierarchy, not geometry.
 
 ## Why power, and why only power
 
@@ -132,12 +149,15 @@ IS_LOCATED_IN_RULE = SemanticRule(
     statement_type=SemanticStatementType.IS_LOCATED_IN,
     max_supporting_objects=1,
     description=(
-        "A designation written as a compound IEC 81346 reference "
-        "designation is located in the location its '+' aspect names. "
-        "The meaning is the standard's: '+E01-QA1' designates an object "
-        "in the context of location '+E01'. Two different location "
-        "aspects for one subject produce no statement - the document "
-        "disagreed with itself, and this rule does not choose."
+        "A designation the document associated with a location aspect "
+        "is located in the location that aspect names. The meaning is "
+        "IEC 81346's: '+E01-QA1' designates an object in the context of "
+        "location '+E01', and a line reading 'MORSETTIERA -E.AM "
+        "+GSH002' says the same of '-E.AM'. Which structural rule "
+        "established the association is the fact catalogue's business, "
+        "not this rule's. Two different location aspects for one "
+        "subject produce no statement - the document disagreed with "
+        "itself, and this rule does not choose."
     ),
 )
 

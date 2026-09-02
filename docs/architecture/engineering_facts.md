@@ -109,7 +109,68 @@ does not apply to it. There is no window whose width depends on how the
 parser blocked a page; the unit is one token.
 
 A designation on the *same line* as `+E01-QA1` receives no location
-fact. It was not written inside it, and a line is not a place.
+fact from **this** rule. It was not written inside it.
+
+### `same_line_location_association` 1.0
+
+A designation entity and a structural-location entity are associated
+when the line carries **exactly one of each** and the two were written
+as **separate tokens** - `MORSETTIERA -E.AM +GSH002`.
+
+Scope `LINE`, cardinality `ONE_SUBJECT_ONE_OBJECT`, token relation
+`DISTINCT_TOKENS`. Introduced by EPIC 32.P2.
+
+It exists because the compound form, which `compound_reference_designation`
+requires, does not occur in the real drawings this repository holds. The
+committed Italian DSO functional diagram carries 52 location aspects
+across 171 pages and **no compound tokens at all**; every location is
+written as its own token beside the designation it belongs to. So the
+governed `IS_LOCATED_IN` relationship EPIC 32.P1 built had no reachable
+real instance until this rule.
+
+**Why it is not "same line means related".** It is the strictest shape a
+line can carry. Two designations, or two locations, produce nothing -
+there is no nearest-token fallback, no ordering tie-break, no distance
+and no threshold, exactly as for `same_line_association`. What it adds
+over that rule is a stricter cardinality, not a looser one.
+
+**Why the token relation is declared.** `LINE` and `TOKEN` scope overlap
+on a line whose only content is `+E01-QA1`: that line carries one
+designation and one location, so a line rule would match what the
+compound rule already recorded. Two facts for one association exceed the
+semantic catalogue's one-location-per-subject policy, so the statement
+would be **refused as a contradiction** and the P1 relationship would
+disappear on exactly the evidence it was built for.
+
+`DISTINCT_TOKENS` prevents that in the catalogue, where the precondition
+belongs, rather than in a deduplication pass that would have to choose
+which fact to keep and would cost the provenance of the one it dropped.
+The compound rule stays authoritative for pairs written inside one
+token; the line rule stands aside.
+
+It is applied as an **eligibility filter on the unit's objects, before
+the cardinality tests**. That order matters: an object this rule may not
+associate is not an ambiguity it should report. On `Trasformatore TR1
+nel quadro +E01-QA1` the only location is bound inside one of the two
+designations, so the line rule has no business on that line at all -
+testing cardinality first would have it announce that it could not tell
+which designation the location belonged to, on a line where the compound
+rule had already determined exactly that.
+
+### Refusals are recorded
+
+Both line-scoped refusals produce a diagnostic, never a fact with a
+softer status:
+
+| On one line | Diagnostic |
+|---|---|
+| two or more designations, at least one eligible object | `MULTIPLE_SUBJECTS` |
+| one designation, two or more objects, under `ONE_SUBJECT_ONE_OBJECT` | `MULTIPLE_OBJECTS` |
+
+`MULTIPLE_OBJECTS` was added by EPIC 32.P2 because the shape it names
+became reachable for the first time. Under `ONE_SUBJECT_MANY_OBJECTS`
+the same shape is a data-sheet line and is associated, not refused, so
+no diagnostic is produced there.
 
 ### Why no paragraph rule
 

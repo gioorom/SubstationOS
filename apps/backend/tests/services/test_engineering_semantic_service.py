@@ -202,7 +202,8 @@ def test_the_set_records_the_whole_upstream_source(
     assert semantic_set.document_id == document.id
     assert semantic_set.project_id == 3
     assert semantic_set.resolution_policy_version == "1.0"
-    assert semantic_set.fact_policy_version == "1.0"
+    # 1.1 since EPIC 32.P2; the semantic catalogue itself is unchanged.
+    assert semantic_set.fact_policy_version == "1.1"
     assert semantic_set.semantic_policy_version == "1.0"
 
 

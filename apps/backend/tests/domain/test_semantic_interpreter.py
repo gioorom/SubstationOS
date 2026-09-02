@@ -392,7 +392,9 @@ def test_the_set_records_the_whole_upstream_source_identity() -> None:
     result = _interpret("TR1 630 kVA")
 
     assert result.resolution_policy_version == "1.0"
-    assert result.fact_policy_version == "1.0"
+    # 1.1 since EPIC 32.P2; the semantic catalogue itself did not change,
+    # which is why only the fact policy moved in this chain.
+    assert result.fact_policy_version == "1.1"
     assert result.semantic_policy_version == "1.0"
     assert result.content_checksum
 

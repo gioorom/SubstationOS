@@ -176,9 +176,12 @@ engineering.
 - **Owns:** `FactPredicate` (`has_associated_quantity`, `has_location_aspect`),
   `fact_construction_rules.py`, `FACT_POLICY_VERSION`, `FACT_CONTRACT_VERSION`.
 - **Does not own:** the meaning of an association.
-- **Constraint:** `HAS_LOCATION_ASPECT` is TOKEN-scoped. There is **no**
-  equipment-to-equipment hierarchy — no `PART_OF`, `CONTAINS`, `CHILD_OF` — and a
-  fitness function asserts that vocabulary stays absent.
+- **Constraint:** `HAS_LOCATION_ASPECT` is produced by two rules — TOKEN-scoped
+  `compound_reference_designation`, and LINE-scoped `same_line_location_association`
+  (EPIC 32.P2), which requires exactly one designation and one location written as
+  distinct tokens. There is **no** equipment-to-equipment hierarchy — no `PART_OF`,
+  `CONTAINS`, `CHILD_OF` — and a fitness function asserts that vocabulary stays
+  absent.
 - **Tests:** `tests/architecture/test_engineering_fact_boundaries.py`
 
 ## engineering_semantics

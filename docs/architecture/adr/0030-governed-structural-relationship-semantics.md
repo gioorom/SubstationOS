@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted. Introduced by EPIC 32.P1, under
+**Amended** by EPIC 32.P2 — see *Amendment* below. The relationship,
+its vocabulary and its governance are unchanged; the amendment adds a
+second way to establish it from evidence.
+
+Originally Accepted (EPIC 32.P1), under
 [Architecture Freeze AF-01](../architecture_freeze_af01.md), which is
 `FROZEN_WITH_KNOWN_DEBT`. No AF-01 invariant was weakened, bypassed,
 renamed away or reinterpreted. This is the **first change to the shape
@@ -102,6 +106,13 @@ association do not apply. There is no distance, no threshold, no
 nearest-neighbour, no coordinate. Either the document wrote `+E01-QA1`
 or it did not.
 
+> **Amended by EPIC 32.P2.** This section's reasoning is sound and its
+> conclusion — that the association must be exact — still governs. What
+> it got wrong was assuming exactness required *one token*. The real
+> drawings in this repository do not use the compound form at all, so
+> this rule reached none of them. The amendment adds a second exact
+> rule for the shape they do use. See *Amendment* below.
+
 **And it is still reviewed.** The reading is declared as a versioned
 semantic rule and an engineer approves each statement before it becomes
 governed. If a document uses `+` for something other than a location,
@@ -167,7 +178,7 @@ stage was bypassed and no new writer was created.
 |---|---|---|
 | Evidence | `EvidenceType.LOCATION_ASPECT`, rule `location_aspect_iec_81346` v1.0 | `sha256(document, checksum, rule, version, type, page, paragraph, line, tokens)` |
 | Entities | `EntityType.STRUCTURAL_LOCATION`, rule `location_aspect_grouping` v1.0 | Existing entity key — **document-scoped** |
-| Facts | `FactPredicate.HAS_LOCATION_ASPECT`, rule `compound_reference_designation` v1.0, scope `TOKEN`, cardinality `ONE_SUBJECT_ONE_OBJECT` | Existing fact key |
+| Facts | `FactPredicate.HAS_LOCATION_ASPECT`, rule `compound_reference_designation` v1.0, scope `TOKEN`, cardinality `ONE_SUBJECT_ONE_OBJECT`. *(32.P2 adds `same_line_location_association` v1.0, scope `LINE`, same cardinality, token relation `DISTINCT_TOKENS`.)* | Existing fact key |
 | Semantics | `SemanticStatementType.IS_LOCATED_IN`, rule `location_from_compound_reference_designation` v1.0 | Existing statement key |
 | Human Review | *nothing* — the existing lifecycle carries it | Existing review snapshot |
 | Promotion | *nothing* — vocabulary-driven, no code change | Existing edge id |
@@ -278,6 +289,189 @@ Untouched, and untested by this milestone: the extraction path is
 deterministic regular expressions and the interpretation path is a
 declared rule catalogue. No LLM participates in producing, interpreting,
 reviewing or promoting a structural relationship.
+
+## Amendment (EPIC 32.P2) — line-scoped structural location association
+
+### What was wrong
+
+Nothing in the decision. The gap was in the **evidence shape it
+assumed**.
+
+`compound_reference_designation` requires the designation and the
+location aspect to come from one token — `+E01-QA1`. EPIC 32.P2
+re-measured the committed evidence and found that form does not occur in
+it:
+
+| Source | Location aspects | Compound tokens |
+|---|---|---|
+| `REF-B-S-025_00 LINEE AT` (171 pp, committed) | 52 | **0** |
+| `real_linee_at_terminal_blocks` (corpus) | 5 | **0** |
+| `real_tr_terminal_blocks` (corpus) | 4 | **0** |
+
+Every real location is written as its own token beside the designation
+it belongs to:
+
+```
+MORSETTIERA -E.AM +GSH002
+```
+
+So `IS_LOCATED_IN` — built, reviewed, promoted, retrievable and
+reasoned over — had **no reachable instance from real evidence**. The
+capability existed; the path to it did not.
+
+EPIC 32.E1's measurement said the same thing and was not acted on: 268
+standalone location aspects across the real diagrams, zero compounds.
+
+### The amendment
+
+One construction rule is added to the fact catalogue:
+
+| | |
+|---|---|
+| rule | `same_line_location_association` 1.0 |
+| predicate | `HAS_LOCATION_ASPECT` — **existing** |
+| subject / object | `EQUIPMENT_DESIGNATION` → `STRUCTURAL_LOCATION` — **existing** |
+| scope | `LINE` |
+| cardinality | `ONE_SUBJECT_ONE_OBJECT` |
+| token relation | `DISTINCT_TOKENS` — new declared axis |
+
+`compound_reference_designation` is **unchanged and not widened**. The
+two rules are separate governed accounts of two different evidence
+shapes.
+
+### Why a line rule does not reopen the objections §2 rejected
+
+§2 rejected page, paragraph and geometric association because their
+strictness depends on something nobody calibrated. That objection is
+about *windows*, not about lines, and the catalogue already accepted a
+line-scoped rule on those grounds: `same_line_association` has produced
+`HAS_ASSOCIATED_QUANTITY` since Milestone 29.2 because "a line is a
+line" — there is no width to tune.
+
+This rule is **stricter than that one**. It requires exactly one
+designation and exactly one location. Two of either produces nothing.
+There is no nearest-token fallback, no ordering tie-break, no distance,
+no similarity and no cartesian product; ambiguity yields no fact rather
+than a probable one.
+
+What it is not: a general line co-occurrence mechanism. It is
+relationship-specific, declared in the catalogue with its own id and
+version, and it associates two entity types that were **already
+independently resolved** by the existing evidence and entity rules. It
+synthesises nothing.
+
+### The overlap, and why it is a precondition rather than a cleanup
+
+`LINE` and `TOKEN` scope overlap. A line whose only content is
+`+E01-QA1` carries exactly one designation and exactly one location, so
+a naive line rule matches what the compound rule already recorded.
+
+That is not merely redundant. It was reproduced before implementing:
+two facts for one association exceed `IS_LOCATED_IN`'s
+`max_supporting_objects = 1`, so the semantic layer reads them as a
+document contradicting itself and **refuses the statement**. A naive
+line rule would therefore have deleted the P1 relationship on exactly
+the evidence P1 was built for.
+
+`TokenRelation.DISTINCT_TOKENS` resolves it where the constraint
+belongs — as a declared precondition of the rule. If any observation of
+the subject shares a token with any observation of the object, the
+compound rule is the authoritative account of that pair and the line
+rule stands aside. No fact is ever constructed and discarded, so no
+provenance is lost, and no deduplication layer has to choose between two
+records.
+
+The comparison is across **all** of an entity's observations, not the
+reported pair alone: a location written both inside a compound
+designation and standing alone on one line resolves to a single entity
+carrying both, and the narrower test would let the same association
+through twice.
+
+### What did not change
+
+- **No new vocabulary.** No evidence type, entity type, fact predicate,
+  statement type, graph node kind, graph edge kind, reasoning family or
+  derived relationship. `IS_LOCATED_IN` means exactly what §10 says.
+- **No semantic rule change.** `location_from_compound_reference_designation`
+  keeps its id and version 1.0. Its engineering judgement is unchanged;
+  it reads facts by predicate and does not ask which structural rule
+  built them, because only facts cross that boundary. Its rule id names
+  the shape it was introduced for and is a published contract, so it is
+  not renamed — its description now states the full contract.
+- **No migration, no schema change, no API change**, and the OpenAPI
+  document is byte-identical.
+- **Human Review, Promotion, Retrieval, Context Assembly and
+  Engineering Reasoning required no code change.** Retrieval carries the
+  semantic rule, never the construction rule, so no consumer can
+  special-case line-derived knowledge.
+
+  *Unchanged code is not unchanged behaviour* — see the revalidation
+  consequence below, which is the one operational cost of this
+  milestone.
+
+### Versions
+
+`FACT_POLICY_VERSION` 1.0 → **1.1**, because the policy version is what
+identifies the effective rule catalogue and a rule was added. Nothing
+else moved: `FACT_CONTRACT_VERSION` stays 1.0 because a fact's *shape*
+is unchanged, and the extraction, resolution and semantic policies are
+untouched. Fact sets stored under 1.0 therefore have a different
+artifact identity and cannot be reused for a 1.1 request — which is
+precisely the invalidation ADR-0032 exists to guarantee.
+
+#### The revalidation consequence, stated plainly
+
+`fact_policy_version` is hashed into `_statement_key`. So a document
+**re-run** after this milestone produces new statement keys for *every*
+statement it carries — including `HAS_RATED_POWER`, which this milestone
+does not otherwise touch.
+
+`review_applicability.evaluate` then returns `REQUIRES_REVALIDATION` for
+the stored reviews, because the key they were recorded against is not in
+the current set. On the next promotion the corresponding edges are
+retired as `HISTORICAL` with their identity preserved, and they
+reactivate when the statements are approved again.
+
+This is ADR-0023 and ADR-0032 working as designed rather than a defect:
+a review is never discarded, and knowledge derived under a rule
+catalogue that has since changed must not stay promoted on the strength
+of a judgement made about a different derivation. It is recorded here
+because it is a **real operational cost** that the rest of this
+amendment's "no code change" framing would otherwise hide: any document
+re-processed after P2 needs its statements re-reviewed before its
+governed knowledge is current again.
+
+Documents that are *not* re-run keep their stored sets, their reviews
+and their edges untouched.
+
+The alternative — leaving the policy at 1.0 — was rejected. It would
+make a fact set built without the new rule indistinguishable from one
+built with it, which is exactly the silent-reuse failure ADR-0032 was
+written about, and would cost a location relationship rather than a
+re-review.
+
+### Correction to §9
+
+§9 states that within one document "`+E01` written alone and `+E01` read
+out of `+E01-QA1` are also two entities — different claims, different
+evidence types, different rules."
+
+**That has not been true since EPIC 32.E2.** Both are observed by one
+rule, `location_aspect_iec_81346`, as one evidence type, and they
+resolve to **one** structural location entity carrying both
+observations. The rest of §9 stands: entity identity remains
+document-scoped, and two documents writing `+E01` remain two governed
+locations.
+
+The correction matters here because the token relation depends on it —
+it is why the check must span all of an entity's observations.
+
+### Debt this does not pay
+
+The four items under *Debt recorded, not paid* are unchanged. In
+particular, cross-document location identity remains unresolved: the two
+real corpus documents share **no** designation and **no** location, and
+the same designation across two plants would denote different assets.
 
 ## Consequences
 

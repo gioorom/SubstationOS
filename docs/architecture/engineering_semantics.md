@@ -100,18 +100,28 @@ quantity as its rated power.
 Introduced by EPIC 32.P1, and the first rule here whose object is not a
 quantity.
 
-A designation written as a **compound IEC 81346 reference designation**
-is located in the location its `+` aspect names: IEC 81346-1 assigns `+`
-to the location aspect, so `+E01-QA1` designates an object in the
-context of location `+E01`.
+A designation the document associated with a location aspect is
+located in the location that aspect names: IEC 81346-1 assigns `+` to
+the location aspect, so `+E01-QA1` designates an object in the context
+of location `+E01`, and a line reading `MORSETTIERA -E.AM +GSH002` says
+the same of `-E.AM`.
 
-**This is a reading of a standard's syntax, not a proximity rule.** Its
-supporting fact is scoped to a single *token* - the designation and the
-location aspect were produced from the same characters, not from the
-same line, page or drawing. There is no window to widen and no threshold
-to tune. Two different location aspects for one subject produce no
-statement: the document disagreed with itself, and this rule does not
-choose.
+**This is a reading of a standard's syntax, not a proximity rule.** The
+rule does not ask how its supporting fact was constructed, and cannot:
+only facts cross this boundary. A rule that read extraction mechanics
+would be assigning meaning to how a drawing was typeset rather than to
+what it said.
+
+What keeps it out of proximity territory is the fact catalogue, where
+that belongs. Both rules able to produce `HAS_LOCATION_ASPECT` are
+exact - one requires a single token, the other exactly one designation
+and one location on a line, written as separate tokens. Neither has a
+window to widen or a threshold to tune, and neither will choose between
+candidates. EPIC 32.P2 added the second because the first, alone, could
+not reach a single real drawing in this repository.
+
+Two different location aspects for one subject produce no statement: the
+document disagreed with itself, and this rule does not choose.
 
 It says where equipment is. It does **not** say what it is connected to,
 which direction anything flows, what kind of place `+E01` is, or that

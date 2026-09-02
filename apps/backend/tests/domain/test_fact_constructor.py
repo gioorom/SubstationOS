@@ -423,7 +423,8 @@ def test_the_set_records_the_catalogue_and_source_that_produced_it(
     fact = result.facts[0]
 
     assert result.resolution_policy_version == "1.0"
-    assert result.fact_policy_version == "1.0"
+    # 1.1 since EPIC 32.P2 added a rule to the catalogue this names.
+    assert result.fact_policy_version == "1.1"
     assert fact.construction_rule_id == "same_line_association"
     assert fact.construction_rule_version == "1.0"
     assert fact.fact_version == "1.0"

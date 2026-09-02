@@ -14,7 +14,12 @@ from app.domain.engineering_entities.entity_policy import (
 # The construction policy's own version. Bumped when the *catalogue*
 # changes - a rule added, a rule version raised, a predicate declared -
 # so a stored fact set always says which body of rules produced it.
-FACT_POLICY_VERSION = "1.0"
+#
+# 1.1 (EPIC 32.P2): ``same_line_location_association`` added. The
+# catalogue now derives associations the 1.0 catalogue could not, so a
+# fact set built under 1.0 is not a substitute for one built under 1.1
+# and must not be reused as one.
+FACT_POLICY_VERSION = "1.1"
 
 # The version of the fact contract itself - the shape of a fact.
 # Recorded alongside the rule version because the two change for

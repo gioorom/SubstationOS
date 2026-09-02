@@ -43,6 +43,29 @@ determined.
 A pair refused on an ambiguous line may still be confirmed from a
 different, unambiguous line. That is correct: the rule was satisfied
 there, and the diagnostic still records where it was not.
+
+## Two rules never claim the same association
+
+`LINE` and `TOKEN` scope overlap: a line containing only ``+E01-QA1``
+satisfies both the compound rule and a line-scoped location rule. EPIC
+32.P2 keeps them disjoint through the rule's declared `TokenRelation`,
+applied as an **eligibility filter on the unit's objects** - a
+line-scoped rule that requires `DISTINCT_TOKENS` does not consider an
+object written inside one of the unit's subjects, because the compound
+rule has already recorded that pair from stronger evidence.
+
+The filter runs **before** the cardinality tests, and that order is the
+whole of its correctness. An object the rule may not associate is not
+an ambiguity it should report: on ``Trasformatore TR1 nel quadro
++E01-QA1`` the only location is bound inside one of the two
+designations, so the line rule has no business on that unit at all.
+Testing cardinality first would have it announce that it could not tell
+which designation the location belonged to - on a line where the
+compound rule had already determined exactly that.
+
+Refusing at construction, rather than deduplicating afterwards, is what
+keeps provenance intact: there is never a second fact to discard, so no
+support is ever dropped to make two records into one.
 """
 
 from __future__ import annotations
@@ -71,6 +94,7 @@ from app.domain.engineering_facts.fact_construction_rules import (
     CardinalityPolicy,
     FactConstructionRule,
     StructuralScope,
+    TokenRelation,
 )
 from app.domain.engineering_facts.fact_models import (
     AmbiguityReason,
@@ -176,6 +200,11 @@ def _apply(
     the same shape cannot arise from any document, so there is nothing to
     report and no diagnostic is produced: a diagnostic for an impossible
     state would be noise that outlived everyone who could explain it.
+
+    Both refusals are reported at line scope, and for the same reason:
+    an engineer reading a document's diagnostics must be able to see
+    every place a rule declined, not only the places it declined for one
+    of the two possible causes.
     """
 
     subjects = _by_unit(entity_set, rule.subject_type, rule.scope)
@@ -187,7 +216,13 @@ def _apply(
 
     for unit in sorted(set(subjects) & set(objects)):
         unit_subjects = subjects[unit]
-        unit_objects = objects[unit]
+        unit_objects = _eligible_objects(rule, unit_subjects, objects[unit])
+
+        if not unit_objects:
+            # Nothing here this rule may associate - the compound rule's
+            # territory, or no object at all. Not an ambiguity and not an
+            # error, so nothing is reported.
+            continue
 
         if len(unit_subjects) > 1:
             # Which subject the object belongs to cannot be determined.
@@ -195,15 +230,32 @@ def _apply(
             # invisible in a graph, expensive in a substation.
             if rule.scope is StructuralScope.LINE:
                 diagnostics.append(
-                    _diagnostic(unit, unit_subjects, unit_objects)
+                    _diagnostic(
+                        AmbiguityReason.MULTIPLE_SUBJECTS,
+                        unit,
+                        unit_subjects,
+                        unit_objects,
+                    )
                 )
 
             continue
 
         if (
             rule.cardinality is CardinalityPolicy.ONE_SUBJECT_ONE_OBJECT
-            and len(unit_objects) != 1
+            and len(unit_objects) > 1
         ):
+            # One subject, several objects, under a rule that allows one.
+            # The document said two things and this system will not pick.
+            if rule.scope is StructuralScope.LINE:
+                diagnostics.append(
+                    _diagnostic(
+                        AmbiguityReason.MULTIPLE_OBJECTS,
+                        unit,
+                        unit_subjects,
+                        unit_objects,
+                    )
+                )
+
             continue
 
         subject, subject_references = next(iter(unit_subjects.values()))
@@ -228,6 +280,53 @@ def _apply(
     ]
 
     return facts, diagnostics
+
+
+def _eligible_objects(
+    rule: FactConstructionRule,
+    unit_subjects: dict[
+        str, tuple[EngineeringEntity, list[EvidenceReference]]
+    ],
+    unit_objects: dict[
+        str, tuple[EngineeringEntity, list[EvidenceReference]]
+    ],
+) -> dict[str, tuple[EngineeringEntity, list[EvidenceReference]]]:
+    """
+    The objects on this unit the rule is allowed to consider at all.
+
+    ``DISTINCT_TOKENS`` excludes an object if **any** of its observations
+    shares a token with **any** observation of **any** subject on the
+    unit - not merely with the subject that would be reported.
+
+    Both breadths are deliberate. Across an object's observations,
+    because a location written inside a compound designation *and*
+    standing alone on one line resolves to a single entity carrying
+    both, and a narrower test would let the compound rule's association
+    through a second time. Across the unit's subjects, because the
+    exclusion is what makes the count that follows meaningful: an object
+    this rule may not associate must not be counted as evidence of an
+    ambiguity it was never going to resolve.
+    """
+
+    if rule.token_relation is TokenRelation.UNCONSTRAINED:
+        return unit_objects
+
+    subject_tokens = {
+        (reference.token_start, reference.token_end)
+        for _, references in unit_subjects.values()
+        for reference in references
+    }
+
+    return {
+        key: candidate
+        for key, candidate in unit_objects.items()
+        if subject_tokens.isdisjoint(
+            {
+                (reference.token_start, reference.token_end)
+                for reference in candidate[1]
+            }
+        )
+    }
 
 
 def _by_unit(
@@ -344,6 +443,7 @@ def _support(
 
 
 def _diagnostic(
+    reason: AmbiguityReason,
     line: _Unit,
     subjects: dict,
     objects: dict,
@@ -351,7 +451,7 @@ def _diagnostic(
     page, paragraph, line_index = line[:3]
 
     return FactConstructionDiagnostic(
-        reason=AmbiguityReason.MULTIPLE_SUBJECTS,
+        reason=reason,
         page_number=page,
         paragraph_index=paragraph,
         line_index=line_index,

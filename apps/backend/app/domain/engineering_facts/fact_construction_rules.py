@@ -2,7 +2,7 @@
 The fact construction rule catalogue (Milestone 29.2) - the **one**
 authoritative statement of when two entities may be associated.
 
-## Two rules ship
+## Three rules ship
 
 `SAME_LINE_ASSOCIATION` (Milestone 29.2) associates a designation entity
 and a quantity entity **only** when contributing observations of both
@@ -14,6 +14,28 @@ entity and a structural-location entity when both observations came from
 **one token**: the ``+E01`` inside ``+E01-QA1``. It is the first rule in
 this catalogue whose object is not a quantity, and the reason EPIC 32.2
 has a structural relationship to reason about at all.
+
+`SAME_LINE_LOCATION_ASSOCIATION` (EPIC 32.P2) associates the same two
+entity types when the document wrote them as **separate tokens on one
+line** - ``MORSETTIERA -E.AM +GSH002``. It exists because that, and not
+the compound form, is how the real drawings in this repository write a
+terminal block and its location: across 171 committed pages there are
+**no** compound tokens at all, so the location path P1 built could not
+be reached from real evidence.
+
+### Why the third rule is not "same line means related"
+
+Because it is the strictest shape a line can carry. It requires exactly
+one eligible designation and exactly one location on the line, so there
+is never a choice to make; and it requires the two observations to
+occupy **different tokens**, which is what keeps it disjoint from the
+compound rule rather than competing with it (see `TokenRelation`).
+
+What it does *not* do is decide which of several candidates belong
+together. On a line with two designations, or two locations, it produces
+nothing. There is no nearest-token fallback, no ordering tie-break, no
+distance and no threshold - the same refusals `SAME_LINE_ASSOCIATION`
+already makes, applied to a stricter cardinality.
 
 Neither rule reads a document. Both read the locations the entities
 already carry on their evidence, which is why the scope vocabulary is
@@ -86,6 +108,11 @@ class StructuralScope(str, Enum):
     each **widening** multiplies how many pairs a rule can produce. Note
     that the second member added here narrows rather than widens: a
     token is the smallest unit there is.
+
+    A scope is a unit, not a licence. Two rules may share `LINE` and
+    still differ completely in what they will accept on one - see
+    `CardinalityPolicy` and `TokenRelation`, which is where a rule's
+    actual strictness is declared.
     """
 
     LINE = "line"
@@ -116,6 +143,50 @@ class CardinalityPolicy(str, Enum):
     ONE_SUBJECT_ONE_OBJECT = "one_subject_one_object"
 
 
+class TokenRelation(str, Enum):
+    """
+    How the two observations must sit **within** the structural unit.
+
+    A third declared axis, added by EPIC 32.P2 for one reason: `LINE` and
+    `TOKEN` scope overlap. A line whose only content is ``+E01-QA1``
+    carries exactly one designation and exactly one location, so a
+    line-scoped location rule would match it - and the compound rule
+    already has. Two rules would then produce two facts asserting the
+    same association.
+
+    That is not merely redundant, it is **destructive**: the semantic
+    catalogue allows one location per subject, so two facts saying the
+    same thing are read as a document contradicting itself and the
+    statement is refused. The relationship P1 shipped would disappear on
+    exactly the evidence it was built for.
+
+    Declaring the token relation fixes that where it belongs - in the
+    catalogue, as a precondition of the rule - rather than in a
+    deduplication pass downstream that would have to guess which fact to
+    keep and would cost the provenance of the one it dropped.
+    """
+
+    #: The rule does not constrain it. Correct where the two entity types
+    #: cannot be produced from one token in the first place: no token is
+    #: both a designation and a quantity.
+    UNCONSTRAINED = "unconstrained"
+
+    #: The supporting observations must occupy **different tokens**. An
+    #: object sharing a token with any subject on the unit is not a
+    #: candidate for this rule at all: the document wrote one inside the
+    #: other, the compound rule is the authoritative account of that
+    #: pair, and this rule stands aside rather than restating it more
+    #: weakly.
+    #:
+    #: Excluding the object rather than vetoing the finished pair is what
+    #: keeps the rule's *refusals* honest too. A location the rule may
+    #: not associate must not be counted when deciding whether the line
+    #: was ambiguous - otherwise the rule reports that it could not tell
+    #: which designation a location belonged to, on a line where the
+    #: compound rule determined exactly that.
+    DISTINCT_TOKENS = "distinct_tokens"
+
+
 @dataclass(frozen=True, slots=True)
 class FactConstructionRule:
     """
@@ -134,6 +205,7 @@ class FactConstructionRule:
     object_type: EntityType
     scope: StructuralScope
     cardinality: CardinalityPolicy
+    token_relation: TokenRelation
     description: str
 
 
@@ -145,6 +217,9 @@ SAME_LINE_ASSOCIATION_RULE = FactConstructionRule(
     object_type=EntityType.ENGINEERING_QUANTITY,
     scope=StructuralScope.LINE,
     cardinality=CardinalityPolicy.ONE_SUBJECT_MANY_OBJECTS,
+    # No token yields both a designation and a quantity, so there is
+    # nothing here for a token relation to exclude.
+    token_relation=TokenRelation.UNCONSTRAINED,
     description=(
         "A designation entity and a quantity entity are associated when "
         "contributing observations of both occur on the same document "
@@ -162,6 +237,10 @@ COMPOUND_REFERENCE_DESIGNATION_RULE = FactConstructionRule(
     object_type=EntityType.STRUCTURAL_LOCATION,
     scope=StructuralScope.TOKEN,
     cardinality=CardinalityPolicy.ONE_SUBJECT_ONE_OBJECT,
+    # Implied by the scope: a token-scoped rule's two observations are in
+    # the same token by construction. Declared as unconstrained because
+    # this axis adds nothing to a rule the unit already decides.
+    token_relation=TokenRelation.UNCONSTRAINED,
     description=(
         "A designation entity and a structural-location entity are "
         "associated when contributing observations of both were "
@@ -172,9 +251,29 @@ COMPOUND_REFERENCE_DESIGNATION_RULE = FactConstructionRule(
     ),
 )
 
+SAME_LINE_LOCATION_ASSOCIATION_RULE = FactConstructionRule(
+    rule_id="same_line_location_association",
+    rule_version="1.0",
+    predicate=FactPredicate.HAS_LOCATION_ASPECT,
+    subject_type=EntityType.EQUIPMENT_DESIGNATION,
+    object_type=EntityType.STRUCTURAL_LOCATION,
+    scope=StructuralScope.LINE,
+    cardinality=CardinalityPolicy.ONE_SUBJECT_ONE_OBJECT,
+    token_relation=TokenRelation.DISTINCT_TOKENS,
+    description=(
+        "A designation entity and a structural-location entity are "
+        "associated when the line carries exactly one of each and the "
+        "two were written as separate tokens - 'MORSETTIERA -E.AM "
+        "+GSH002'. Says that the document wrote them together on one "
+        "line, not what that means. Two designations, two locations, or "
+        "a location written inside the designation produce nothing."
+    ),
+)
+
 CONSTRUCTION_RULES: tuple[FactConstructionRule, ...] = (
     SAME_LINE_ASSOCIATION_RULE,
     COMPOUND_REFERENCE_DESIGNATION_RULE,
+    SAME_LINE_LOCATION_ASSOCIATION_RULE,
 )
 
 RULES_BY_ID: dict[str, FactConstructionRule] = {

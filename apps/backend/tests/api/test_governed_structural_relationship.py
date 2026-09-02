@@ -448,3 +448,170 @@ def test_the_same_location_in_two_documents_is_two_governed_locations(
 
     assert len(locations) == 2
     assert len({node["node_id"] for node in locations}) == 2
+
+
+# --- The line-scoped shape, end to end (EPIC 32.P2) ----------------------
+#
+# Everything above proves the compound form. EPIC 32.P2 added a second
+# construction rule for the shape real drawings actually use, and the
+# claim it has to earn is that the *rest* of the governed path did not
+# change: same statement type, same review lifecycle, same promotion,
+# same edge kind, same provenance shape.
+#
+# Verbatim from a committed an Italian DSO HV/MV functional diagram
+# (LINEE AT, sha256 835469be…): a terminal block and the location it
+# sits in, written as two separate tokens on one line.
+REAL_TERMINAL_BLOCK = "MORSETTIERA -E.AM +GSH002"
+
+#: Two terminal blocks and one location on one line. The line does not
+#: say which block is where, so it must yield no relationship at all.
+REAL_AMBIGUOUS_LINE = "MORSETTIERA -E.AM -E.TAL +GSH002"
+
+
+@pytest.fixture()
+def real_line_approved(api_client: TestClient) -> int:
+    """The real drawing shape, taken to an approved location statement."""
+
+    document_id = _upload(
+        api_client, single_page_pdf(REAL_TERMINAL_BLOCK)
+    )
+    _run_pipeline(api_client, document_id)
+    statement_key = _located_in_key(api_client, document_id)
+
+    assert (
+        _review(api_client, document_id, statement_key).status_code == 201
+    )
+
+    return document_id
+
+
+def test_a_real_drawing_line_yields_a_location_statement(
+    api_client: TestClient
+) -> None:
+    """Before EPIC 32.P2 this document produced no statement at all."""
+
+    document_id = _upload(
+        api_client, single_page_pdf(REAL_TERMINAL_BLOCK)
+    )
+    _run_pipeline(api_client, document_id)
+
+    statements = [
+        statement
+        for statement in _statements(api_client, document_id)
+        if statement["statement_type"] == "is_located_in"
+    ]
+
+    assert len(statements) == 1
+
+
+def test_the_real_line_statement_is_not_promoted_before_review(
+    api_client: TestClient
+) -> None:
+    """
+    Governance is unchanged. A deterministic construction rule produces
+    a candidate, never approved knowledge - the line-scoped rule buys no
+    exemption from the review lifecycle.
+    """
+
+    document_id = _upload(
+        api_client, single_page_pdf(REAL_TERMINAL_BLOCK)
+    )
+    _run_pipeline(api_client, document_id)
+    _promote(api_client, document_id)
+
+    assert [
+        edge
+        for edge in _edges(api_client, document_id=document_id)
+        if edge["kind"] == "is_located_in"
+    ] == []
+
+
+def test_an_approved_real_line_becomes_the_existing_governed_edge(
+    real_line_approved: int, api_client: TestClient
+) -> None:
+    """
+    The same `IS_LOCATED_IN` edge the compound form produces. No new
+    edge kind, no new node kind, and no second promotion path.
+    """
+
+    _promote(api_client, real_line_approved)
+
+    edges = [
+        edge
+        for edge in _edges(api_client, document_id=real_line_approved)
+        if edge["kind"] == "is_located_in"
+    ]
+
+    assert len(edges) == 1
+
+    nodes = {
+        node["node_id"]: node
+        for node in _nodes(api_client, document_id=real_line_approved)
+    }
+
+    assert nodes[edges[0]["subject_node_id"]]["kind"] == "engineering_asset"
+    assert nodes[edges[0]["object_node_id"]]["kind"] == "structural_location"
+    assert nodes[edges[0]["object_node_id"]]["label"] == "+GSH002"
+    assert nodes[edges[0]["subject_node_id"]]["label"] == "-E.AM"
+
+
+def test_the_real_line_edge_carries_complete_provenance(
+    real_line_approved: int, api_client: TestClient
+) -> None:
+    """Promotion copies the reviewed statement's provenance; it does not
+    manufacture any."""
+
+    _promote(api_client, real_line_approved)
+
+    edge = _edges(
+        api_client, document_id=real_line_approved, kind="is_located_in"
+    )[0]
+    provenance = edge["provenance"]
+
+    assert provenance["statement_key"]
+    assert provenance["review_id"] > 0
+    assert provenance["reviewer_display_name"]
+    assert provenance["document_id"] == real_line_approved
+    assert provenance["content_checksum"]
+    assert provenance["semantic_rule_id"] == (
+        "location_from_compound_reference_designation"
+    )
+    assert provenance["semantic_rule_version"] == "1.0"
+
+
+def test_an_ambiguous_real_line_yields_no_governed_relationship(
+    api_client: TestClient
+) -> None:
+    """
+    Co-occurrence is still not a relationship. Two terminal blocks and
+    one location on one line say nothing about which is where, and the
+    governed path produces nothing rather than guessing.
+    """
+
+    document_id = _upload(
+        api_client, single_page_pdf(REAL_AMBIGUOUS_LINE)
+    )
+    _run_pipeline(api_client, document_id)
+
+    assert [
+        statement
+        for statement in _statements(api_client, document_id)
+        if statement["statement_type"] == "is_located_in"
+    ] == []
+
+
+def test_a_rebuild_reproduces_the_real_line_edge(
+    real_line_approved: int, api_client: TestClient
+) -> None:
+    """The graph stays a rebuildable projection (ADR-0024) for the new
+    evidence shape too."""
+
+    _promote(api_client, real_line_approved)
+    before = _edges(api_client, document_id=real_line_approved)
+
+    _promote(api_client, real_line_approved)
+    after = _edges(api_client, document_id=real_line_approved)
+
+    assert [edge["edge_id"] for edge in before] == [
+        edge["edge_id"] for edge in after
+    ]

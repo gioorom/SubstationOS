@@ -308,3 +308,86 @@ def test_context_assembly_is_deterministic(
     ).package
 
     assert first == second
+
+
+# --- The line-scoped shape reaches retrieval unchanged (EPIC 32.P2) ------
+#
+# The claim EPIC 32.P2 has to earn downstream: retrieval and context
+# assembly required **no** change to consume relationships established by
+# the new construction rule. They read governed knowledge, and governed
+# knowledge does not record which structural rule produced the fact
+# beneath the statement - which is exactly why neither layer can develop
+# an opinion about it.
+#
+# Verbatim from a committed an Italian DSO HV/MV functional diagram
+# (LINEE AT, sha256 835469be…).
+REAL_TERMINAL_BLOCK = "MORSETTIERA -E.AM +GSH002"
+
+
+@pytest.fixture()
+def governed_real_line(api_client: TestClient) -> int:
+    project_id = _project(api_client)
+    _governed_document(api_client, project_id, REAL_TERMINAL_BLOCK)
+
+    return project_id
+
+
+def test_a_line_scoped_relationship_is_retrievable_by_kind(
+    governed_real_line: int, db_session: Session
+) -> None:
+    """The same query, the same edge kind. Retrieval does not know the
+    difference and must not be able to."""
+
+    result = _retrieve_locations(db_session, governed_real_line)
+
+    assert result.outcome is GovernedMatchOutcome.UNIQUE_MATCH
+    assert len(result.items) == 1
+
+    relationship = result.items[0].relationship
+
+    assert relationship.kind is GraphEdgeKind.IS_LOCATED_IN
+    assert relationship.subject.kind is GraphNodeKind.ENGINEERING_ASSET
+    assert relationship.subject.label == "-E.AM"
+    assert relationship.object.kind is GraphNodeKind.STRUCTURAL_LOCATION
+    assert relationship.object.label == "+GSH002"
+
+
+def test_a_line_scoped_relationship_reaches_the_context_package(
+    governed_real_line: int, db_session: Session
+) -> None:
+    package = context_builder_service.build_context_package(
+        project_id=governed_real_line,
+        results=(_retrieve_locations(db_session, governed_real_line),),
+        now=RETRIEVED_AT,
+    ).package
+
+    assert len(package.selected_relationships) == 1
+
+    selected = package.selected_relationships[0]
+
+    assert selected.result.relationship.object.label == "+GSH002"
+    assert selected.result.provenance.statement_key
+    assert selected.result.provenance.review_id > 0
+
+
+def test_retrieval_carries_no_trace_of_the_construction_rule(
+    governed_real_line: int, db_session: Session
+) -> None:
+    """
+    The boundary that keeps EPIC 32.P2 out of the answering path.
+
+    A retrieved relationship names the semantic rule an engineer
+    reviewed. It does not name the fact-construction rule, so no
+    consumer can special-case line-derived knowledge - and a future one
+    that wanted to would have to change the governed model to do it.
+    """
+
+    provenance = _retrieve_locations(
+        db_session, governed_real_line
+    ).items[0].provenance
+
+    assert provenance.semantic_rule_id == (
+        "location_from_compound_reference_designation"
+    )
+    assert not hasattr(provenance, "construction_rule_id")
+    assert not hasattr(provenance, "structural_scope")
