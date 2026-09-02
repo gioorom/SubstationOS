@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "substationos-backend"
+version = "0.1.0"
+description = "SubstationOS backend - deterministic engineering knowledge derivation for HV/MV substations."
+# All rights reserved - see LICENSE at the repository root.
+license = "LicenseRef-Proprietary"
+requires-python = ">=3.13"
+
+# Direct runtime dependencies only. Every entry below is imported by
+# `app/**` or is required by a route at import time; nothing here is a
+# transitive dependency written down twice.
+#
+# Lower bounds are the versions this was developed and verified against.
+# Upper bounds appear only where a major release is known to be breaking,
+# because a bound nobody has tested is a guess with a version number.
+dependencies = [
+    "fastapi>=0.139,<1",
+    # Imported by name in app/routers/security.py for the middleware base
+    # and response types, so it is a direct dependency rather than one
+    # inherited from FastAPI.
+    "starlette>=1.3,<2",
+    "pydantic>=2.13,<3",
+    "sqlalchemy>=2.0,<3",
+    "alembic>=1.18,<2",
+    "pyyaml>=6.0,<7",
+    "python-dotenv>=1.2,<2",
+    # Import name is `fitz`.
+    "pymupdf>=1.28,<2",
+    # Required by FastAPI at *route registration* time for the multipart
+    # upload endpoint in app/routers/documents.py. Nothing installs it
+    # transitively, so omitting it does not fail at request time - the
+    # application refuses to import at all, and the test suite cannot
+    # even be collected. It was present in the original developer
+    # environment by accident, which is precisely why this file exists.
+    "python-multipart>=0.0.32,<0.1",
+    # Used directly by the Anthropic client and error mapper, and by
+    # Starlette's TestClient. Reaches the environment through `anthropic`
+    # today; declared here because the code imports it by name.
+    "httpx>=0.28,<1",
+    # Imported at module scope by two routers, so the application cannot
+    # start without it. The *credential* remains optional - the whole
+    # deterministic pipeline and the entire test suite run with no API
+    # key and no network. Making the SDK itself optional would mean
+    # deferring those router imports, which is a code change and not a
+    # packaging one; it is recorded as debt rather than done here.
+    "anthropic>=0.117,<1",
+]
+
+[project.optional-dependencies]
+# The ASGI server. Never imported by the application - it is how the
+# application is served - so it is an extra rather than a hard runtime
+# dependency of the library code.
+server = ["uvicorn>=0.51,<1"]
+
+# Test and development tooling. Deliberately short: the suite uses no
+# async test plugin, because there are no `async def test_` functions -
+# coroutines are driven by explicit `asyncio.run(...)` calls.
+dev = ["pytest>=9.1,<10"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

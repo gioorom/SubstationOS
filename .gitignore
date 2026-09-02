@@ -5,6 +5,12 @@
 __pycache__/
 *.pyc
 
+# Editable-install and build metadata
+*.egg-info/
+.eggs/
+build/
+dist/
+
 # -----------------------------
 # Node.js
 # -----------------------------
