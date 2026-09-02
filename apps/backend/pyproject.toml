@@ -10,9 +10,10 @@ description = "SubstationOS backend - deterministic engineering knowledge deriva
 license = "LicenseRef-Proprietary"
 requires-python = ">=3.13"
 
-# Direct runtime dependencies only. Every entry below is imported by
-# `app/**` or is required by a route at import time; nothing here is a
-# transitive dependency written down twice.
+# Direct runtime dependencies only. Every entry below is imported by name
+# somewhere the application or its schema needs at run time - `app/**` for
+# most, `migrations/**` for alembic - or is required by a route at import
+# time. Nothing here is a transitive dependency written down twice.
 #
 # Lower bounds are the versions this was developed and verified against.
 # Upper bounds appear only where a major release is known to be breaking,
