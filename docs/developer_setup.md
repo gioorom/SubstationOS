@@ -30,7 +30,7 @@ Then:
 cd apps/backend
 alembic upgrade head          # `alembic stamp head` for an existing dev database
 uvicorn app.main:app --reload # serves on http://127.0.0.1:8000
-python -m pytest              # 2941 tests, all deterministic
+python -m pytest              # 3523 tests, all deterministic
 ```
 
 The schema is managed by Alembic, never by application startup: a
@@ -74,7 +74,7 @@ that list — a backend change, so make it deliberately.
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm test            # vitest, 119 tests
+npm test            # vitest, 312 tests
 npm run build       # next build
 ```
 

@@ -46,3 +46,59 @@ storage/
 # -----------------------------
 *.log
 npm-debug.log*
+# -----------------------------
+# Engineering source firewall
+# -----------------------------
+# Real engineering documentation is an EXTERNAL input to this project. It is
+# client material: drawings, cable schedules and their exports never belong in
+# version control, regardless of which directory they are dropped into.
+#
+# `storage/` above already excludes the runtime document store. These rules are
+# defence in depth for the case that actually happened once: a source drawing
+# added from another path, or forced past an ignore rule. The repository ships
+# no PDF, workbook or CAD asset of its own, so a blanket rule costs nothing.
+#
+# If a genuinely public documentation asset is ever needed, add it with an
+# explicit negation (`!docs/assets/example.pdf`) and say why in the commit.
+*.pdf
+*.xlsx
+*.xlsm
+*.xls
+*.dwg
+*.dxf
+*.dwf
+*.step
+*.stp
+*.iges
+
+# Scans and exported drawing images
+*.tif
+*.tiff
+
+# Extraction and pipeline outputs derived from source documents
+knowledge/extraction/outputs/**/*
+!knowledge/extraction/outputs/**/README.md
+
+# -----------------------------
+# Local databases and dumps
+# -----------------------------
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sql.gz
+*.dump
+
+# -----------------------------
+# Tooling caches
+# -----------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# -----------------------------
+# Agent / editor local state
+# -----------------------------
+.claude/settings.local.json
