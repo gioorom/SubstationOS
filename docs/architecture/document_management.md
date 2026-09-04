@@ -542,10 +542,15 @@ into stored content. An architecture test asserts the signature.
 
 ### Supported documents
 
-Only PDF. Everything else - DWG, DXF, spreadsheets, images - produces a
-typed `UNSUPPORTED_FORMAT` result. A drawing is not badly-formed text; it
-is a different problem, and representing it as text would put nonsense
-into the one artefact every future extraction trusts.
+Only PDF. A DWG, a DXF or an image produces a typed
+`UNSUPPORTED_FORMAT` result. A drawing is not badly-formed text; it is a
+different problem, and representing it as text would put nonsense into
+the one artefact every future extraction trusts.
+
+**A spreadsheet no longer reaches this stage at all.** Since ADR-0034 it
+belongs to its own source family and is routed to
+`canonical_spreadsheet_service` before canonicalisation is asked, so it
+is not refused here - it is simply not this lineage's document.
 
 **Scanned PDFs remain unsupported.** There is no OCR in this milestone
 and no OCR import anywhere in the context. A PDF whose pages carry no
@@ -909,16 +914,34 @@ enforced by an architecture test rather than by convention:
 ### What the upload endpoint does now
 
 `POST /documents/upload` stores the file, classifies its format, records
-the document - and then calls **one application workflow**,
-`document_pipeline_service.process_uploaded_document`, which sequences
-ingestion, canonicalisation and segmentation and hands the assembled text
-to the Knowledge Graph.
+the document - and then, **for a project-scoped upload**, calls one
+application workflow for the lineage that document belongs to. There are
+two, and they share their first stage:
+
+| Lineage | Workflow | Stages |
+|---|---|---|
+| PDF (the default) | `process_uploaded_document` | ingestion, canonicalisation, segmentation, text assembly, consumer |
+| Spreadsheet (ADR-0034) | `process_uploaded_spreadsheet` | ingestion, canonicalisation - and it stops |
+
+A **canonical-library** upload runs neither. The endpoint returns
+`skipped` before a lineage is chosen, so a workbook uploaded to the
+shared library is stored and classified but never ingested and never
+canonicalised. That predates this fork and applies equally to a PDF -
+but it means "an uploaded workbook is canonicalised" is true of
+project-scoped uploads only.
+
+Which lineage a format belongs to is answered by
+`document_pipeline_service.lineage_for_format`, **not** by the router:
+that is a processing rule. Every format the spreadsheet policy does not
+positively claim takes the PDF lineage and earns the refusal it always
+earned, so the fork is invisible to every format it does not concern.
 
 The router constructs adapters and maps the result onto the response. It
 contains no parsing, no sequencing rules and no processing decisions; a
 test asserts it never calls the ingestion, canonicalisation or
-segmentation services directly, because re-sequencing them in the API
-layer would put a second, divergent pipeline there.
+segmentation services directly - including the spreadsheet
+canonicalisation service - because re-sequencing them in the API layer
+would put a second, divergent pipeline there.
 
 **A pipeline failure never fails the upload.** The document is stored,
 identified and recorded whatever the Knowledge Graph makes of it - losing
@@ -938,11 +961,32 @@ fourth vocabulary:
 | `segmentation` | A `SegmentationFailureCode` - `unsupported_representation_version`, ... |
 | `text_assembly` | `no_extractable_text` |
 | `downstream_consumer` | `downstream_consumer_failure`, with the consumer's own error in the detail |
+| `canonical_workbook` | A `WorkbookCanonicalizationFailureCode` - `malformed_package`, `encrypted_workbook`, `no_populated_cell`, `unrepresentable_number`, ... |
 
-The endpoint's `knowledge_graph.status` keeps the exact vocabulary it has
+Beside those, the endpoint reports one code of its own,
+`storage_unavailable`. It is not a canonicalisation cause and belongs to
+no bounded context: it means the records a workflow needs could not be
+reached at all - a table absent because code was deployed ahead of its
+migration being the realistic case. No workflow can report it, because
+the fault is what stops the workflow concluding.
+
+**The promise it keeps is precise.** A failure *inside* a lineage never
+fails the upload. A storage fault that also prevents the endpoint
+reading back the document row it just committed is a different
+condition, and one this endpoint cannot report - the response is built
+from those rows.
+
+The spreadsheet lineage's codes are a **restatement**, not a reuse: it
+shares the observations both families can make and keeps its own words
+for the ones only it can (`malformed_package` has no PDF meaning). Where
+the two describe the same observation, the endpoint reports the same
+status - a PDF with no text span and a workbook with no populated cell
+both report `no_text`.
+
+The endpoint's `analysis.status` keeps the exact vocabulary it has
 always had - `skipped`, `completed`, `no_text`, `unsupported_file_type`,
 `failed` - so a client reading only that field sees no change. Beside it,
-`knowledge_graph.failure` now names the stage and the typed cause, so
+`analysis.failure` now names the stage and the typed cause, so
 "failed" is no longer the end of the story.
 
 ### Text assembly

@@ -123,6 +123,41 @@ export const CANONICALIZATION_FAILURE_CODES = [
 export type CanonicalizationFailureCode =
   (typeof CANONICALIZATION_FAILURE_CODES)[number];
 
+// --- Canonical workbook representation (ADR-0034) ------------------------
+//
+// A restatement of the list above, not an extension of it. The two
+// lineages fork at the source and never meet: they share the causes both
+// can observe and each keeps its own word for the ones only it can, so
+// `malformed_package` has no PDF meaning and `corrupted_document` has no
+// spreadsheet meaning. Merging them into one list would suggest a single
+// vocabulary that neither backend context actually uses.
+
+export const WORKBOOK_CANONICALIZATION_FAILURE_CODES = [
+  "document_not_found",
+  "unsupported_format",
+  "content_not_found",
+  "content_inaccessible",
+  "empty_content",
+  "not_ready_for_extraction",
+  "encrypted_workbook",
+  "malformed_package",
+  "decompression_limit_exceeded",
+  "workbook_too_large",
+  "unrepresentable_number",
+  "reader_failure",
+  "empty_workbook",
+  "no_populated_cell",
+  "representation_persistence_failure",
+] as const;
+
+export type WorkbookCanonicalizationFailureCode =
+  (typeof WORKBOOK_CANONICALIZATION_FAILURE_CODES)[number];
+
+// The upload endpoint's own code, belonging to neither lineage: the
+// records a workflow needed could not be reached at all. Reported by the
+// API layer, because the fault is what prevents any workflow concluding.
+export const STORAGE_UNAVAILABLE_CODE = "storage_unavailable";
+
 export interface CanonicalRepresentationSummary {
   document_id: number;
   content_checksum: string;

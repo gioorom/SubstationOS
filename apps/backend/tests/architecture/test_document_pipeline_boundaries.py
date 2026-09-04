@@ -317,6 +317,11 @@ def test_the_upload_router_delegates_the_pipeline_to_the_workflow(
     workflow, but must not call the ingestion, canonicalisation or
     segmentation services themselves - re-sequencing them here would put
     a second, divergent pipeline in the API layer.
+
+    ``canonical_spreadsheet_service`` is named for the same reason as
+    its PDF mirror, and naming it mattered the moment a second lineage
+    existed: a router that reached it directly would have been calling a
+    canonicalisation service itself, and this test would have passed.
     """
 
     tree = ast.parse(UPLOAD_ROUTER.read_text(encoding="utf-8"))
@@ -331,6 +336,7 @@ def test_the_upload_router_delegates_the_pipeline_to_the_workflow(
     assert "document_ingestion_service" not in called_services
     assert "canonical_pdf_service" not in called_services
     assert "canonical_text_service" not in called_services
+    assert "canonical_spreadsheet_service" not in called_services
     assert "document_pipeline_service" in called_services
 
 
@@ -472,3 +478,40 @@ def test_no_semantic_consumer_reaches_stored_content() -> None:
     ] + _knowledge_graph_surface()
 
     assert _offenders(semantic_modules, RAW_CONTENT_MODULES) == []
+
+
+def test_every_pipeline_stage_has_a_reported_status() -> None:
+    """
+    Every stage the workflow can stop at must have a status the endpoint
+    can report.
+
+    The router's table is indexed **unguarded**, so a stage missing from
+    it raises ``KeyError`` *inside the request* - and that would fail an
+    upload whose document is already stored and committed, which is the
+    one thing that endpoint promises never to do.
+
+    The mapping is deliberately lossy and that is not what this guards.
+    It guards totality: a new ``PipelineStage`` member has to arrive
+    with an answer, and this is what says so before a user finds out.
+    """
+
+    from app.routers.documents import _LEGACY_STATUS_FOR_STAGE
+    from app.services.document_pipeline_service import PipelineStage
+
+    assert set(_LEGACY_STATUS_FOR_STAGE) == set(PipelineStage)
+
+
+def test_every_lineage_has_a_stage_to_report_a_storage_fault_at() -> None:
+    """
+    The sibling of the guard above, for the sibling table.
+
+    ``_STAGE_FOR_LINEAGE`` is indexed unguarded *inside the exception
+    handler that reports a storage fault* - so a missing entry would
+    replace a reported failure with the ``KeyError`` the handler exists
+    to prevent, at the moment the system is already in trouble.
+    """
+
+    from app.routers.documents import _STAGE_FOR_LINEAGE
+    from app.services.document_pipeline_service import DocumentLineage
+
+    assert set(_STAGE_FOR_LINEAGE) == set(DocumentLineage)

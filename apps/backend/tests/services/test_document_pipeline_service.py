@@ -18,6 +18,12 @@ from app.infrastructure.canonical_pdf.pymupdf_parser import PyMuPdfParser
 from app.infrastructure.canonical_pdf.sqlalchemy_canonical_representation_repository import (  # noqa: E501
     SqlAlchemyCanonicalRepresentationRepository,
 )
+from app.infrastructure.canonical_spreadsheet.openpyxl_workbook_reader import (  # noqa: E501
+    OpenpyxlWorkbookReader,
+)
+from app.infrastructure.canonical_spreadsheet.sqlalchemy_canonical_workbook_repository import (  # noqa: E501
+    SqlAlchemyCanonicalWorkbookRepository,
+)
 from app.infrastructure.canonical_text.sqlalchemy_canonical_text_repository import (  # noqa: E501
     SqlAlchemyCanonicalTextRepository,
 )
@@ -39,9 +45,11 @@ from app.models.document import Document as DocumentRecord
 from app.models.document import DocumentCategory, DocumentFormat
 from app.services import document_pipeline_service
 from app.services.document_pipeline_service import (
+    DocumentLineage,
     PipelineFailureCode,
     PipelineStage,
 )
+from tests.fixtures import synthetic_workbooks
 from tests._pdf_builder import (
     build_pdf,
     corrupted_pdf,
@@ -471,3 +479,135 @@ def test_the_consumer_never_receives_normalized_text(
     assert "±5" in received[0]
     assert "°C" in received[0]
     assert "kV" in received[0]
+
+
+# --- Which lineage a document takes ------------------------------------------
+
+
+def test_a_workbook_format_takes_the_spreadsheet_lineage() -> None:
+    assert document_pipeline_service.lineage_for_format("xlsx") is (
+        DocumentLineage.CANONICAL_SPREADSHEET
+    )
+
+
+def test_every_other_format_keeps_the_path_it_always_had() -> None:
+    """
+    The PDF lineage is the default, and that is what keeps this change
+    invisible to every format it does not concern.
+
+    A DWG is not routed away from canonicalisation to be refused
+    somewhere new: it takes the same path and earns the same
+    ``unsupported_format`` it always did.
+    """
+
+    for document_format in ("pdf", "dwg", "dxf", "image", "other"):
+        assert document_pipeline_service.lineage_for_format(
+            document_format
+        ) is DocumentLineage.CANONICAL_PDF
+
+
+# --- The spreadsheet lineage --------------------------------------------------
+
+
+def _run_spreadsheet(db: Session, document_id: int):
+    return document_pipeline_service.process_uploaded_spreadsheet(
+        document_id=document_id,
+        ingestion_repository=SqlAlchemyIngestionJobRepository(db),
+        document_metadata_port=SqlAlchemyDocumentMetadataRepository(db),
+        content_port=FilesystemDocumentContentAdapter(),
+        storage_location_port=SqlAlchemyDocumentStorageLocation(db),
+        reader=OpenpyxlWorkbookReader(),
+        workbook_repository=SqlAlchemyCanonicalWorkbookRepository(db),
+        now=NOW,
+    )
+
+
+def _workbook_document(db: Session, tmp_path: Path) -> DocumentRecord:
+    return _document(
+        db,
+        tmp_path,
+        content=synthetic_workbooks.simple_register(),
+        filename="elenco-cavi.xlsx",
+        file_format=DocumentFormat.XLSX,
+    )
+
+
+def test_the_spreadsheet_lineage_stops_at_its_representation(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """Two stages and no more. The absence of a segmentation and an
+    assembled text is the decision ADR-0034 §8 recorded, not an
+    unfinished pipeline."""
+
+    document = _workbook_document(db_session, tmp_path)
+
+    result = _run_spreadsheet(db_session, document.id)
+
+    assert result.succeeded
+    assert result.stage_reached is PipelineStage.CANONICAL_WORKBOOK
+    assert result.reused_representation is False
+    assert db_session.query(CanonicalPdfRepresentation).count() == 0
+    assert db_session.query(CanonicalTextDocumentRecord).count() == 0
+
+
+def test_running_the_spreadsheet_lineage_again_reuses_the_representation(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """The idempotency every stage already has, inherited rather than
+    reimplemented: the same bytes under the same contract are not read
+    twice."""
+
+    document = _workbook_document(db_session, tmp_path)
+
+    assert _run_spreadsheet(db_session, document.id).succeeded
+    second = _run_spreadsheet(db_session, document.id)
+
+    assert second.succeeded
+    assert second.reused_representation is True
+
+
+def test_the_spreadsheet_lineage_reports_the_readers_own_code(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """
+    The failing stage's own vocabulary, carried verbatim.
+
+    ``malformed_package`` exists in no other lineage: a PDF cannot fail
+    this way, and the workflow neither translates it into a shared word
+    nor invents a fourth taxonomy to hold it.
+    """
+
+    document = _document(
+        db_session,
+        tmp_path,
+        content=synthetic_workbooks.corrupted_package(),
+        filename="rotto.xlsx",
+        file_format=DocumentFormat.XLSX,
+    )
+
+    result = _run_spreadsheet(db_session, document.id)
+
+    assert result.succeeded is False
+    assert result.stage_reached is PipelineStage.CANONICAL_WORKBOOK
+    assert result.failure.stage is PipelineStage.CANONICAL_WORKBOOK
+    assert result.failure.code == "malformed_package"
+
+
+def test_the_spreadsheet_lineage_stops_when_ingestion_does(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """Ingestion is shared, and so is its refusal: reading is the step
+    after ingestion in both lineages."""
+
+    document = _document(
+        db_session,
+        tmp_path,
+        filename="assente.xlsx",
+        file_format=DocumentFormat.XLSX,
+    )
+
+    result = _run_spreadsheet(db_session, document.id)
+
+    assert result.succeeded is False
+    assert result.stage_reached is PipelineStage.INGESTION
+    assert result.failure.stage is PipelineStage.INGESTION

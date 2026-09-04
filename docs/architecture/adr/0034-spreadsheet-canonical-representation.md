@@ -283,12 +283,25 @@ designation are two sets of observations.
 - A workbook can be read into a deterministic, identity-keyed, reusable
   representation - the same reproducibility guarantee a PDF has had since
   Milestone 26.1, and the first time a cable register is readable at all.
-  **Read, not yet reached:** no orchestrator invokes canonicalisation for
-  an uploaded workbook and no router exposes it, so an uploaded `.xlsx`
-  still stops at `READY_FOR_EXTRACTION` exactly as before. The capability
-  exists and is reachable only from a direct call. Calling it a
-  first-class governed source would describe the design rather than the
-  shipped state.
+  **Reached since the pipeline integration that followed.** As
+  originally shipped this decision was *read, not yet reached*: no
+  orchestrator invoked canonicalisation, so an uploaded `.xlsx` stopped
+  at `READY_FOR_EXTRACTION` and the capability was reachable only from a
+  test. That is no longer true. A **project-scoped**
+  `POST /documents/upload` now routes a workbook through
+  `process_uploaded_spreadsheet`, a sibling of the PDF workflow sharing
+  its ingestion stage and nothing above it, and the upload reports
+  `completed` with a stored canonical workbook. A canonical-library
+  upload still returns `skipped` before any lineage is chosen - a
+  pre-existing limit of the endpoint that applies to PDFs equally.
+
+  What remains true is the narrower claim: **nothing consumes the
+  result.** No endpoint reads a canonical workbook back, evidence
+  extraction is not run on upload in either lineage, and the frontend
+  renders none of the pipeline's verdict. The lineage is reachable; it
+  is not yet useful, and calling a spreadsheet a first-class governed
+  source would still describe the design rather than the shipped
+  state.
 - **Nothing is fabricated.** No page number, bounding box, reading order
   or line index is invented for a cell, and no existing `NOT NULL`
   provenance column is loosened. The rule the Engineering Index has

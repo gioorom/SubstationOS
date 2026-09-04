@@ -38,6 +38,11 @@ from fastapi import (
     status,
 )
 from fastapi.responses import StreamingResponse
+from sqlalchemy.exc import (
+    InterfaceError,
+    OperationalError,
+    ProgrammingError,
+)
 from sqlalchemy.orm import Session
 
 from app.database.database import SessionLocal
@@ -82,6 +87,12 @@ from app.infrastructure.canonical_pdf.pymupdf_parser import PyMuPdfParser
 from app.infrastructure.canonical_pdf.sqlalchemy_canonical_representation_repository import (  # noqa: E501
     SqlAlchemyCanonicalRepresentationRepository,
 )
+from app.infrastructure.canonical_spreadsheet.openpyxl_workbook_reader import (  # noqa: E501
+    OpenpyxlWorkbookReader,
+)
+from app.infrastructure.canonical_spreadsheet.sqlalchemy_canonical_workbook_repository import (  # noqa: E501
+    SqlAlchemyCanonicalWorkbookRepository,
+)
 from app.infrastructure.canonical_text.sqlalchemy_canonical_text_repository import (  # noqa: E501
     SqlAlchemyCanonicalTextRepository,
 )
@@ -122,7 +133,12 @@ from app.services import (
     document_registry_service,
 )
 from app.services.document_identity_service import resolve_document_identity
-from app.services.document_pipeline_service import PipelineStage
+from app.services.document_pipeline_service import (
+    DocumentLineage,
+    DocumentPipelineResult,
+    PipelineStage,
+    SpreadsheetPipelineResult,
+)
 from app.services.storage import safe_storage_name, save_file
 
 
@@ -539,22 +555,52 @@ _LEGACY_STATUS_FOR_STAGE: dict[PipelineStage, str] = {
     PipelineStage.SEGMENTATION: "failed",
     PipelineStage.TEXT_ASSEMBLY: "no_text",
     PipelineStage.DOWNSTREAM_CONSUMER: "failed",
+    PipelineStage.CANONICAL_WORKBOOK: "failed",
 }
 
 # The one canonicalisation refusal that is not a failure of this upload:
-# the document is simply not a PDF.
+# the document belongs to no lineage that can read it.
 _UNSUPPORTED_FORMAT_CODE = "unsupported_format"
 
-# Canonicalisation's own name for "pages, and no text anywhere".
-_NO_EXTRACTABLE_TEXT_CODE = "no_extractable_text"
+# Reported when the records a workflow needs cannot be reached at all -
+# a table that does not exist yet being the realistic cause. Named here
+# rather than in any context's failure vocabulary because it describes
+# the deployment, not the document.
+_STORAGE_UNAVAILABLE_CODE = "storage_unavailable"
+
+# Where a storage fault is reported to have stopped a run. The workflow
+# never concluded, so this names the lineage the router had dispatched
+# to rather than a stage the workflow claimed to reach.
+_STAGE_FOR_LINEAGE: dict[DocumentLineage, PipelineStage] = {
+    DocumentLineage.CANONICAL_PDF: PipelineStage.CANONICAL_REPRESENTATION,
+    DocumentLineage.CANONICAL_SPREADSHEET: (
+        PipelineStage.CANONICAL_WORKBOOK
+    ),
+}
+
+# Each lineage's own name for "the document opened, it had content to
+# hold, and it held nothing". A set rather than one string because the
+# same observation has a different word in each lineage - a PDF reports
+# pages with no text span, a workbook reports worksheets with no
+# populated cell - and reporting one as `no_text` while the other became
+# the generic `failed` would give a client two answers to one question.
+#
+# `empty_workbook` is deliberately **not** here. It names a container
+# with no worksheet at all, which is the analogue of `empty_document`
+# (no pages), not of `no_extractable_text` - and `empty_document`
+# reports `failed`. Nothing was empty of text; there was nowhere for
+# text to be.
+_NOTHING_TO_READ_CODES = frozenset(
+    {"no_extractable_text", "no_populated_cell"}
+)
 
 
 def _run_document_pipeline(
     db: Session, document: Document, project
 ) -> UploadAnalysisRead:
     """
-    Runs the uploaded document through the one supported pipeline and
-    reports what the Knowledge Graph made of it.
+    Runs the uploaded document through the workflow for its lineage and
+    reports where that workflow stopped.
 
     **The router orchestrates and decides nothing.** Every processing
     rule lives in ``document_pipeline_service`` and the services beneath
@@ -562,9 +608,9 @@ def _run_document_pipeline(
     typed result onto this endpoint's reported shape.
 
     A pipeline failure never fails the upload. The document is stored,
-    identified and recorded whatever the Knowledge Graph makes of it -
-    losing an uploaded file because a downstream analysis stumbled would
-    be the worst possible trade.
+    identified and recorded whatever the workflow makes of it - losing
+    an uploaded file because a downstream analysis stumbled would be the
+    worst possible trade.
     """
 
     if project is None:
@@ -575,8 +621,96 @@ def _run_document_pipeline(
             status="skipped", entities_found=0, failure=None
         )
 
+    # Which lineage this document belongs to is a processing rule, and
+    # the workflow layer owns it (ADR-0034 §1). What the router does
+    # with the answer is construct that lineage's adapters - which is
+    # its job as the composition root, and the only thing it decides.
+    lineage = document_pipeline_service.lineage_for_format(
+        document.file_format.value
+    )
+
+    # The document's own id, read before the workflow runs. A storage
+    # fault leaves the session unusable until it is rolled back, and the
+    # instance is expired by the stages' own commits - so reading it
+    # afterwards would itself raise, inside the handler meant to report
+    # the fault.
+    document_id = document.id
+
+    try:
+        return _run_lineage(db, lineage, document_id=document_id)
+    except (InterfaceError, OperationalError, ProgrammingError):
+        # **The store could not answer.** A missing table is the
+        # realistic case - code deployed ahead of its migration - and it
+        # is not something any workflow can report, because the fault
+        # prevents the workflow concluding at all.
+        #
+        # Mapped here rather than given a domain failure code: no
+        # bounded context owns "the database is not ready", and
+        # inventing a canonicalisation cause for it would put an
+        # infrastructure condition into a vocabulary that describes
+        # documents. This endpoint's promise is a router-level promise,
+        # so this is where it is kept.
+        #
+        # **Narrow on purpose.** These three are the "the database
+        # could not do that" errors - an absent table, a refused
+        # statement, a connection that is gone. The wider
+        # ``SQLAlchemyError`` would also swallow
+        # ``MultipleResultsFound`` and ``InvalidRequestError``, which
+        # are integrity and programming faults: reporting one of those
+        # as an unreachable store would tell an operator to look at the
+        # deployment for a bug that is in the code.
+        db.rollback()
+
+        logger.exception(
+            "Storage was unavailable while processing document %s",
+            document_id,
+        )
+
+        return UploadAnalysisRead(
+            status="failed",
+            entities_found=0,
+            failure=UploadPipelineFailureRead(
+                stage=_STAGE_FOR_LINEAGE[lineage].value,
+                code=_STORAGE_UNAVAILABLE_CODE,
+                message=(
+                    f"Document '{document_id}' was stored, and the "
+                    "analysis could not run because its records were "
+                    "unreachable."
+                ),
+            ),
+        )
+
+
+def _run_lineage(
+    db: Session,
+    lineage: DocumentLineage,
+    *,
+    document_id: int,
+) -> UploadAnalysisRead:
+    """Construct the adapters this lineage needs, run its workflow, and
+    map the result. Dependency construction and nothing else."""
+
+    if lineage is DocumentLineage.CANONICAL_SPREADSHEET:
+        return _report(
+            document_pipeline_service.process_uploaded_spreadsheet(
+                document_id=document_id,
+                ingestion_repository=SqlAlchemyIngestionJobRepository(db),
+                document_metadata_port=(
+                    SqlAlchemyDocumentMetadataRepository(db)
+                ),
+                content_port=FilesystemDocumentContentAdapter(),
+                storage_location_port=SqlAlchemyDocumentStorageLocation(db),
+                reader=OpenpyxlWorkbookReader(),
+                workbook_repository=(
+                    SqlAlchemyCanonicalWorkbookRepository(db)
+                ),
+                now=datetime.utcnow(),
+            ),
+            document_id=document_id,
+        )
+
     result = document_pipeline_service.process_uploaded_document(
-        document_id=document.id,
+        document_id=document_id,
         ingestion_repository=SqlAlchemyIngestionJobRepository(db),
         document_metadata_port=SqlAlchemyDocumentMetadataRepository(db),
         content_port=FilesystemDocumentContentAdapter(),
@@ -604,6 +738,25 @@ def _run_document_pipeline(
         consumer=None,
     )
 
+    return _report(result, document_id=document_id)
+
+
+def _report(
+    result: DocumentPipelineResult | SpreadsheetPipelineResult,
+    *,
+    document_id: int,
+) -> UploadAnalysisRead:
+    """
+    Map either lineage's result onto this endpoint's reported shape.
+
+    **One mapping, not one per lineage.** The two result types differ in
+    what they carry about their own stages, and agree exactly on what
+    this endpoint reports - ``succeeded``, and a ``failure`` whose
+    ``stage``, ``code`` and ``message`` come from the shared,
+    lineage-neutral type. Reading only those keeps the response a single
+    contract however many source families exist.
+    """
+
     if result.succeeded:
         return UploadAnalysisRead(
             status="completed",
@@ -618,7 +771,7 @@ def _run_document_pipeline(
     logger.info(
         "Document pipeline stopped at %s for document %s: %s",
         result.failure.stage.value,
-        document.id,
+        document_id,
         result.failure.code,
     )
 
@@ -641,7 +794,7 @@ def _legacy_status(failure) -> str:
     if failure.code == _UNSUPPORTED_FORMAT_CODE:
         return "unsupported_file_type"
 
-    if failure.code == _NO_EXTRACTABLE_TEXT_CODE:
+    if failure.code in _NOTHING_TO_READ_CODES:
         return "no_text"
 
     return _LEGACY_STATUS_FOR_STAGE[failure.stage]
