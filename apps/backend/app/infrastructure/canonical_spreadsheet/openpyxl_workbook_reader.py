@@ -108,7 +108,9 @@ from app.domain.canonical_spreadsheet.canonical_spreadsheet_policy import (
     MAX_COMPRESSED_BYTES,
     MAX_DECOMPRESSION_RATIO,
     MAX_ENTRY_UNCOMPRESSED_BYTES,
+    MAX_NUMERIC_INTEGER_DIGITS,
     MAX_POPULATED_CELLS,
+    MAX_ROW_NUMBER,
     MAX_ROWS_PER_WORKSHEET,
     MAX_UNCOMPRESSED_BYTES,
     MAX_WORKSHEETS,
@@ -181,14 +183,30 @@ _ERROR_DATA_TYPE = "e"
 #: were missing, and a half-uploaded workbook is the ordinary way to
 #: meet the first: the container header is intact, so nothing fails
 #: until a member is actually decompressed.
+#: ``OSError`` is openpyxl's own signal for "this package has no
+#: workbook part" (it raises a bare ``IOError``), which is what an OOXML
+#: file that is not a spreadsheet at all looks like - a ``.docx``
+#: renamed ``.xlsx`` being the ordinary way to meet it. It is safe to
+#: read as a file defect here because this adapter is handed **bytes**
+#: and opens nothing: there is no disk, socket or handle in scope that
+#: could raise an ``OSError`` meaning anything else.
+#: ``IndexError`` is the shared-string table's version of the same
+#: thing: a ``t="s"`` cell holds an *index* into `sharedStrings.xml`,
+#: resolved as a plain list subscript, so a package whose table is
+#: shorter than its cells claim - truncated, or written by a generator
+#: that miscounted - fails there. It sits beside ``KeyError`` for the
+#: same reason: a part that is present but does not hold what another
+#: part says it does.
 _MALFORMED_PACKAGE_FAULTS = (
     zipfile.BadZipFile,
     zipfile.LargeZipFile,
     InvalidFileException,
     KeyError,
+    IndexError,
     SyntaxError,
     zlib.error,
     NotImplementedError,
+    OSError,
 )
 
 #: A reader fault says the container opened and the library then failed
@@ -711,8 +729,30 @@ def _observe(
 
     observations: list[_Observation] = []
     rows_observed = 0
+    rows_scanned = 0
 
     for raw_row in worksheet.rows:
+        # **Counted before the row is looked at**, and separately from
+        # ``rows_observed`` below, because these two count different
+        # things and only this one bounds the walk.
+        #
+        # A file that declares one populated row at an enormous
+        # coordinate makes the library materialise every index beneath
+        # it - each yielded as an empty row that ``rows_observed`` then
+        # correctly declines to count. The work is done regardless, so
+        # without this the *file* decides how long a read takes, and a
+        # five-kilobyte upload can cost minutes of CPU. The coordinate
+        # is parsed as an unbounded integer, so there is no natural
+        # ceiling to reach.
+        rows_scanned += 1
+
+        if rows_scanned > MAX_ROW_NUMBER:
+            raise _UnreadableWorkbook(
+                WorkbookCanonicalizationFailureCode.WORKBOOK_TOO_LARGE,
+                f"A worksheet spans more than {MAX_ROW_NUMBER} row "
+                "indices, beyond the format's own grid.",
+            )
+
         populated = tuple(
             cell for cell in raw_row if cell.value is not None
         )
@@ -854,8 +894,26 @@ def _value(cell: ReadOnlyCell) -> CellValue:
         )
 
     if isinstance(value, (int, float, Decimal)):
+        number = Decimal(repr(value))
+
+        if not number.is_finite() or (
+            number.adjusted() >= MAX_NUMERIC_INTEGER_DIGITS
+        ):
+            # `<v>1e999</v>` parses to a double that is simply
+            # `inf`. Refused here, with the cell named, rather than
+            # recorded: an infinity cannot be stored and read back, and
+            # substituting a finite stand-in or an error code would put
+            # a number in the register that the file never stated.
+            raise _UnreadableWorkbook(
+                WorkbookCanonicalizationFailureCode
+                .UNREPRESENTABLE_NUMBER,
+                f"Cell row {cell.row}, column {cell.column} states a "
+                "magnitude no recorded number can hold "
+                f"({value!r}).",
+            )
+
         return _typed(
-            CanonicalCellType.NUMBER, repr(value), number=Decimal(repr(value))
+            CanonicalCellType.NUMBER, repr(value), number=number
         )
 
     if isinstance(value, str):

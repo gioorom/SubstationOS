@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import datetime
 import io
+import re
+import zipfile
 
 from openpyxl import Workbook
 
@@ -256,3 +258,205 @@ def many_sheets(count: int) -> bytes:
         sheet = workbook.create_sheet(f"Sheet{index}")
         sheet["A1"] = "x"
     return _to_bytes(workbook)
+
+
+def workbook_without_worksheets() -> bytes:
+    """
+    Fixture L - a valid OOXML container carrying no worksheet at all.
+
+    The spreadsheet analogue of a PDF with no pages, and distinct from
+    fixture H: that one has a worksheet holding nothing, this one has no
+    worksheet to hold anything. The two are different observations and
+    the endpoint reports them differently.
+
+    Built by rebuilding the package without its worksheet part, because
+    ``openpyxl`` refuses to *write* a workbook with no visible sheet -
+    which is itself the reason a file shaped like this only ever arrives
+    from somewhere else.
+    """
+
+    source = simple_register()
+    rebuilt = io.BytesIO()
+
+    with (
+        zipfile.ZipFile(io.BytesIO(source)) as original,
+        zipfile.ZipFile(rebuilt, "w", zipfile.ZIP_DEFLATED) as stripped,
+    ):
+        for entry in original.infolist():
+            if entry.filename.startswith("xl/worksheets/"):
+                continue
+
+            stripped.writestr(entry, original.read(entry.filename))
+
+    return rebuilt.getvalue()
+
+
+def ooxml_without_workbook_part() -> bytes:
+    """
+    Fixture M - a well-formed OOXML package that is not a spreadsheet.
+
+    The shape a ``.docx`` renamed ``.xlsx`` arrives in, and an ordinary
+    mistake rather than an attack: the container opens, every part is
+    valid markup, and there is simply no workbook in it.
+
+    Worth its own fixture because the library signals this case with a
+    bare ``OSError`` - a fault that reached the request as a crash until
+    it was named.
+    """
+
+    package = io.BytesIO()
+
+    with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as parts:
+        parts.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0"?><Types xmlns="http://schemas.'
+            'openxmlformats.org/package/2006/content-types"/>',
+        )
+        parts.writestr(
+            "_rels/.rels",
+            '<?xml version="1.0"?><Relationships xmlns="http://schemas.'
+            'openxmlformats.org/package/2006/relationships"/>',
+        )
+        parts.writestr("word/document.xml", "<document/>")
+
+    return package.getvalue()
+
+
+def row_far_beyond_the_grid() -> bytes:
+    """
+    Fixture N - a tiny workbook that claims a row index the format has
+    no room for.
+
+    Two populated rows, a few kilobytes, and a coordinate so far down
+    that walking to it costs minutes. It is the cheap half of the file
+    that makes it worth refusing: nothing about the *size* of the upload
+    says what reading it will cost.
+    """
+
+    source = simple_register()
+    rebuilt = io.BytesIO()
+
+    with (
+        zipfile.ZipFile(io.BytesIO(source)) as original,
+        zipfile.ZipFile(rebuilt, "w", zipfile.ZIP_DEFLATED) as stripped,
+    ):
+        for entry in original.infolist():
+            content = original.read(entry.filename)
+
+            if entry.filename.startswith("xl/worksheets/"):
+                content = content.replace(
+                    b'<row r="2"', b'<row r="20000000"', 1
+                )
+
+            stripped.writestr(entry, content)
+
+    return rebuilt.getvalue()
+
+
+def _with_patched_cell_value(literal: bytes) -> bytes:
+    """
+    Rebuild a one-number workbook with a raw ``<v>`` payload of our
+    choosing.
+
+    The payload has to be written into the part directly because no
+    spreadsheet application will produce these: they are what a
+    generator, an export or a corrupted file puts there, which is
+    exactly why the reader has to have an answer for them.
+    """
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Ratings"
+    sheet["A1"] = "Rating"
+    sheet["A2"] = 630
+    original = _to_bytes(workbook)
+
+    rebuilt = io.BytesIO()
+
+    with (
+        zipfile.ZipFile(io.BytesIO(original)) as parts,
+        zipfile.ZipFile(rebuilt, "w", zipfile.ZIP_DEFLATED) as patched,
+    ):
+        for entry in parts.infolist():
+            content = parts.read(entry.filename)
+
+            if entry.filename.startswith("xl/worksheets/"):
+                content = content.replace(
+                    b"<v>630</v>", b"<v>" + literal + b"</v>", 1
+                )
+
+            patched.writestr(entry, content)
+
+    return rebuilt.getvalue()
+
+
+def positive_infinity_number() -> bytes:
+    """Fixture O - a cell stating a magnitude no double can hold."""
+
+    return _with_patched_cell_value(b"1e999")
+
+
+def negative_infinity_number() -> bytes:
+    """Fixture P - the same, negative."""
+
+    return _with_patched_cell_value(b"-1e999")
+
+
+def large_finite_number() -> bytes:
+    """
+    Fixture Q - a large magnitude the canonical column can still hold.
+
+    The control for the two above: it must keep working. A bound placed
+    on non-finite values that also refused honest large numbers would
+    have swapped one wrong answer for another.
+    """
+
+    return _with_patched_cell_value(b"1e12")
+
+
+def magnitude_beyond_the_column() -> bytes:
+    """
+    Fixture R - a finite number too large to record.
+
+    A payload with no decimal point is parsed as a Python **integer**,
+    which has no width: this one is four hundred digits and perfectly
+    finite, so a check for finiteness alone waves it through. The column
+    then holds it as an infinity, and the row can never be read again.
+    """
+
+    return _with_patched_cell_value(b"9" * 400)
+
+
+def shared_string_index_beyond_the_table() -> bytes:
+    """
+    Fixture S - a cell pointing past the end of the shared-string table.
+
+    A ``t="s"`` cell holds an *index* into `sharedStrings.xml`, and the
+    library resolves it as a plain list subscript. A package whose table
+    is shorter than its cells claim - truncated, or written by a
+    generator that miscounted - therefore fails on a subscript rather
+    than on anything that looks like a parse error.
+    """
+
+    source = simple_register()
+    rebuilt = io.BytesIO()
+
+    with (
+        zipfile.ZipFile(io.BytesIO(source)) as parts,
+        zipfile.ZipFile(rebuilt, "w", zipfile.ZIP_DEFLATED) as patched,
+    ):
+        for entry in parts.infolist():
+            content = parts.read(entry.filename)
+
+            if entry.filename.startswith("xl/worksheets/"):
+                content = re.sub(
+                    rb'<c r="A2"[^>]*>.*?</c>',
+                    b'<c r="A2" t="s"><v>9999</v></c>',
+                    content,
+                    count=1,
+                    flags=re.S,
+                )
+
+            patched.writestr(entry, content)
+
+    return rebuilt.getvalue()

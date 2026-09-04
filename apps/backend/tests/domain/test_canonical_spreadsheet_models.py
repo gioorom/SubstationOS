@@ -607,3 +607,86 @@ def test_a_representation_cannot_be_edited_after_the_fact() -> None:
 
     with pytest.raises(Exception):
         workbook.content_checksum = "b" * 64
+
+
+# --- Numbers that are not numbers -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "magnitude",
+    [
+        "Infinity",
+        "-Infinity",
+        "NaN",
+        "-NaN",
+        "sNaN",
+        # Finite, and still unrecordable. A payload with no decimal
+        # point is a Python integer, which has no width at all.
+        "1E+15",
+        "-1E+15",
+        "1E+300",
+        "9" * 400,
+    ],
+)
+def test_a_number_cell_refuses_a_magnitude_it_cannot_record(
+    magnitude: str
+) -> None:
+    """
+    A magnitude this representation cannot record.
+
+    Two different faults share one refusal. An infinity or a NaN is not
+    a value a register can state at all. A finite magnitude past the
+    bound is a value the column cannot hold: far enough past it, the
+    stored number becomes an infinity and the row can never be read
+    again - a canonical artefact that is written and unreadable, which
+    is the one thing a representation must never be.
+
+    The bound is a conservative digit-count proxy for that: some values
+    just past it would in fact survive a round trip, and are refused
+    anyway rather than being admitted by a rule nobody could state.
+    """
+
+    with pytest.raises(InvalidCanonicalWorkbookError):
+        canonical_spreadsheet_factory.build_cell_value(
+            value_type=CanonicalCellType.NUMBER,
+            text=magnitude,
+            number=Decimal(magnitude),
+        )
+
+
+@pytest.mark.parametrize(
+    "magnitude",
+    [
+        "0",
+        "-0",
+        "630",
+        "2.5",
+        "0.000000000001",
+        "1E+12",
+        "-1E+12",
+        # The exact edge: fifteen integer digits, the most the store
+        # returns unchanged.
+        "9" * 15,
+        "-" + "9" * 15,
+    ],
+)
+def test_a_number_cell_accepts_a_recordable_magnitude(
+    magnitude: str
+) -> None:
+    """
+    The control for the rule above.
+
+    The bound is on magnitude, and it is deliberately generous: fifteen
+    integer digits is a thousand million million, past anything a
+    register carries. It is **not** a bound on decimal places - see
+    ``test_a_number_needing_more_scale_than_the_column_is_still_read``
+    for what happens to those.
+    """
+
+    value = canonical_spreadsheet_factory.build_cell_value(
+        value_type=CanonicalCellType.NUMBER,
+        text=magnitude,
+        number=Decimal(magnitude),
+    )
+
+    assert value.number == Decimal(magnitude)

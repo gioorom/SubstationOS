@@ -303,9 +303,28 @@ class CanonicalCellRecord(Base):
 
     ``literal_number`` and ``cached_number`` are `Numeric`, **never**
     `Float`: a rated current that read back as 630.0000000000001 A would
-    be a defect nobody could explain to an engineer, and binary floating
-    point makes that inevitable. SQLAlchemy returns `Decimal` from these
-    columns, which is what the domain holds.
+    be a defect nobody could explain to an engineer. SQLAlchemy returns
+    `Decimal` from these columns, which is what the domain holds.
+
+    **The declared width is not the whole story, and the columns are a
+    projection rather than a second original.** SQLite has no native
+    decimal type, so a value passes through a float on the way in and is
+    rendered back at the column's scale on the way out. Measured against
+    the deployed stack that is exact to fifteen integer digits and to
+    the column's twelve decimal places.
+
+    The domain refuses a *magnitude* it cannot hold at all
+    (``MAX_NUMERIC_INTEGER_DIGITS``): past a point the value becomes an
+    infinity and the row can then never be read. It does **not** refuse
+    a value that merely needs more decimal places than the column
+    carries - a cell holding pi is recorded here as 3.14159265359, and
+    one holding 1e-20 as zero. Refusing those would lose an ordinary
+    workbook over an ordinary number.
+
+    So ``literal_text``/``cached_text`` are authoritative, as ADR-0034
+    records, and these columns are what makes a number *queryable*. A
+    consumer that needs the reading the file states must take the
+    text.
 
     ``literal_text``/``cached_text`` remain the authoritative rendering
     either way - ADR-0034 records that a non-integer's own lexical form

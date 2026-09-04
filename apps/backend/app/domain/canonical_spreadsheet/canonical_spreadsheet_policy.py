@@ -88,6 +88,20 @@ MAX_WORKSHEETS = 256
 #: one.
 MAX_ROWS_PER_WORKSHEET = 200_000
 
+#: Row indices one worksheet may make a reader walk - the format's own
+#: grid, so no file a spreadsheet application can write is affected.
+#:
+#: Distinct from ``MAX_ROWS_PER_WORKSHEET``, and needed beside it. That
+#: bound counts rows that *materialise something*, so a file declaring
+#: two populated rows either side of an enormous gap never approaches
+#: it - while the reader still walks every index in between. The work
+#: is done whether or not anything is found in it, which is how a
+#: five-kilobyte upload can cost minutes of CPU and defeat the promise
+#: below that cost is bounded by bounding the work. The coordinate is
+#: parsed as an unbounded integer, so the file, not the format, would
+#: otherwise decide how much walking there is.
+MAX_ROW_NUMBER = 1_048_576
+
 #: The highest column number a worksheet may reach. The format allows
 #: 16,384; a register that is a thousand columns wide is not a register,
 #: and the bound keeps a single crafted row from forcing a wide scan.
@@ -98,6 +112,41 @@ MAX_COLUMNS_PER_WORKSHEET = 1024
 #: this system spends on one untrusted file. Two million cells is a
 #: hundred columns across every row the row bound admits.
 MAX_POPULATED_CELLS = 2_000_000
+
+#: Integer digits one recorded number may carry, and therefore the
+#: widest magnitude this representation will record at all.
+#:
+#: **Set by what the store demonstrably preserves, not by what the
+#: column declares.** The column is 38 digits with 12 after the point,
+#: which would allow 26 before it - but measuring the deployed stack
+#: shows exactness ends at fifteen integer digits; the sixteenth already
+#: returns a different number.
+#:
+#: **This bounds magnitude only, and nothing here bounds scale.** The
+#: column rounds to twelve decimal places, so a cell holding pi is
+#: recorded as 3.14159265359 and one holding 1e-20 is recorded as zero.
+#: Neither is refused, and refusing them would be the wrong trade: a
+#: register legitimately carries such values, and losing the workbook
+#: over them would be worse than recording them at the column's scale.
+#: ``literal_text`` keeps the reading the file actually states, and
+#: ADR-0034 makes it the authoritative rendering for exactly this
+#: reason - the numeric column is a queryable projection of it, not a
+#: second original.
+#:
+#: A magnitude past the bound is refused rather than truncated, for the
+#: same reason a too-large workbook is refused rather than partially
+#: read - and refused rather than stored, because past a certain size it
+#: becomes an infinity in the column and the row can then never be read
+#: again.
+#:
+#: Bounded here rather than only checked for finiteness because a
+#: spreadsheet payload with no decimal point is parsed as a Python
+#: integer, which has no width at all: a four-hundred-digit literal is a
+#: perfectly finite number that no column can hold.
+#:
+#: Fifteen digits is a thousand million million. No rated current,
+#: voltage, length or cross-section comes near it.
+MAX_NUMERIC_INTEGER_DIGITS = 15
 
 #: Characters in one cell's recorded text. The format's own limit for a
 #: cell, so anything longer is a non-conformant file rather than a long

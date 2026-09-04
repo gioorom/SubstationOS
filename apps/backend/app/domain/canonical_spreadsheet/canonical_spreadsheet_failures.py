@@ -62,6 +62,13 @@ class WorkbookCanonicalizationFailureCode(str, Enum):
     # Refused rather than truncated: a partial representation would look
     # to every future consumer like a register that simply ends there.
     WORKBOOK_TOO_LARGE = "workbook_too_large"
+    # A cell states a magnitude no finite number can hold - an infinity
+    # or a NaN, which is what a raw payload like `1e999` becomes once
+    # parsed as a double. No spreadsheet application writes one, so this
+    # is a non-conformant file rather than a large honest register.
+    # Named separately from "too large", which is about how much there
+    # is to read, not about a value that is not a number at all.
+    UNREPRESENTABLE_NUMBER = "unrepresentable_number"
     # The library failed for a reason of its own, on bytes it accepted.
     # The one genuinely unknown cause here, and the only one that should
     # ever prompt "look at the reader".

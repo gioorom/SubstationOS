@@ -50,6 +50,7 @@ from app.domain.canonical_spreadsheet.canonical_spreadsheet_models import (
 )
 from app.domain.canonical_spreadsheet.canonical_spreadsheet_policy import (
     CANONICAL_WORKBOOK_VERSION,
+    MAX_COMPRESSED_BYTES,
     SUPPORTED_SPREADSHEET_FORMATS,
     is_readable_spreadsheet_format,
 )
@@ -228,14 +229,31 @@ def canonicalize_workbook(
             succeeded=True, representation=existing, reused=True
         )
 
-    content = _read_all(content_port, identity)
+    load = _read_bounded(
+        content_port, identity.identity.storage_reference
+    )
 
-    if content is None:
+    if load.exceeded_bound:
+        return _failed(
+            WorkbookCanonicalizationFailureCode.WORKBOOK_TOO_LARGE,
+            f"Document '{document_id}' exceeds the "
+            f"{MAX_COMPRESSED_BYTES} byte bound on a workbook "
+            "container.",
+            detail="Reading stopped at the bound rather than at the "
+            "end of the file, so the exact size is not reported here - "
+            "discovering it would have required holding the whole "
+            "document in memory, which is the cost the bound exists to "
+            "refuse.",
+        )
+
+    if load.content is None:
         return _failed(
             WorkbookCanonicalizationFailureCode.CONTENT_INACCESSIBLE,
             f"Document '{document_id}' became unreadable while its "
             "content was being loaded.",
         )
+
+    content = load.content
 
     read = reader.read(
         content,
@@ -365,27 +383,61 @@ def _is_ready_for_extraction(
     )
 
 
-def _read_all(
-    content_port: DocumentContentPort, identity: ContentIdentityResult
-) -> bytes | None:
+@dataclass(frozen=True, slots=True)
+class _BoundedContent:
     """
-    Loads the whole document through the governed content port.
+    The document's bytes, or the reason there are none to give.
+
+    ``exceeded_bound`` is not a failure of the storage: the bytes are
+    there and readable, and there are simply more of them than the
+    policy admits.
+    """
+
+    content: bytes | None = None
+    exceeded_bound: bool = False
+
+
+def _read_bounded(
+    content_port: DocumentContentPort, storage_reference: str
+) -> _BoundedContent:
+    """
+    Loads the document through the governed content port, **stopping at
+    the governed bound rather than at the end of the file.**
 
     A workbook is a compressed container whose central directory lives at
-    the end, so streaming past the reader is not available here. The port
-    is still the only route to the bytes: this service never opens a
-    file, and the reader receives content rather than a path so it cannot
-    open one either.
+    the end, so streaming past the reader is not available here: the
+    reader needs the whole container. What is available is refusing to
+    accumulate an unbounded amount before discovering that it is
+    unbounded, and that is what this does - the port already yields
+    chunks, so the loop simply stops once one byte more than the policy
+    admits has arrived.
+
+    Reading one byte past the bound rather than exactly to it is what
+    distinguishes "exactly at the limit" from "over it" without a second
+    request or a trusted declared size. Nothing here consults
+    ``Content-Length`` or any other claim the file makes about itself.
+
+    The port remains the only route to the bytes: this service never
+    opens a file, and the reader receives content rather than a path so
+    it cannot open one either.
     """
 
-    reference = identity.identity.storage_reference
+    chunks: list[bytes] = []
+    accumulated = 0
 
     try:
-        return b"".join(
-            content_port.iter_chunks(reference, _READ_CHUNK_SIZE)
-        )
+        for chunk in content_port.iter_chunks(
+            storage_reference, _READ_CHUNK_SIZE
+        ):
+            chunks.append(chunk)
+            accumulated += len(chunk)
+
+            if accumulated > MAX_COMPRESSED_BYTES:
+                return _BoundedContent(exceeded_bound=True)
     except OSError:
-        return None
+        return _BoundedContent()
+
+    return _BoundedContent(content=b"".join(chunks))
 
 
 def _failed(

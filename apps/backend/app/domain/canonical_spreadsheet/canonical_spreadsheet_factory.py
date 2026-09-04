@@ -37,6 +37,9 @@ from app.domain.canonical_spreadsheet.canonical_spreadsheet_models import (
     WorkbookDateSystem,
     WorksheetVisibility,
 )
+from app.domain.canonical_spreadsheet.canonical_spreadsheet_policy import (
+    MAX_NUMERIC_INTEGER_DIGITS,
+)
 
 #: Which typed slot each kind of value must fill, and by omission which
 #: slots it must leave empty. A table rather than a chain of conditions:
@@ -108,6 +111,32 @@ def build_cell_value(
         raise InvalidCanonicalWorkbookError(
             f"Value kind '{value_type.value}' must fill exactly "
             f"('{expected}',); {filled} was supplied."
+        )
+
+    if number is not None and not number.is_finite():
+        # An infinity or a NaN is not a number a register can state, and
+        # it is not storable either: it survives the write and then
+        # raises on the way back, leaving a representation that can be
+        # persisted and never read - the one thing a canonical artefact
+        # must never be.
+        #
+        # Refused here rather than at any single producer because this
+        # factory is also the way a stored row is rebuilt, so the same
+        # rule protects the read path without a second copy of it.
+        raise InvalidCanonicalWorkbookError(
+            f"Value kind '{value_type.value}' carries {number!r}, "
+            "which is not a finite number."
+        )
+
+    if number is not None and number.adjusted() >= MAX_NUMERIC_INTEGER_DIGITS:
+        # Finite, and still not storable. A magnitude past the column's
+        # width becomes an infinity on the way in and raises on the way
+        # out, which is the same broken invariant as a non-finite value
+        # reached by a different route.
+        raise InvalidCanonicalWorkbookError(
+            f"Value kind '{value_type.value}' carries a magnitude of "
+            f"{number.adjusted() + 1} digits, beyond the "
+            f"{MAX_NUMERIC_INTEGER_DIGITS} a recorded number may hold."
         )
 
     return CellValue(

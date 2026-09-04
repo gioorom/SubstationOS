@@ -18,17 +18,29 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.domain.canonical_spreadsheet.canonical_spreadsheet_failures import (
     WorkbookCanonicalizationFailureCode,
 )
+from app.domain.canonical_spreadsheet.canonical_spreadsheet_exceptions import (  # noqa: E501
+    InvalidCanonicalWorkbookError,
+)
 from app.domain.canonical_spreadsheet.canonical_spreadsheet_models import (
+    CanonicalCellType,
     CanonicalWorkbook,
+    WorkbookDateSystem,
     WorksheetVisibility,
+)
+from app.domain.canonical_spreadsheet.canonical_spreadsheet_policy import (  # noqa: E501
+    MAX_COMPRESSED_BYTES,
 )
 from app.domain.canonical_spreadsheet.canonical_workbook_repository import (
     CanonicalWorkbookRepository,
+)
+from app.domain.document_identity.document_content_port import (
+    DocumentContentPort,
 )
 from app.domain.project.project_document_scope import DocumentScope
 from app.infrastructure.canonical_spreadsheet.openpyxl_workbook_reader import (
@@ -49,7 +61,12 @@ from app.infrastructure.document_ingestion.sqlalchemy_ingestion_repository impor
 from app.infrastructure.engineering_index.sqlalchemy_document_metadata import (
     SqlAlchemyDocumentMetadataRepository,
 )
-from app.models.canonical_spreadsheet import CanonicalWorkbookRecord
+from app.models.canonical_spreadsheet import (
+    CanonicalCellRecord,
+    CanonicalRowRecord,
+    CanonicalWorkbookRecord,
+    CanonicalWorksheetRecord,
+)
 from app.models.document import Document as DocumentRecord
 from app.models.document import DocumentCategory, DocumentFormat
 from app.models.engineering_entities import EngineeringEntityRecord
@@ -615,3 +632,314 @@ def test_canonicalisation_writes_no_graph_no_index_and_no_entity(
     assert db_session.query(GovernedGraphEdgeRecord).count() == 0
     assert db_session.query(EngineeringIndexEntry).count() == 0
     assert db_session.query(EngineeringEntityRecord).count() == 0
+
+
+# --- The session a failed write leaves behind ----------------------------
+
+
+class _ReuseBlindRepository(SqlAlchemyCanonicalWorkbookRepository):
+    """
+    The real adapter with reuse defeated.
+
+    Subclassed rather than mocked because the behaviour under test is
+    the *real* adapter's: what a genuine constraint violation does to
+    the session it was handed. Only the reuse short-circuit is removed,
+    so a second run reaches the write instead of returning the stored
+    representation.
+    """
+
+    def find_by_identity(
+        self, document_id: int, artifact_identity: str
+    ) -> CanonicalWorkbook | None:
+        return None
+
+
+def test_a_failed_save_leaves_the_caller_s_session_usable(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """
+    A refused write is reported, and costs the caller nothing else.
+
+    The adapter commits the session it was given, and this service
+    converts a failed commit into a typed result rather than re-raising.
+    Nothing above it would therefore ever roll back - so unless the
+    adapter repairs what it broke, the *next* unrelated query on that
+    session raises ``PendingRollbackError``.
+
+    In the upload endpoint it lands sooner than one might guess: the
+    ingestion stage has already committed, so the ``Document`` instance
+    is expired, and merely reading ``document.id`` to report the
+    failure issues a SELECT on the poisoned session. The registry read
+    and the audit write that follow would fail for the same reason.
+
+    Either way a pipeline failure becomes a failed upload for a
+    document already stored and committed - the one thing that endpoint
+    promises never to do.
+    """
+
+    document = _ready_document(db_session, tmp_path)
+    repository = _ReuseBlindRepository(db_session)
+
+    first = _canonicalize(db_session, document.id, repository=repository)
+    assert first.succeeded
+
+    result = _canonicalize(db_session, document.id, repository=repository)
+
+    assert result.succeeded is False
+    assert result.failure.code is (
+        WorkbookCanonicalizationFailureCode
+        .REPRESENTATION_PERSISTENCE_FAILURE
+    )
+
+    # The assertion this test exists for. The count is incidental; that
+    # the query runs at all is the point.
+    assert db_session.query(CanonicalWorkbookRecord).count() == 1
+
+
+# --- A stored row that should never have existed -------------------------
+
+
+@pytest.mark.parametrize("magnitude", ["Infinity", "-Infinity", "NaN"])
+def test_a_stored_non_finite_number_is_refused_by_name(
+    db_session: Session, magnitude: str
+) -> None:
+    """
+    A row written outside the governed path is refused on the way out,
+    and refused *legibly*.
+
+    Nothing this system writes can produce one - the factory rejects a
+    non-finite value at construction. But the adapter used to reach
+    ``Decimal.quantize`` before the factory saw the row, so such a row
+    surfaced as a bare ``InvalidOperation`` from the decimal library:
+    an error naming no document, no cell and no rule.
+    """
+
+    record = CanonicalWorkbookRecord(
+        artifact_identity="legacy",
+        upstream_identity="upstream",
+        document_id=1,
+        content_checksum="a" * 64,
+        checksum_algorithm="sha256",
+        representation_version="1.0",
+        reader_name="openpyxl",
+        reader_version="3.1.5",
+        date_system=WorkbookDateSystem.EPOCH_1900,
+        has_vba_project=False,
+        has_external_links=False,
+        worksheet_count=1,
+    )
+    worksheet = CanonicalWorksheetRecord(
+        worksheet_index=0,
+        name="Ratings",
+        visibility=WorksheetVisibility.VISIBLE,
+        used_first_row=1,
+        used_last_row=1,
+        used_first_column=1,
+        used_last_column=1,
+    )
+    row = CanonicalRowRecord(row_number=1)
+    row.cells.append(
+        CanonicalCellRecord(
+            column_number=1,
+            literal_type=CanonicalCellType.NUMBER,
+            literal_text=magnitude,
+            literal_number=Decimal(magnitude),
+        )
+    )
+    worksheet.rows.append(row)
+    record.worksheets.append(worksheet)
+    db_session.add(record)
+    db_session.commit()
+
+    with pytest.raises(InvalidCanonicalWorkbookError):
+        SqlAlchemyCanonicalWorkbookRepository(db_session).find_by_identity(
+            1, "legacy"
+        )
+
+
+# --- The bound has to act before the memory is spent ---------------------
+
+
+class _EndlessContent(DocumentContentPort):
+    """
+    A stored document that never ends.
+
+    Not a contrived shape: a port cannot know how much there is until it
+    has read it, which is exactly why the caller must stop rather than
+    ask. It counts what was pulled, because the property under test is
+    *how much was read*, not what was returned.
+    """
+
+    def __init__(self) -> None:
+        self.chunks_yielded = 0
+
+    def describe(self, storage_reference: str):
+        raise NotImplementedError
+
+    def read_prefix(self, storage_reference: str, length: int) -> bytes:
+        raise NotImplementedError
+
+    def iter_chunks(self, storage_reference: str, chunk_size: int):
+        while True:
+            self.chunks_yielded += 1
+            yield bytes(chunk_size)
+
+
+def test_reading_stops_at_the_bound_not_at_the_end_of_the_document() -> None:
+    """
+    The bound must cost what it saves.
+
+    Loading the whole document and *then* measuring it makes the limit a
+    report rather than a protection: the memory is already spent by the
+    time the number is known. This proves the read stops within one
+    chunk of the bound against content that would otherwise never end.
+    """
+
+    port = _EndlessContent()
+
+    load = canonical_spreadsheet_service._read_bounded(port, "anywhere")
+
+    assert load.exceeded_bound is True
+    assert load.content is None
+
+    chunk_size = canonical_spreadsheet_service._READ_CHUNK_SIZE
+    assert port.chunks_yielded <= MAX_COMPRESSED_BYTES // chunk_size + 1
+    assert port.chunks_yielded * chunk_size <= (
+        MAX_COMPRESSED_BYTES + chunk_size
+    )
+
+
+def test_a_document_within_the_bound_is_read_whole() -> None:
+    """The control: the bound refuses excess, not ordinary documents."""
+
+    class _SmallContent(_EndlessContent):
+        def iter_chunks(self, storage_reference: str, chunk_size: int):
+            self.chunks_yielded += 1
+            yield b"workbook bytes"
+
+    load = canonical_spreadsheet_service._read_bounded(
+        _SmallContent(), "anywhere"
+    )
+
+    assert load.exceeded_bound is False
+    assert load.content == b"workbook bytes"
+
+
+def _stored_number(db: Session, magnitude: str, identity: str) -> None:
+    """A workbook row carrying exactly one numeric cell."""
+
+    record = CanonicalWorkbookRecord(
+        artifact_identity=identity,
+        upstream_identity="upstream",
+        document_id=1,
+        content_checksum="a" * 64,
+        checksum_algorithm="sha256",
+        representation_version="1.0",
+        reader_name="openpyxl",
+        reader_version="3.1.5",
+        date_system=WorkbookDateSystem.EPOCH_1900,
+        has_vba_project=False,
+        has_external_links=False,
+        worksheet_count=1,
+    )
+    worksheet = CanonicalWorksheetRecord(
+        worksheet_index=0,
+        name="Ratings",
+        visibility=WorksheetVisibility.VISIBLE,
+        used_first_row=1,
+        used_last_row=1,
+        used_first_column=1,
+        used_last_column=1,
+    )
+    row = CanonicalRowRecord(row_number=1)
+    row.cells.append(
+        CanonicalCellRecord(
+            column_number=1,
+            literal_type=CanonicalCellType.NUMBER,
+            literal_text=magnitude,
+            literal_number=Decimal(magnitude),
+        )
+    )
+    worksheet.rows.append(row)
+    record.worksheets.append(worksheet)
+    db.add(record)
+    db.commit()
+
+
+@pytest.mark.parametrize(
+    "magnitude",
+    ["1E+12", "-1E+12", "630000", "2.5", "0", "0.000000000001", "9" * 15],
+)
+def test_a_number_within_the_columns_scale_reads_back_unchanged(
+    db_session: Session, magnitude: str
+) -> None:
+    """
+    Being large is not being invalid.
+
+    Restoring an integral value to plain notation is a *presentation*
+    step, and it is only defined while the plain form fits the
+    arithmetic context. Applied unconditionally it raised
+    ``InvalidOperation`` on magnitudes a register may legitimately
+    carry - so a number that stored perfectly well could never be read
+    back, which is the same broken invariant as a non-finite value
+    reached by a different route.
+    """
+
+    _stored_number(db_session, magnitude, f"finite-{magnitude}")
+
+    workbook = SqlAlchemyCanonicalWorkbookRepository(
+        db_session
+    ).find_by_identity(1, f"finite-{magnitude}")
+    number = workbook.worksheets[0].rows[0].cells[0].literal.number
+
+    # Equality, not merely "a finite number came back". The weaker
+    # assertion passed while the value was silently altered by the
+    # store, which is the failure this is here to catch.
+    assert number == Decimal(magnitude)
+
+
+@pytest.mark.parametrize(
+    "written, recorded",
+    [
+        # Pi as a spreadsheet holds it: seventeen significant digits,
+        # rounded to the column's twelve decimal places.
+        ("3.141592653589793", "3.14159265359"),
+        # Smaller than the column's smallest step, so it records as
+        # nothing at all.
+        ("1E-20", "0"),
+        ("0.1234567890123", "0.123456789012"),
+    ],
+)
+def test_a_number_needing_more_scale_than_the_column_is_still_read(
+    db_session: Session, written: str, recorded: str
+) -> None:
+    """
+    Scale is **not** bounded, and this pins what that costs.
+
+    The magnitude bound refuses values the column cannot hold at all.
+    Decimal places are a different matter: the column carries twelve,
+    and a value needing more is recorded rounded rather than refused -
+    because a register legitimately holds such numbers and losing the
+    workbook over one would be the worse trade.
+
+    So this asserts the rounding rather than pretending it does not
+    happen. ``literal_text`` keeps the reading the file states, and
+    ADR-0034 makes it the authoritative rendering for exactly this
+    reason: these columns make a number queryable, they are not a
+    second original.
+    """
+
+    _stored_number(db_session, written, f"scale-{written}")
+
+    cell = (
+        SqlAlchemyCanonicalWorkbookRepository(db_session)
+        .find_by_identity(1, f"scale-{written}")
+        .worksheets[0]
+        .rows[0]
+        .cells[0]
+    )
+
+    assert cell.literal.number == Decimal(recorded)
+    # The exact reading survives, in the column that is authoritative
+    # for it.
+    assert cell.literal.text == written
