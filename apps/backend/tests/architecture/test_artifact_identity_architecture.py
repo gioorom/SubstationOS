@@ -24,9 +24,22 @@ from pathlib import Path
 APP_ROOT = Path(__file__).resolve().parents[2] / "app"
 MIGRATIONS = APP_ROOT.parent / "migrations" / "versions"
 
-# The six persisted deterministic artifacts, in derivation order.
+# The eight persisted deterministic artifacts, in derivation order
+# **within each lineage**.
 #
-# This tuple is the audit: a seventh persisted deterministic artifact is
+# ADR-0034 forks the chain at its root: a document's bytes yield either a
+# canonical PDF or a canonical spreadsheet, and the two families meet
+# nowhere above. The tuple was written against a flat chain, so
+# expressing the fork is an edit to the audit itself - which ADR-0034
+# records as a cost of the milestone rather than making quietly. Nothing
+# is weakened by it: every stage below still declares its own port,
+# record, service and locally owned versions, and every test in this file
+# still runs over all of them.
+#
+#     SOURCE ─┬─► CANONICAL_PDF ─► CANONICAL_TEXT ─► EVIDENCE_SET ─► ...
+#             └─► CANONICAL_SPREADSHEET ─► SPREADSHEET_EVIDENCE_SET
+#
+# This tuple is the audit: a ninth persisted deterministic artifact is
 # an architecture decision, and adding one without a line here fails
 # ``test_no_persisted_reuse_boundary_is_unaccounted_for``.
 CHAIN = (
@@ -93,6 +106,35 @@ CHAIN = (
         service=("app.services.engineering_semantic_service",
                  "interpret_document_facts"),
         local=("semantic_policy_version", "semantic_contract_version"),
+    ),
+    # --- The spreadsheet lineage (ADR-0034) -----------------------------
+    #
+    # A second source family, forking at the bytes. Its upstream is
+    # ``source_identity``, exactly as CANONICAL_PDF's is, so the chain
+    # forks at the root rather than growing longer.
+    dict(
+        kind="CANONICAL_SPREADSHEET",
+        context="canonical_spreadsheet",
+        port=("app.domain.canonical_spreadsheet."
+              "canonical_workbook_repository",
+              "CanonicalWorkbookRepository"),
+        record=("app.models.canonical_spreadsheet",
+                "CanonicalWorkbookRecord"),
+        service=("app.services.canonical_spreadsheet_service",
+                 "canonicalize_workbook"),
+        local=("representation_version",),
+    ),
+    dict(
+        kind="SPREADSHEET_EVIDENCE_SET",
+        context="spreadsheet_evidence",
+        port=("app.domain.spreadsheet_evidence."
+              "spreadsheet_evidence_repository",
+              "SpreadsheetEvidenceRepository"),
+        record=("app.models.spreadsheet_evidence",
+                "SpreadsheetEvidenceSetRecord"),
+        service=("app.services.spreadsheet_evidence_service",
+                 "extract_workbook_evidence"),
+        local=("extraction_policy_version",),
     ),
 )
 
@@ -208,6 +250,17 @@ def test_no_stage_names_another_stages_version() -> None:
         "SEMANTIC_SET": ("representation_version", "segmentation_version",
                          "extraction_policy", "resolution_policy",
                          "fact_policy"),
+        # The spreadsheet lineage owns a representation contract and a
+        # reader, and knows nothing of any segmentation or of any stage
+        # below it - including the PDF family's extraction policy, which
+        # is a different reuse key over a different source family.
+        "CANONICAL_SPREADSHEET": ("segmentation_version",
+                                  "extraction_policy", "resolution_policy",
+                                  "fact_policy", "semantic_policy"),
+        "SPREADSHEET_EVIDENCE_SET": ("representation_version",
+                                     "segmentation_version",
+                                     "resolution_policy", "fact_policy",
+                                     "semantic_policy"),
     }
 
     for stage in CHAIN:
@@ -230,6 +283,8 @@ def _identity_module(context: str) -> str:
         "engineering_entities": "entity_identity",
         "engineering_facts": "fact_identity",
         "engineering_semantics": "semantic_identity",
+        "canonical_spreadsheet": "canonical_spreadsheet_identity",
+        "spreadsheet_evidence": "spreadsheet_evidence_identity",
     }[context]
 
 
@@ -526,16 +581,16 @@ def test_no_migration_fabricates_an_identity() -> None:
 
 def test_no_persisted_reuse_boundary_is_unaccounted_for() -> None:
     """
-    Exactly six persisted deterministic artifacts exist, and ``CHAIN``
-    is the declared audit of them.
+    Exactly eight persisted deterministic artifacts exist across the two
+    source families, and ``CHAIN`` is the declared audit of them.
 
     Scope, stated honestly: this compares the declared list against the
-    domain ports that define ``find_by_identity``. It catches a seventh
+    domain ports that define ``find_by_identity``. It catches a ninth
     artifact that follows the established pattern, and a declared one
     that disappears. It cannot catch an artifact persisted through some
     entirely different mechanism - that remains a review question, and
-    the repository-wide scan that found these six is recorded in the
-    EPIC 32.E2.3 audit.
+    the repository-wide scan that found the original six is recorded in
+    the EPIC 32.E2.3 audit.
     """
 
     found = set()

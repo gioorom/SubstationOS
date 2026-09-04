@@ -502,6 +502,14 @@ def test_no_context_outside_canonicalisation_consumes_stored_pdf_bytes(
         "app/services/document_format_backfill_service.py",
         "app/services/document_ingestion_service.py",
         "app/services/canonical_pdf_service.py",
+        # ADR-0034: the spreadsheet lineage's canonicalisation. It reads
+        # a workbook's bytes to record its grid, and does so *through
+        # this port* rather than opening the file - the reader adapter
+        # receives content, never a path, so it cannot reach storage at
+        # all. A mirror of canonical_pdf_service rather than a new kind
+        # of access; every consumer of what it produces reads the
+        # canonical workbook instead of the bytes.
+        "app/services/canonical_spreadsheet_service.py",
         "app/services/document_pipeline_service.py",
         # Milestone 30.1.3: the governed download. It resolves a document
         # id to an opaque storage reference through the registry and hands

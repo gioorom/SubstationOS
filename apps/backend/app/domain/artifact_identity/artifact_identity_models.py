@@ -59,6 +59,14 @@ class ArtifactKind(str, Enum):
     FACT_SET = "fact_set"
     SEMANTIC_SET = "semantic_set"
 
+    #: The spreadsheet lineage (ADR-0034). It is a second source family
+    #: rather than a later stage: its upstream is the source bytes,
+    #: exactly as CANONICAL_PDF's is, so the chain forks at the root
+    #: instead of growing longer. A workbook has no page to record and
+    #: no block to point at, and the two lineages never meet.
+    CANONICAL_SPREADSHEET = "canonical_spreadsheet"
+    SPREADSHEET_EVIDENCE_SET = "spreadsheet_evidence_set"
+
 
 @dataclass(frozen=True, slots=True)
 class ArtifactIdentity:

@@ -31,6 +31,11 @@ dependencies = [
     "python-dotenv>=1.2,<2",
     # Import name is `fitz`.
     "pymupdf>=1.28,<2",
+    # The only module permitted to open an OOXML workbook, enforced by
+    # architecture test (ADR-0034). Pure Python, so there is no wheel to
+    # be missing on a new interpreter - which matters for a library that
+    # sits where untrusted bytes are decoded.
+    "openpyxl>=3.1.5,<4",
     # Required by FastAPI at *route registration* time for the multipart
     # upload endpoint in app/routers/documents.py. Nothing installs it
     # transitively, so omitting it does not fail at request time - the

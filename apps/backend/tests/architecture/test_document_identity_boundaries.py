@@ -309,6 +309,14 @@ def test_no_other_context_gained_storage_access() -> None:
         "app/services/document_format_backfill_service.py",
         "app/services/document_ingestion_service.py",
         "app/services/canonical_pdf_service.py",
+        # ADR-0034: the spreadsheet lineage's canonicalisation. It reads
+        # a workbook's bytes to record its grid, and does so *through
+        # this port* rather than opening the file - the reader adapter
+        # receives content, never a path, so it cannot reach storage at
+        # all. A mirror of canonical_pdf_service rather than a new kind
+        # of access; every consumer of what it produces reads the
+        # canonical workbook instead of the bytes.
+        "app/services/canonical_spreadsheet_service.py",
         # Passes the ports through to ingestion and canonicalisation; it
         # never calls them itself (asserted in
         # tests/architecture/test_document_pipeline_boundaries.py).

@@ -81,6 +81,13 @@ MIME_TYPES: dict[str, ClassifiedFormat] = {
         "application/vnd.openxmlformats-officedocument"
         ".spreadsheetml.sheet"
     ): ClassifiedFormat.XLSX,
+    # The macro-enabled workbook. The `.xlsm` extension has always
+    # classified as XLSX below; without this the two weak sources
+    # disagree and a real macro-enabled register deadlocks as
+    # CONFLICTING. The container is the same OOXML package - whether it
+    # carries a macro project is a property of the content, not of the
+    # format, and is recorded by the reader rather than decided here.
+    "application/vnd.ms-excel.sheet.macroEnabled.12": ClassifiedFormat.XLSX,
     (
         "application/vnd.openxmlformats-officedocument"
         ".wordprocessingml.document"

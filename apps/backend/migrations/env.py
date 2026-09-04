@@ -16,6 +16,7 @@ from alembic import context
 from app.database.database import Base, DATABASE_URL
 from app.models import (  # noqa: F401
     canonical_pdf,
+    canonical_spreadsheet,
     canonical_text,
     canonicalization,
     document,
@@ -32,6 +33,7 @@ from app.models import (  # noqa: F401
     project,
     proposed_claims,
     review_workflow,
+    spreadsheet_evidence,
 )
 
 # this is the Alembic Config object, which provides
