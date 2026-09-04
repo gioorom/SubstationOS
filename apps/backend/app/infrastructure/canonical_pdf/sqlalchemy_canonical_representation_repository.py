@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from sqlalchemy.orm import Session
 
+from app.database.session_commit import commit_or_restore
 from app.domain.canonical_pdf import canonical_pdf_factory
 from app.domain.canonical_pdf.canonical_pdf_models import (
     CanonicalBlockKind,
@@ -93,7 +94,7 @@ class SqlAlchemyCanonicalRepresentationRepository(
             record.pages.append(page_record)
 
         self._session.add(record)
-        self._session.commit()
+        commit_or_restore(self._session)
 
     def find_by_identity(
         self, document_id: int, artifact_identity: str

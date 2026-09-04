@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from decimal import Decimal
+from decimal import Decimal, getcontext
 
 from sqlalchemy.orm import Session
 
+from app.database.session_commit import commit_or_restore
 from app.domain.canonical_spreadsheet import canonical_spreadsheet_factory
 from app.domain.canonical_spreadsheet.canonical_spreadsheet_models import (
     CanonicalCell,
@@ -88,7 +89,7 @@ class SqlAlchemyCanonicalWorkbookRepository(CanonicalWorkbookRepository):
             record.worksheets.append(worksheet_record)
 
         self._session.add(record)
-        self._session.commit()
+        commit_or_restore(self._session)
 
     def find_by_identity(
         self, document_id: int, artifact_identity: str
@@ -292,6 +293,34 @@ def _normalized(value: Decimal) -> Decimal:
     """
 
     normalized = Decimal(value).normalize()
+
+    if not normalized.is_finite():
+        # An infinity or a NaN, which only a row written outside the
+        # governed path can hold: the factory refuses to build one, so
+        # nothing this system writes can produce it.
+        #
+        # Returned untouched rather than repaired or reported here.
+        # Tidying it up in an adapter would launder a corrupt row into a
+        # plausible one, and the presentation concern below has no
+        # meaning for a value that is not a number. The factory this
+        # feeds is where the rule lives, and it raises a typed
+        # ``InvalidCanonicalWorkbookError`` naming the value - rather
+        # than the bare ``InvalidOperation`` that ``quantize`` raised
+        # from here, which named nothing and reached the caller as a
+        # decimal-library fault.
+        return normalized
+
+    if normalized.adjusted() >= getcontext().prec:
+        # Plain notation for this magnitude needs more digits than the
+        # arithmetic context has, and ``quantize`` is undefined there -
+        # it raised ``InvalidOperation`` from here, which is how a
+        # legitimately large finite number became a value that could be
+        # written and never read.
+        #
+        # Exponent form is the same number, so it is returned as it is.
+        # The alternative - rounding it to fit - would silently change
+        # what the register says.
+        return normalized
 
     # ``normalize`` renders large integers in exponent form
     # (Decimal("630000") -> Decimal("6.3E+5")). Equal as numbers, but

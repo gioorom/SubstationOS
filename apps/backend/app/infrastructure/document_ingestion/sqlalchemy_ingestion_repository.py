@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.database.session_commit import commit_or_restore
 from app.domain.document_ingestion.ingestion_lifecycle import (
     ACTIVE_STATES,
     IngestionState,
@@ -46,7 +47,7 @@ class SqlAlchemyIngestionJobRepository(IngestionJobRepository):
         self._apply(record, job)
 
         self._session.add(record)
-        self._session.commit()
+        commit_or_restore(self._session)
         self._session.refresh(record)
 
         return self._to_domain(record)
@@ -61,7 +62,7 @@ class SqlAlchemyIngestionJobRepository(IngestionJobRepository):
 
         self._apply(record, job)
 
-        self._session.commit()
+        commit_or_restore(self._session)
         self._session.refresh(record)
 
         return self._to_domain(record)

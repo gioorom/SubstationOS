@@ -10,6 +10,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.database.session_commit import commit_or_restore
 from app.domain.audit.audit_models import (
     AuditAction,
     AuditActor,
@@ -42,7 +43,7 @@ class SqlAlchemyAuditRepository(AuditRepository):
         )
 
         self._session.add(record)
-        self._session.commit()
+        commit_or_restore(self._session)
 
         return _to_domain(record)
 

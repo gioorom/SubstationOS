@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.database.session_commit import commit_or_restore
 from app.domain.canonical_text.canonical_text_models import (
     CanonicalTextDocument,
     CanonicalTextLine,
@@ -51,7 +52,7 @@ class SqlAlchemyCanonicalTextRepository(CanonicalTextRepository):
             record.sections.append(_section_record(section))
 
         self._session.add(record)
-        self._session.commit()
+        commit_or_restore(self._session)
 
     def find_by_identity(
         self, document_id: int, artifact_identity: str
