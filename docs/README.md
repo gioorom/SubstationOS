@@ -65,7 +65,7 @@ In derivation order. Each stage is a pure function of the one above it.
 
 | Document | Answers |
 |---|---|
-| [`architecture/adr/`](architecture/adr/) | 33 Architecture Decision Records, with a status index |
+| [`architecture/adr/`](architecture/adr/) | 34 Architecture Decision Records, with a status index |
 | [`architecture/architecture_freeze_af01.md`](architecture/architecture_freeze_af01.md) | Architecture Freeze v1.0 — the invariant register, and which test proves each one |
 | [`architecture/ARCHITECTURE_FREEZE_V1_CHECKLIST.md`](architecture/ARCHITECTURE_FREEZE_V1_CHECKLIST.md) | The freeze checklist |
 | [`project/PRODUCT_DEVELOPMENT_PLAN.md`](project/PRODUCT_DEVELOPMENT_PLAN.md) | Roadmap: status, EPICs, milestones |

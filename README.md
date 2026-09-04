@@ -174,6 +174,28 @@ The governing rule is that a wrong answer is worse than a visible error.
 content-checksum identity, explicit project versus canonical-library scoping; PDF
 text extraction into canonical representation and canonical text.
 
+**Spreadsheets** — an `.xlsx` or `.xlsm` workbook is read into a deterministic
+canonical representation of workbook, worksheet, row and cell, and cell-scoped
+observations are recorded against exact coordinates. It is a second source family
+rather than a later stage: a worksheet is not a page and a cell has no bounding box,
+so the derivation chain forks at the bytes instead of forcing a grid into a model
+shaped for ink ([ADR-0034](docs/architecture/adr/0034-spreadsheet-canonical-representation.md)).
+
+A formula is recorded as the formula, and separately as the value some other
+application cached into the file. Nothing here evaluates one. A workbook written by
+a script and never opened by a spreadsheet application carries a formula and no
+cached value at all, and that is recorded as exactly that — never as a blank cell,
+an empty string or a zero, which would be indistinguishable downstream from a
+register that genuinely says nothing there.
+
+**What a spreadsheet does not yet do.** Nothing reads a workbook's structure as a
+table. There is deliberately no header row, no column name and no record: deciding
+that row 1 — or row 7, after a title block — is a header is a guess, and nothing at
+this stage can check a guess. So no cable, circuit or terminal is recognised, no
+connectivity is inferred from two cells sharing a row, and a designation in a
+workbook is not matched to the same designation in a drawing. Those are separate,
+reviewable milestones. `.xls`, `.xlsb`, CSV and ODS are unsupported.
+
 **Deterministic derivation** — evidence extraction for reference designations,
 engineering quantities (voltage, current, power, cable section) and IEC 81346
 location aspects, every match traceable to one declared pattern; entity resolution
@@ -211,7 +233,7 @@ timeline, a pipeline inspector and a project knowledge-graph view.
 | Backend | Python 3.13+, FastAPI, SQLAlchemy, Alembic |
 | PDF parsing | PyMuPDF, behind a domain-owned parser port |
 | Domain data | YAML, safe-loaded, reviewable without reading Python |
-| Database | SQL, schema owned by Alembic (17 migrations); SQLite in development |
+| Database | SQL, schema owned by Alembic (18 migrations); SQLite in development |
 | LLM | Anthropic, behind `LlmProviderPort`; disabled by default |
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS, React Flow |
 | Tests | pytest (backend), Vitest and Testing Library (frontend) |
@@ -226,7 +248,7 @@ standard library and other domain modules, and an architecture test enforces it.
 
 ```
 apps/backend/            Python / FastAPI backend — the primary application
-  app/domain/            33 domain packages: entities, value objects, rules, ports
+  app/domain/            35 domain packages: entities, value objects, rules, ports
   app/application/       provider-neutral LLM contracts, policies, runtime
   app/infrastructure/    adapters: PDF parser, YAML loaders, repositories, LLM
   app/services/          use-case orchestration, one service per pipeline stage
@@ -236,7 +258,7 @@ apps/backend/            Python / FastAPI backend — the primary application
   tests/                 domain, services, api, infrastructure, architecture
 apps/frontend/           Next.js engineering workspace
 docs/architecture/       Architecture Freeze v1.0 and long-form references
-docs/architecture/adr/   33 Architecture Decision Records
+docs/architecture/adr/   34 Architecture Decision Records
 docs/ai-context/         derived navigation layer, regenerated rather than authored
 knowledge/               Canonical Knowledge Protocol and extraction methodology
 scripts/, tools/         operational scripts and PDF tooling
@@ -453,7 +475,7 @@ Please report security issues privately rather than opening a public issue —
 
 Alpha, under active development by a single author.
 
-The architecture is frozen at **v1.0** and recorded as 33 Architecture Decision
+The architecture is frozen at **v1.0** and recorded as 34 Architecture Decision
 Records, each stating what was decided, what it costs and what was rejected instead.
 The freeze is not a claim of production readiness — it is an honest map of what is
 settled, what is partial and what is open, so later work builds on a documented
@@ -473,7 +495,7 @@ the problem are welcome.
 | [`CLAUDE.md`](CLAUDE.md) | Engineering manual: architecture, conventions, workflow, what must never be done |
 | [`PRODUCT_VISION.md`](PRODUCT_VISION.md) | Product vision, mission, modules, long-range narrative |
 | [`docs/architecture/`](docs/architecture/) | Architecture Freeze v1.0 and long-form references per context |
-| [`docs/architecture/adr/`](docs/architecture/adr/) | 33 Architecture Decision Records |
+| [`docs/architecture/adr/`](docs/architecture/adr/) | 34 Architecture Decision Records |
 | [`docs/developer_setup.md`](docs/developer_setup.md) | Local development setup |
 | [`docs/project/PRODUCT_DEVELOPMENT_PLAN.md`](docs/project/PRODUCT_DEVELOPMENT_PLAN.md) | Roadmap: status, EPICs, milestones |
 
