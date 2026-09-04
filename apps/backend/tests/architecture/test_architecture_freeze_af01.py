@@ -56,6 +56,14 @@ def _imports(path: pathlib.Path) -> set[str]:
             names.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             names.add(node.module)
+            # ``from app.application.services import llm_runtime`` names
+            # the package, not the module, so a check against the full
+            # dotted path missed it - while both other import forms were
+            # caught. Recording the resolved name too closes the one
+            # spelling that evaded every invariant built on this helper.
+            names.update(
+                f"{node.module}.{alias.name}" for alias in node.names
+            )
 
     return names
 
@@ -507,6 +515,14 @@ DETERMINISTIC_CONTEXTS = (
     "artifact_identity",
     "canonical_pdf",
     "canonical_text",
+    # ADR-0034's second source family. Named here as well as in its own
+    # boundary test, because this list is what makes "a new deterministic
+    # context" a visible edit to the freeze - and because the local test's
+    # forbidden set was narrower than AF-DET-002's, so a spreadsheet
+    # module importing the provider-neutral LLM runtime would have passed
+    # every test in the repository.
+    "canonical_spreadsheet",
+    "spreadsheet_evidence",
     "engineering_evidence",
     "engineering_entities",
     "engineering_facts",

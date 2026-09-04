@@ -280,10 +280,15 @@ designation are two sets of observations.
 
 ### Good
 
-- A workbook becomes a first-class governed source with a deterministic,
-  identity-keyed, reusable representation - the same reproducibility
-  guarantee a PDF has had since Milestone 26.1, and the first time a
-  cable register is readable at all.
+- A workbook can be read into a deterministic, identity-keyed, reusable
+  representation - the same reproducibility guarantee a PDF has had since
+  Milestone 26.1, and the first time a cable register is readable at all.
+  **Read, not yet reached:** no orchestrator invokes canonicalisation for
+  an uploaded workbook and no router exposes it, so an uploaded `.xlsx`
+  still stops at `READY_FOR_EXTRACTION` exactly as before. The capability
+  exists and is reachable only from a direct call. Calling it a
+  first-class governed source would describe the design rather than the
+  shipped state.
 - **Nothing is fabricated.** No page number, bounding box, reading order
   or line index is invented for a cell, and no existing `NOT NULL`
   provenance column is loosened. The rule the Engineering Index has

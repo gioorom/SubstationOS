@@ -146,6 +146,16 @@ CATALOGUE_PINS = {
     # supposed to identify them. See
     # ``test_a_rule_version_change_cannot_hide_behind_its_policy``.
     "extraction": ("2.0", "9cbc2819b4957551afe58ef551d7c36acc60daa1b253fd5bfe80c818b88aa6a4"),
+    # ADR-0034's spreadsheet stage applies the *same* extraction catalogue,
+    # imported read-only, and folds those rule ids and versions into its
+    # stored evidence keys. Without a pin of its own, raising a rule
+    # version would re-derive the PDF lineage correctly and leave stored
+    # spreadsheet evidence reused under an unchanged identity - which is
+    # the exact failure this test exists to prevent, one lineage over.
+    "spreadsheet_extraction": (
+        "1.0",
+        "9cbc2819b4957551afe58ef551d7c36acc60daa1b253fd5bfe80c818b88aa6a4",
+    ),
     "resolution": ("1.0", "a4db9d527dc529d3f8bb0e290d426436e410c5b504b25d2f73d910cfffed2957"),
     # EPIC 32.P2 raised both together: ``same_line_location_association``
     # joined the catalogue, so the policy version that identifies it moved
@@ -402,8 +412,16 @@ def test_a_rule_version_change_cannot_hide_behind_its_policy() -> None:
         SEMANTIC_RULES,
     )
 
+    from app.domain.spreadsheet_evidence.spreadsheet_evidence_policy import (
+        SPREADSHEET_EXTRACTION_POLICY_VERSION,
+    )
+
     catalogues = {
         "extraction": (EXTRACTION_POLICY_VERSION, EXTRACTION_RULES),
+        "spreadsheet_extraction": (
+            SPREADSHEET_EXTRACTION_POLICY_VERSION,
+            EXTRACTION_RULES,
+        ),
         "resolution": (RESOLUTION_POLICY_VERSION, RESOLUTION_RULES),
         "fact": (FACT_POLICY_VERSION, CONSTRUCTION_RULES),
         "semantic": (SEMANTIC_POLICY_VERSION, SEMANTIC_RULES),

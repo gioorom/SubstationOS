@@ -374,10 +374,17 @@ def test_the_spreadsheet_family_reaches_no_llm() -> None:
     """A workbook is read deterministically or not at all."""
 
     forbidden = {"anthropic", "openai", "cohere", "transformers", "torch"}
+    # The three application-layer names are the ones AF-DET-002 bans and
+    # this list originally missed: they are provider-neutral, so a module
+    # importing them looks innocent, and none of the vendor names above
+    # would have caught it.
     forbidden_prefixes = (
         "app.domain.llm",
         "app.application.llm",
         "app.infrastructure.llm",
+        "app.application.services.llm_invocation_service",
+        "app.application.services.llm_runtime",
+        "app.application.ports.llm_provider_port",
     )
     offenders: dict[str, set[str]] = {}
     for path in _python_files(*SPREADSHEET_FAMILY):
