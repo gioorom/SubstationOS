@@ -110,3 +110,4 @@ one.
 | [0032](0032-upstream-identity-in-derived-set-reuse.md) | Upstream Identity in Derived-Set Reuse | Amended (32.E2.4) |
 | [0033](0033-pseudonymous-reference-corpus-provenance.md) | Pseudonymous Reference-Corpus Provenance | Accepted |
 | [0034](0034-spreadsheet-canonical-representation.md) | Spreadsheet Canonical Representation | Accepted |
+| [0035](0035-human-authored-document-assertions.md) | Human-Authored Document Assertions | Accepted |
