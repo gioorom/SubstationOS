@@ -513,6 +513,21 @@ DETERMINISTIC_CONTEXTS = (
     # hashing and artifact kinds - and must never learn anything that
     # could make an identity depend on a guess.
     "artifact_identity",
+    # ADR-0036. The context that establishes a document's content
+    # identity - the input `source_identity` hashes, and therefore the
+    # first link in every deterministic chain in the system.
+    #
+    # It was absent from this list, and naming it closes no hole: its
+    # own boundary test already forbids `app.application` outright over
+    # this same directory, which is a strict superset of what AF-DET-002
+    # bans here. It is listed for the two reasons the list exists. This
+    # is the registry of deterministic contexts, so membership is what
+    # makes the root of the chain's deterministic status a visible edit
+    # to the freeze rather than a property somebody has to infer. And it
+    # is defence in depth: deleting or narrowing the local boundary test
+    # no longer silently removes LLM protection from the one context
+    # every other identity is composed from.
+    "document_identity",
     "canonical_pdf",
     "canonical_text",
     # ADR-0034's second source family. Named here as well as in its own

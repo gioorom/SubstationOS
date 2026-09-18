@@ -11,6 +11,7 @@ Four things this milestone had to make true, and each has tests here:
 
 from __future__ import annotations
 
+import hashlib
 import io
 
 import httpx
@@ -170,18 +171,35 @@ def test_document_detail_reports_ingestion_state_once_ingested(
     assert detail["size_bytes"] == len(PDF)
 
 
-def test_a_document_that_has_not_been_ingested_reports_no_checksum(
+def test_a_document_reports_its_own_identity_before_any_ingestion(
     api_client: TestClient,
 ) -> None:
-    """An un-run identity is not a zero, and is not invented."""
+    """
+    ADR-0036 changed where this answer comes from.
+
+    It used to be the checksum of the document's most recent ingestion
+    job, so a document that had never been ingested reported ``None`` -
+    not because nothing was known about its bytes, but because the only
+    place the answer was kept had no row yet. The bytes were hashed at
+    upload even then; the result was discarded.
+
+    Now the document records its own identity when it is created, so the
+    answer exists from the moment the upload succeeds and does not move
+    afterwards. The ingestion fields stay empty, because they describe
+    something that genuinely has not happened - which is the distinction
+    the old assertion could not make.
+    """
 
     document = _uploaded(api_client)
 
     detail = api_client.get(f"/documents/{document['id']}").json()
 
-    assert detail["content_checksum"] is None
-    assert detail["size_bytes"] is None
+    assert detail["content_checksum"] == hashlib.sha256(PDF).hexdigest()
+    assert detail["checksum_algorithm"] == "sha256"
+    assert detail["size_bytes"] == len(PDF)
+
     assert detail["ingestion_state"] is None
+    assert detail["ingestion_outcome"] is None
 
 
 def test_an_unknown_document_detail_returns_404(

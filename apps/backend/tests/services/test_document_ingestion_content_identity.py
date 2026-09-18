@@ -340,3 +340,56 @@ def test_two_documents_with_identical_bytes_both_ingest_normally(
     assert first.outcome is IngestionOutcome.READY_FOR_EXTRACTION
     assert second.outcome is IngestionOutcome.READY_FOR_EXTRACTION
     assert first.document.content.checksum == second.document.content.checksum
+
+
+# --- The document's identity does not move (ADR-0036 §28 row 10) --------
+
+
+def test_re_ingestion_records_a_job_and_never_writes_the_documents_identity(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """
+    Row 10 at the layer the ADR names it: the **service**.
+
+    The persistence tests prove the columns survive a job row written by
+    hand, which is a statement about the schema. This runs the real
+    ingestion service over a document whose bytes have since changed, so
+    the identity the job resolves genuinely disagrees with the one the
+    document carries - the only arrangement in which "the service does
+    not write the document row" is observable rather than assumed.
+
+    Without it, "what this document is" and "what one attempt saw"
+    collapse into one mutable value, and the evidence that the bytes
+    changed is destroyed by the very read that discovered it.
+    """
+
+    document = _stored_document(db_session, tmp_path)
+
+    document.content_checksum = hashlib.sha256(PDF_CONTENT).hexdigest()
+    document.content_checksum_algorithm = "sha256"
+    document.content_size_bytes = len(PDF_CONTENT)
+    db_session.commit()
+    db_session.refresh(document)
+
+    recorded = (
+        document.content_checksum,
+        document.content_checksum_algorithm,
+        document.content_size_bytes,
+    )
+
+    redrawn = b"%PDF-1.7 montante T2, revisione 03, ridisegnato"
+    Path(document.file_path).write_bytes(redrawn)
+
+    job = _ingest(db_session, document.id)
+    db_session.refresh(document)
+
+    assert job.id is not None
+    assert job.document.content.checksum == hashlib.sha256(
+        redrawn
+    ).hexdigest()
+
+    assert (
+        document.content_checksum,
+        document.content_checksum_algorithm,
+        document.content_size_bytes,
+    ) == recorded

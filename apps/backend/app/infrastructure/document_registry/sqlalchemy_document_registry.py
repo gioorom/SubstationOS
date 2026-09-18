@@ -100,9 +100,14 @@ class SqlAlchemyDocumentRegistryRepository(DocumentRegistryRepository):
 
     def _latest_job(self, document_id: int) -> DocumentIngestionJob | None:
         """
-        The document's most recent ingestion attempt, which is where the
-        content identity lives. Reading it here rather than recomputing a
-        checksum keeps a detail view a read, not a full file hash.
+        The document's most recent ingestion attempt, which is where its
+        ingestion *state* lives.
+
+        It no longer supplies the content identity. ADR-0036 moved that
+        to the document's own row, because "most recent attempt" is not
+        a version handle: this query orders by row id and filters on
+        nothing, so a failed job was as authoritative as a successful
+        one and the reported checksum moved whenever either was written.
         """
 
         return (
@@ -195,11 +200,16 @@ class SqlAlchemyDocumentRegistryRepository(DocumentRegistryRepository):
             revision=record.revision,
             scope=record.scope,
             uploaded_at=record.uploaded_at,
-            content_checksum=None if job is None else job.content_checksum,
-            checksum_algorithm=(
-                None if job is None else job.content_checksum_algorithm
-            ),
-            size_bytes=None if job is None else job.content_size_bytes,
+            # ADR-0036: the document's own recorded identity, not the
+            # newest ingestion attempt's. The attempt's checksum is what
+            # *that run* saw and legitimately differs from the next
+            # run's; reading it here made "the checksum of this document"
+            # move whenever a job was recorded, including a failed one.
+            # A row created before that milestone carries none, and none
+            # is invented for it.
+            content_checksum=record.content_checksum,
+            checksum_algorithm=record.content_checksum_algorithm,
+            size_bytes=record.content_size_bytes,
             # Resolved by the service through the content port; the
             # registry cannot see storage and does not guess.
             content_available=False,

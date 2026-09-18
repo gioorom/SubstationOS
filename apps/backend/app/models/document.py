@@ -108,6 +108,34 @@ class Document(Base):
         nullable=False,
     )
 
+    # ADR-0036. The document's own content identity, recorded when the
+    # row is created and never updated afterwards. Together with ``id``
+    # it is what the pipeline already calls this document's *version*:
+    # every downstream stage refuses to build when its checksum and its
+    # upstream's disagree.
+    #
+    # Nullable because a row created before this milestone has none, and
+    # no migration may invent one - an identity a migration computed
+    # would be a claim about bytes it never saw. ``NULL`` therefore means
+    # *honestly unknown*, never "empty" and never "zero", and two of them
+    # are never the same unknown.
+
+    content_checksum: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        index=True,
+    )
+
+    content_checksum_algorithm: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    content_size_bytes: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
     project: Mapped["Project | None"] = relationship(
         "Project",
         back_populates="documents",

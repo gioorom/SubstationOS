@@ -23,11 +23,15 @@ would be inventing a policy nobody has stated.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from enum import Enum
 
 from app.domain.document_identity.document_content_port import (
     DocumentContentPort,
+)
+from app.domain.document_identity.document_identity_exceptions import (
+    DocumentIdentityError,
 )
 
 CHECKSUM_ALGORITHM = "sha256"
@@ -54,6 +58,26 @@ class ContentIdentityFailureReason(str, Enum):
     CHECKSUM_FAILURE = "checksum_failure"
 
 
+#: A recorded checksum is exactly this: lowercase hexadecimal, as long
+#: as the algorithm's digest. Uppercase hex, base64 and a ``sha256:``
+#: prefix all name the same bytes and none of them compares equal to
+#: this spelling, so a digest that could arrive in more than one form is
+#: not an identity - it is a value that sometimes matches itself.
+CHECKSUM_PATTERN = re.compile(r"\A[0-9a-f]{64}\Z")
+
+
+class MalformedChecksumError(DocumentIdentityError):
+    """
+    A checksum was offered in a spelling this context does not record.
+
+    Raised at construction rather than reported as a failure reason: a
+    failure reason describes something true about a document - it could
+    not be found, it was empty - whereas this describes a caller that
+    computed the digest wrongly. Recording it would put a value in the
+    column that no comparison can trust.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class ContentIdentity:
     """The bytes' own identity. ``storage_reference`` is recorded so a
@@ -64,6 +88,35 @@ class ContentIdentity:
     checksum_algorithm: str
     checksum: str
     size_bytes: int
+
+    def __post_init__(self) -> None:
+        """
+        The representation rule, enforced where the value is made.
+
+        Every digest in this system is written by ``hexdigest()`` and is
+        canonical already, so this rejects nothing that exists today.
+        That is the point: the guarantee the rest of the milestone rests
+        on should not be *"the only caller happens to be correct"*, which
+        is a property of the call site rather than of the identity.
+        """
+
+        if self.checksum_algorithm != CHECKSUM_ALGORITHM:
+            raise MalformedChecksumError(
+                f"Content identity records {CHECKSUM_ALGORITHM!r} "
+                f"checksums; {self.checksum_algorithm!r} was offered."
+            )
+
+        if not CHECKSUM_PATTERN.fullmatch(self.checksum):
+            raise MalformedChecksumError(
+                "A content checksum is 64 lowercase hexadecimal "
+                f"characters; {self.checksum!r} is not."
+            )
+
+        if self.size_bytes <= 0:
+            raise MalformedChecksumError(
+                "A content identity describes bytes that exist; "
+                f"{self.size_bytes} is not a length."
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,5 +223,44 @@ def resolve_content_identity(
             checksum_algorithm=CHECKSUM_ALGORITHM,
             checksum=digest.hexdigest(),
             size_bytes=hashed_bytes,
+        ),
+    )
+
+
+def identity_of_written_bytes(
+    *, storage_reference: str, checksum: str, size_bytes: int
+) -> ContentIdentityResult:
+    """
+    The same identity, for a caller that hashed the bytes *as it wrote
+    them* rather than by reading them back.
+
+    ``resolve_content_identity`` above answers "what is at this
+    reference now". This answers "what did I just store", and the
+    difference matters: a digest taken during the write provably covers
+    the bytes that were persisted, where a digest taken afterwards
+    covers whatever the file held at the moment of the second read.
+
+    Pure by construction - it performs no I/O and reaches no port, so
+    the rule stays in the domain while the streaming stays at the edge.
+    The empty-file refusal is applied here too, for the reason
+    ``resolve_content_identity`` gives: SHA-256's empty digest is a real
+    value, and recording it would make every empty document in the
+    system look like the same document.
+    """
+
+    if size_bytes <= 0:
+        return _failed(
+            ContentIdentityFailureReason.EMPTY_CONTENT,
+            f"Nothing was written to '{storage_reference}'; there is "
+            "nothing to identify.",
+        )
+
+    return ContentIdentityResult(
+        resolved=True,
+        identity=ContentIdentity(
+            storage_reference=storage_reference,
+            checksum_algorithm=CHECKSUM_ALGORITHM,
+            checksum=checksum,
+            size_bytes=size_bytes,
         ),
     )

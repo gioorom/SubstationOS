@@ -67,10 +67,20 @@ def resolve_document_identity(
     storage_reference: str | None,
     filename: str | None = None,
     declared_mime_type: str | None = None,
+    content: ContentIdentityResult | None = None,
 ) -> ResolvedDocumentIdentity:
     """
     Establishes content identity and format for the bytes at
     ``storage_reference``.
+
+    ``content`` lets a caller that has **already** established the
+    identity pass it in rather than have it recomputed. The upload path
+    does, because it hashes while it writes (ADR-0036 §8), and hashing
+    the same file again would cost a second full read and describe
+    whatever the file held at the moment of that read. Ingestion and
+    canonicalisation deliberately do not: a later stage recomputing the
+    digest is how a change to the stored bytes becomes detectable at
+    all.
 
     The leading bytes are read **only** when content identity resolved.
     Reading a prefix from something already reported as missing, empty or
@@ -79,7 +89,10 @@ def resolve_document_identity(
     describe bytes the checksum does not cover.
     """
 
-    content = resolve_content_identity(content_port, storage_reference or "")
+    if content is None:
+        content = resolve_content_identity(
+            content_port, storage_reference or ""
+        )
 
     content_prefix: bytes | None = None
 

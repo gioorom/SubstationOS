@@ -91,15 +91,16 @@ describe("document detail", () => {
     expect(result.current.document?.size_bytes).toBe(4096);
   });
 
-  it("reports no checksum for a document that was never ingested", async () => {
+  it("reports the identity of a document that was never ingested", async () => {
     stubBackend({
       "GET /documents/7": {
         body: aDocumentDetail({
           id: 7,
-          content_checksum: null,
-          checksum_algorithm: null,
-          size_bytes: null,
+          content_checksum: "a".repeat(64),
+          checksum_algorithm: "sha256",
+          size_bytes: 38,
           ingestion_state: null,
+          ingestion_outcome: null,
         }),
       },
     });
@@ -108,7 +109,36 @@ describe("document detail", () => {
 
     await waitFor(() => expect(result.current.document).not.toBeNull());
 
-    // An un-run identity is not a zero, and the UI does not invent one.
+    // ADR-0036: a document records the identity of its own bytes at
+    // upload, so the answer exists before anything has been ingested.
+    // The two are separate facts and the hook keeps them separate: an
+    // ingestion that has not happened stays empty, and does not erase
+    // an identity that is already known.
+    expect(result.current.document?.content_checksum).toBe("a".repeat(64));
+    expect(result.current.document?.checksum_algorithm).toBe("sha256");
+    expect(result.current.document?.size_bytes).toBe(38);
+    expect(result.current.document?.ingestion_state).toBeNull();
+  });
+
+  it("reports no checksum for a document that has no identity", async () => {
+    stubBackend({
+      "GET /documents/7": {
+        body: aDocumentDetail({
+          id: 7,
+          content_checksum: null,
+          checksum_algorithm: null,
+          size_bytes: null,
+        }),
+      },
+    });
+
+    const { result } = renderHook(() => useDocument(7));
+
+    await waitFor(() => expect(result.current.document).not.toBeNull());
+
+    // Rows uploaded before ADR-0036 carry no identity, and none is
+    // written for them afterwards. An unknown is not a zero, and the UI
+    // does not invent one.
     expect(result.current.document?.content_checksum).toBeNull();
     expect(result.current.document?.size_bytes).toBeNull();
   });

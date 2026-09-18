@@ -46,6 +46,7 @@ from sqlalchemy.exc import (
 from sqlalchemy.orm import Session
 
 from app.database.database import SessionLocal
+from app.database.session_commit import commit_or_restore
 from app.domain.document_identity.document_format import FormatClassification
 from app.domain.audit.audit_models import (
     AuditAction,
@@ -139,7 +140,11 @@ from app.services.document_pipeline_service import (
     PipelineStage,
     SpreadsheetPipelineResult,
 )
-from app.services.storage import safe_storage_name, save_file
+from app.services.storage import (
+    discard_file,
+    safe_storage_name,
+    save_file,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -441,30 +446,69 @@ async def upload_document(
 
     filename = file.filename or "unnamed_document"
 
-    # The uploaded name never becomes a path; see `save_file`.
-    saved_path = save_file(file.file, filename)
+    # The uploaded name never becomes a path; see `save_file`. The bytes
+    # are hashed as they are written, so the identity recorded below
+    # covers the bytes that were actually stored.
+    stored = save_file(file.file, filename)
+    saved_path = stored.path
 
-    # Milestone 25.2: the format is classified from the bytes just
-    # written, plus the declared MIME type and the filename, by the same
-    # classifier ingestion uses.
-    identity = resolve_document_identity(
-        FilesystemDocumentContentAdapter(),
-        storage_reference=str(saved_path),
-        filename=filename,
-        declared_mime_type=file.content_type,
-    )
+    # Everything from here to the commit runs with bytes already on disk
+    # and no row referencing them, so every exit from this block that is
+    # not a commit has to take the file with it. The window is wider
+    # than the commit itself: classification and row construction can
+    # both raise, and a file orphaned by those is orphaned just as
+    # thoroughly as one orphaned by a failed commit.
+    try:
+        # Milestone 25.2: the format is classified from the bytes just
+        # written, plus the declared MIME type and the filename, by the
+        # same classifier ingestion uses. ADR-0036: the content identity
+        # comes from the write rather than a second read of the file.
+        identity = resolve_document_identity(
+            FilesystemDocumentContentAdapter(),
+            storage_reference=str(saved_path),
+            filename=filename,
+            declared_mime_type=file.content_type,
+            content=stored.content,
+        )
 
-    document = Document(
-        filename=filename,
-        file_path=str(saved_path),
-        file_format=_persisted_format(identity.format),
-        project_id=project.id if project else None,
-        project_name=project.name if project else "Unknown",
-        scope=scope,
-    )
+        content_identity = (
+            identity.content.identity if identity.content.resolved else None
+        )
 
-    db.add(document)
-    db.commit()
+        document = Document(
+            filename=filename,
+            file_path=str(saved_path),
+            file_format=_persisted_format(identity.format),
+            project_id=project.id if project else None,
+            project_name=project.name if project else "Unknown",
+            scope=scope,
+            # ADR-0036 §18: written once, here, and never updated. A
+            # file that could not be identified - an empty upload is the
+            # reachable case - records no identity rather than a
+            # placeholder for one.
+            content_checksum=(
+                content_identity.checksum if content_identity else None
+            ),
+            content_checksum_algorithm=(
+                content_identity.checksum_algorithm
+                if content_identity
+                else None
+            ),
+            content_size_bytes=(
+                content_identity.size_bytes if content_identity else None
+            ),
+        )
+
+        db.add(document)
+        commit_or_restore(db)
+    except Exception:
+        # The bytes were written before the row existed, which is the
+        # right order - the alternative leaves a committed row pointing
+        # at nothing, and that is a lie in the registry rather than
+        # invisible waste. So the compensation belongs here.
+        discard_file(saved_path)
+        raise
+
     db.refresh(document)
 
     analysis = _run_document_pipeline(db, document, project)
