@@ -146,8 +146,24 @@ class Project(Base):
         nullable=True,
     )
 
+    # No cascade, deliberately.
+    #
+    # This carried ``cascade="all, delete-orphan"``, which meant two
+    # things nobody had written down. Deleting a project deleted every
+    # document filed against it - and a project is only ever *soft*
+    # deleted precisely so that "the Project record, and every document,
+    # index entry, and graph node that references it, remain in place for
+    # audit and eventual restore". And merely removing a document from
+    # this collection deleted its row, so re-filing a document into
+    # another project would have destroyed it.
+    #
+    # A document outlives its filing. Twelve tables reference
+    # ``documents.id`` and none of them cascades, so a destroyed document
+    # leaves twelve tables of derived artefacts pointing at a row that is
+    # not there. The default ``save-update, merge`` is what this
+    # relationship should always have had: a way to read a project's
+    # documents, not a way to destroy them.
     documents: Mapped[list["Document"]] = relationship(
         "Document",
         back_populates="project",
-        cascade="all, delete-orphan",
     )

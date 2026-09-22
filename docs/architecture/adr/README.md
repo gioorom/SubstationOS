@@ -112,3 +112,4 @@ one.
 | [0034](0034-spreadsheet-canonical-representation.md) | Spreadsheet Canonical Representation | Accepted |
 | [0035](0035-human-authored-document-assertions.md) | Human-Authored Document Assertions | Accepted |
 | [0036](0036-document-version-identity.md) | Document Version Identity | Accepted |
+| [0037](0037-document-supersession.md) | Document Supersession | Accepted |
