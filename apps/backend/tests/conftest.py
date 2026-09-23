@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
+import pathlib
 from collections.abc import Iterator
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -44,6 +47,102 @@ from app.routers import review_workflow as review_workflow_router_module
 from app.routers import users as users_router_module
 from app.routers import working_memory as working_memory_router_module
 from app.routers.security import install_security
+from app.services import storage as storage_service
+
+
+# --- Storage isolation ---------------------------------------------------
+#
+# `app.services.storage.BASE_STORAGE` is a relative path to the
+# deployment's storage root, and every upload writes under it. Until
+# this fixture existed, each test that uploaded a document wrote a real
+# file into the developer's real document store - roughly 78,000 of
+# them had accumulated there, mixed in with the actual engineering
+# corpus.
+#
+# Redirecting the constant is the mechanism two test modules already
+# used for their own files; making it autouse simply applies it to all
+# of them, and changes nothing about how the application behaves when
+# nobody has redirected it.
+
+#: The real storage root, found from this file rather than from
+#: ``BASE_STORAGE`` - which is the thing under test and is redirected
+#: below, so trusting it here would make the guard agree with whatever
+#: went wrong.
+REAL_STORAGE_ROOT = pathlib.Path(__file__).resolve().parents[3] / "storage"
+
+#: What ``BASE_STORAGE`` is when nobody has redirected it - captured at
+#: import, before any fixture runs, so a test can assert what the
+#: application does in production without having to undo the isolation
+#: to find out.
+DEFAULT_STORAGE_ROOT = storage_service.BASE_STORAGE
+
+
+@pytest.fixture(autouse=True)
+def isolated_storage(
+    tmp_path_factory: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[Path]:
+    """
+    A storage root of this test's own, and never the real one.
+
+    Autouse, because the protection has to hold for tests nobody
+    remembered to mark - the accumulation this prevents came entirely
+    from tests that had no idea they were writing anywhere.
+
+    pytest removes these directories on its own retention schedule, so
+    nothing here deletes them: a failed test's files are worth keeping
+    until the next runs need the space.
+    """
+
+    root = tmp_path_factory.mktemp("substationos-storage")
+    monkeypatch.setattr(storage_service, "BASE_STORAGE", root)
+
+    yield root
+
+
+def _storage_population() -> dict[str, int]:
+    """How many entries each part of the real storage root holds."""
+
+    if not REAL_STORAGE_ROOT.is_dir():
+        return {}
+
+    return {
+        child.name: sum(1 for _ in os.scandir(child))
+        for child in REAL_STORAGE_ROOT.iterdir()
+        if child.is_dir()
+    }
+
+
+@pytest.fixture(scope="session", autouse=True)
+def real_storage_is_never_written_to() -> Iterator[None]:
+    """
+    Fails the session if it left anything behind in the real storage
+    root.
+
+    A filesystem-level check rather than a promise about code paths: it
+    counts what is there before and after, so a write through any route
+    - a fixture, a helper, an endpoint nobody thought of - is caught.
+    It makes no assertion about the *contents*, which are the
+    developer's own documents and none of a test's business.
+    """
+
+    before = _storage_population()
+
+    yield
+
+    after = _storage_population()
+
+    grew = {
+        name: (before.get(name, 0), count)
+        for name, count in after.items()
+        if count > before.get(name, 0)
+    }
+
+    assert not grew, (
+        "The test session wrote into the real storage root "
+        f"{REAL_STORAGE_ROOT}: {grew}. Every test must write under the "
+        "`isolated_storage` fixture's temporary root."
+    )
 
 
 @pytest.fixture()
