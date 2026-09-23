@@ -552,6 +552,16 @@ DETERMINISTIC_CONTEXTS = (
     # consequence. A conclusion an LLM helped reach is a guess with a
     # rule id attached.
     "engineering_reasoning",
+    # The searchable projection of a document. Lexical and
+    # deterministic by design: the same query over the same corpus
+    # returns the same hits forever, because a search that ranked by
+    # similarity would be answering an engineering question - "is TR2
+    # near enough to TR1?" - that nobody asked it.
+    #
+    # It is listed here rather than left to its own boundary test
+    # because a search box is exactly where a model would be reached
+    # for first, and the freeze is where that has to be a visible edit.
+    "document_search",
 )
 
 

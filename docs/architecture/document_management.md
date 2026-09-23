@@ -943,6 +943,29 @@ segmentation services directly - including the spreadsheet
 canonicalisation service - because re-sequencing them in the API layer
 would put a second, divergent pipeline there.
 
+#### Indexing for search happens after the lineage, not inside it
+
+Once the lineage has run, the endpoint calls one further application
+service - `DocumentSearchService.index_document` (ADR-0038) - for
+**every** scope, including canonical-library. This is a second call, not
+a stage of the pipeline: indexing *reads* what the pipeline produced,
+and the pipeline's contract is to report where processing stopped, not
+to publish anything. Constructing that service is the same composition-
+root job the router already does for the lineage adapters, so the rule
+above is unchanged: no parsing, no sequencing, no processing decision.
+
+Calling it unconditionally is deliberate rather than an oversight. A
+canonical-library upload has no canonical representation to read, so it
+indexes nothing and the call is a no-op - but the endpoint does not have
+to know that, and a scope added later becomes searchable without anybody
+remembering to add it here. What a canonical-library document is worth
+searching, and under which scope, is left open by ADR-0038.
+
+A failure to index does not fail the upload, for the same reason a
+pipeline failure does not. The catch is the same narrow set of store
+faults; anything else is a defect in the indexing code rather than a
+condition to absorb.
+
 **A pipeline failure never fails the upload.** The document is stored,
 identified and recorded whatever the Knowledge Graph makes of it - losing
 an uploaded file because a downstream analysis stumbled would be the

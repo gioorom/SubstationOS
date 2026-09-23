@@ -134,6 +134,13 @@ from app.services import (
     document_registry_service,
 )
 from app.services.document_identity_service import resolve_document_identity
+from app.infrastructure.document_search.canonical_segment_reader import (
+    CanonicalSegmentReader,
+)
+from app.infrastructure.document_search.sqlalchemy_document_search_repository import (  # noqa: E501
+    SqlAlchemyDocumentSearchRepository,
+)
+from app.services.document_search_service import DocumentSearchService
 from app.services.document_pipeline_service import (
     DocumentLineage,
     DocumentPipelineResult,
@@ -513,6 +520,8 @@ async def upload_document(
 
     analysis = _run_document_pipeline(db, document, project)
 
+    _index_for_search(db, document.id)
+
     detail = document_registry_service.get_document_detail(
         _registry(db),
         _content_port(),
@@ -538,6 +547,48 @@ async def upload_document(
         analysis=analysis,
         warnings=_upload_warnings(identity, filename),
     )
+
+
+def _index_for_search(db: Session, document_id: int) -> None:
+    """
+    Make this document findable, now that whatever could be derived from
+    it has been.
+
+    Indexing runs here rather than inside the pipeline because it reads
+    what the pipeline produced. The pipeline's contract is to report
+    where processing stopped; making the result searchable is a separate
+    concern and belongs to the composition root, like every other
+    adapter this router wires.
+
+    **A store that cannot answer does not fail the upload.** The
+    document is stored and recorded, and losing an uploaded file
+    because an index could not be written would be the worst possible
+    trade. A document that is not indexed is a document that cannot yet
+    be found - which re-indexing repairs. The failure is logged rather
+    than swallowed.
+
+    The catch is deliberately the same narrow set the pipeline handler
+    below uses, and for the same reason: those three are the faults a
+    workflow cannot report because they stop it concluding at all.
+    Anything else raised from here is a defect in this code rather than
+    a condition to absorb, and hiding it behind a successful upload
+    would leave it undiagnosed.
+    """
+
+    service = DocumentSearchService(
+        SqlAlchemyDocumentSearchRepository(db),
+        CanonicalSegmentReader(db),
+    )
+
+    try:
+        service.index_document(document_id)
+    except (InterfaceError, OperationalError, ProgrammingError):
+        logger.exception(
+            "Could not index document %s for search; it is stored but "
+            "will not appear in results until it is indexed again.",
+            document_id,
+        )
+        db.rollback()
 
 
 def _upload_warnings(

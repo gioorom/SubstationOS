@@ -10019,6 +10019,61 @@
     "title": "ProjectRead",
     "type": "object"
    },
+   "ProjectSearchResponse": {
+    "description": "The answer to one search within one project.",
+    "properties": {
+     "documents": {
+      "items": {
+       "$ref": "#/components/schemas/SearchDocumentResult"
+      },
+      "title": "Documents",
+      "type": "array"
+     },
+     "project_id": {
+      "title": "Project Id",
+      "type": "integer"
+     },
+     "query": {
+      "description": "What was typed, unchanged.",
+      "title": "Query",
+      "type": "string"
+     },
+     "suggestions": {
+      "description": "Populated only when nothing matched.",
+      "items": {
+       "$ref": "#/components/schemas/SearchTermSuggestion"
+      },
+      "title": "Suggestions",
+      "type": "array"
+     },
+     "terms": {
+      "description": "What was actually searched for once case and accents were folded. Shown so the reader can see how their query was read.",
+      "items": {
+       "type": "string"
+      },
+      "title": "Terms",
+      "type": "array"
+     },
+     "total_documents": {
+      "default": 0,
+      "description": "Documents containing at least one match.",
+      "title": "Total Documents",
+      "type": "integer"
+     },
+     "total_matches": {
+      "default": 0,
+      "description": "Matching places across the project.",
+      "title": "Total Matches",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "project_id",
+     "query"
+    ],
+    "title": "ProjectSearchResponse",
+    "type": "object"
+   },
    "ProjectSortField": {
     "description": "The fields a project list may be ordered by.",
     "enum": [
@@ -11907,6 +11962,214 @@
      "rule_version"
     ],
     "title": "RuleVersionRead",
+    "type": "object"
+   },
+   "SearchDocumentResult": {
+    "description": "Every match found in one document.\n\nResults arrive grouped this way because an engineer looks for a\ndocument first and a position inside it second.",
+    "properties": {
+     "content_checksum": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Digest of the document version these matches were read from. Null for documents stored before versions were recorded.",
+      "title": "Content Checksum"
+     },
+     "document_id": {
+      "title": "Document Id",
+      "type": "integer"
+     },
+     "filename": {
+      "title": "Filename",
+      "type": "string"
+     },
+     "matches": {
+      "items": {
+       "$ref": "#/components/schemas/SearchMatch"
+      },
+      "title": "Matches",
+      "type": "array"
+     },
+     "source_type": {
+      "$ref": "#/components/schemas/SearchSourceType"
+     }
+    },
+    "required": [
+     "document_id",
+     "filename",
+     "source_type"
+    ],
+    "title": "SearchDocumentResult",
+    "type": "object"
+   },
+   "SearchHighlight": {
+    "description": "Where a searched term sits inside the snippet.",
+    "properties": {
+     "end": {
+      "description": "One past the last character.",
+      "title": "End",
+      "type": "integer"
+     },
+     "start": {
+      "description": "First character of the match.",
+      "title": "Start",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "start",
+     "end"
+    ],
+    "title": "SearchHighlight",
+    "type": "object"
+   },
+   "SearchLocation": {
+    "description": "Where a match is inside its document.\n\n``determined`` is false when the source did not record a position.\nIn that case every other field is null and no position is implied -\nthe platform does not guess at a page number.",
+    "properties": {
+     "cell_reference": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Cell in A1 notation, when the exact cell is known.",
+      "title": "Cell Reference"
+     },
+     "determined": {
+      "description": "Whether the position inside the document is known.",
+      "title": "Determined",
+      "type": "boolean"
+     },
+     "page_number": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "1-based page, for a PDF.",
+      "title": "Page Number"
+     },
+     "row_number": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "1-based row, for a spreadsheet.",
+      "title": "Row Number"
+     },
+     "worksheet_name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Sheet name, for a spreadsheet.",
+      "title": "Worksheet Name"
+     }
+    },
+    "required": [
+     "determined"
+    ],
+    "title": "SearchLocation",
+    "type": "object"
+   },
+   "SearchMatch": {
+    "description": "One place in one document that matches the query.",
+    "properties": {
+     "location": {
+      "$ref": "#/components/schemas/SearchLocation"
+     },
+     "snippet": {
+      "$ref": "#/components/schemas/SearchSnippet"
+     }
+    },
+    "required": [
+     "location",
+     "snippet"
+    ],
+    "title": "SearchMatch",
+    "type": "object"
+   },
+   "SearchSnippet": {
+    "description": "The text shown for a match, and what to emphasise in it.",
+    "properties": {
+     "highlights": {
+      "description": "Positions of the searched terms within the text.",
+      "items": {
+       "$ref": "#/components/schemas/SearchHighlight"
+      },
+      "title": "Highlights",
+      "type": "array"
+     },
+     "text": {
+      "description": "The source text, exactly as the document has it.",
+      "title": "Text",
+      "type": "string"
+     },
+     "truncated_after": {
+      "default": false,
+      "description": "Text was cut from the end of this snippet.",
+      "title": "Truncated After",
+      "type": "boolean"
+     },
+     "truncated_before": {
+      "default": false,
+      "description": "Text was cut from the start of this snippet.",
+      "title": "Truncated Before",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "text"
+    ],
+    "title": "SearchSnippet",
+    "type": "object"
+   },
+   "SearchSourceType": {
+    "description": "The kind of document a result came from, named as a person would\nname it.",
+    "enum": [
+     "pdf",
+     "spreadsheet"
+    ],
+    "title": "SearchSourceType",
+    "type": "string"
+   },
+   "SearchTermSuggestion": {
+    "description": "A term that matched nothing, and the designations this project does\ncontain that differ from it only by an IEC 81346 aspect prefix.\n\nOffered so an empty result can be understood. The search is not\nrerun with them: ``-Q1`` and ``Q1`` are different designations, and\nwhich one was meant is the engineer's call.",
+    "properties": {
+     "present_variants": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Present Variants",
+      "type": "array"
+     },
+     "term": {
+      "title": "Term",
+      "type": "string"
+     }
+    },
+    "required": [
+     "term"
+    ],
+    "title": "SearchTermSuggestion",
     "type": "object"
    },
    "SegmentationFailureCode": {
@@ -18683,6 +18946,85 @@
     "summary": "List Review Candidates For Project",
     "tags": [
      "Review Workflow"
+    ]
+   }
+  },
+  "/projects/{project_id}/search": {
+   "get": {
+    "description": "Search the documents filed under one project.\n\nOnly this project's documents are searched, and the project must\nexist: searching a project that does not exist is a mistake worth\nreporting, not an empty result that looks like \"nothing found here\".",
+    "operationId": "search_project_documents_projects__project_id__search_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "project_id",
+      "required": true,
+      "schema": {
+       "title": "Project Id",
+       "type": "integer"
+      }
+     },
+     {
+      "description": "What to look for. Terms are matched whole and every term must appear in the same place. Engineering designations keep their aspect prefix: -Q1 and Q1 are different.",
+      "in": "query",
+      "name": "q",
+      "required": false,
+      "schema": {
+       "default": "",
+       "description": "What to look for. Terms are matched whole and every term must appear in the same place. Engineering designations keep their aspect prefix: -Q1 and Q1 are different.",
+       "maxLength": 200,
+       "title": "Q",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 20,
+       "maximum": 50,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "offset",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "minimum": 0,
+       "title": "Offset",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProjectSearchResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Find what this project's documents say",
+    "tags": [
+     "Project Document Search"
     ]
    }
   },

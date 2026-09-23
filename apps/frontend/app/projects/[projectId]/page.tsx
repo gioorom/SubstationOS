@@ -8,6 +8,7 @@ import { Archive, ArrowLeft, Network, RotateCcw } from "lucide-react";
 import EngineeringIntelligencePanel from "@/components/intelligence/EngineeringIntelligencePanel";
 import ProjectDocumentsPanel from "@/components/projects/ProjectDocumentsPanel";
 import ProjectHero from "@/components/projects/ProjectHero";
+import ProjectSearchPanel from "@/components/projects/ProjectSearchPanel";
 import UploadBox from "@/components/UploadBox";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +19,7 @@ import {
   type ProjectTransition,
 } from "@/hooks/useProjects";
 import { useProjectIntelligence } from "@/hooks/usePlatform";
+import { useProjectSearch } from "@/hooks/useProjectSearch";
 import { isMutable } from "@/lib/contracts";
 
 export default function ProjectDetailPage() {
@@ -53,6 +55,17 @@ export default function ProjectDetailPage() {
   const [uploadProjectId, setUploadProjectId] = useState<number | undefined>(
     projectId,
   );
+
+  // What the engineer has typed into the search box. The hook decides
+  // when that becomes a request; this only holds the text.
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const {
+    results: searchResults,
+    submitted: searchSubmitted,
+    searching,
+    error: searchError,
+  } = useProjectSearch(projectId, searchQuery);
 
   if (projectId === undefined) {
     return (
@@ -208,6 +221,17 @@ export default function ProjectDetailPage() {
           <EngineeringIntelligencePanel intelligence={intelligence} />
         </section>
       )}
+
+      <section className="mt-8">
+        <ProjectSearchPanel
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          results={searchResults}
+          submitted={searchSubmitted}
+          searching={searching}
+          error={searchError}
+        />
+      </section>
 
       <section className="mt-8 grid gap-6 xl:grid-cols-2">
         <div id="project-upload-box">

@@ -18,6 +18,7 @@ from app.models import (  # noqa: F401
     canonicalization,
     document,
     document_ingestion,
+    document_search,
     engineering_entities,
     engineering_evidence,
     engineering_facts,
@@ -41,6 +42,7 @@ from app.routers import (
     conversation as conversation_router,
     documents,
     document_ingestion as document_ingestion_router,
+    document_search as document_search_router,
     engineering_engine as engineering_engine_router,
     engineering_entities as engineering_entities_router,
     engineering_evidence as engineering_evidence_router,
@@ -110,6 +112,7 @@ app.include_router(users_router.router)
 app.include_router(audit_router.router)
 app.include_router(documents.router)
 app.include_router(document_ingestion_router.router)
+app.include_router(document_search_router.router)
 app.include_router(canonical_pdf_router.router)
 app.include_router(canonical_text_router.router)
 app.include_router(engineering_evidence_router.router)

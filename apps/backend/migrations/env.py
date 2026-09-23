@@ -21,6 +21,7 @@ from app.models import (  # noqa: F401
     canonicalization,
     document,
     document_ingestion,
+    document_search,
     engineering_entities,
     engineering_evidence,
     engineering_facts,

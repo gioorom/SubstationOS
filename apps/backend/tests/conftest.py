@@ -18,6 +18,7 @@ from app.routers import canonical_text as canonical_text_router_module
 from app.routers import canonicalization as canonicalization_router_module
 from app.routers import conversation as conversation_router_module
 from app.routers import document_ingestion as document_ingestion_router_module
+from app.routers import document_search as document_search_router_module
 from app.routers import documents as documents_router_module
 from app.routers import engineering_engine as engineering_engine_router_module
 from app.routers import engineering_entities as engineering_entities_router_module
@@ -235,6 +236,7 @@ def secured_app(db_session: Session, session_factory: sessionmaker):
     test_app.include_router(projects_router_module.router)
     test_app.include_router(documents_router_module.router)
     test_app.include_router(document_ingestion_router_module.router)
+    test_app.include_router(document_search_router_module.router)
     test_app.include_router(canonical_pdf_router_module.router)
     test_app.include_router(canonical_text_router_module.router)
     test_app.include_router(engineering_evidence_router_module.router)
@@ -269,6 +271,9 @@ def secured_app(db_session: Session, session_factory: sessionmaker):
     ] = _override_get_db
     test_app.dependency_overrides[
         document_ingestion_router_module.get_db
+    ] = _override_get_db
+    test_app.dependency_overrides[
+        document_search_router_module.get_db
     ] = _override_get_db
     test_app.dependency_overrides[
         canonical_pdf_router_module.get_db

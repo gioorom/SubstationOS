@@ -16,3 +16,4 @@ export * from "./pipeline";
 export * from "./platform";
 export * from "./project";
 export * from "./review";
+export * from "./search";

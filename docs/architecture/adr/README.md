@@ -113,3 +113,4 @@ one.
 | [0035](0035-human-authored-document-assertions.md) | Human-Authored Document Assertions | Accepted |
 | [0036](0036-document-version-identity.md) | Document Version Identity | Accepted |
 | [0037](0037-document-supersession.md) | Document Supersession | Accepted |
+| [0038](0038-project-document-search.md) | Project Document Search | Accepted |

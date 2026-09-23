@@ -92,6 +92,14 @@ ALLOWED_DOMAIN_DEPENDENCIES: dict[str, frozenset[str]] = {
     # layer, not by a domain import.
     "document_registry": frozenset({"project"}),
     "engineering_index": frozenset({"project"}),
+    # The searchable projection of a document (EPIC: Engineering
+    # Document Search). It depends on **nothing** - not even Project.
+    # A search is scoped to a project by the id its caller passes in,
+    # never by a type this context imports, which is what lets the same
+    # matching rules serve any scoping decision made above it. Listed
+    # with an empty set so that acquiring a dependency is a visible edit
+    # here rather than something that simply starts working.
+    "document_search": frozenset(),
     "proposed_claims": frozenset({"project", "engineering_index"}),
     "review_workflow": frozenset({"project", "proposed_claims"}),
     "canonicalization": frozenset(
