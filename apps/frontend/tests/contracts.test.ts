@@ -20,7 +20,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   AUDIT_ACTIONS,
@@ -67,7 +67,10 @@ import {
   SEMANTIC_AMBIGUITY_REASONS,
   SEMANTIC_STATEMENT_TYPES,
   SUPPORT_ROLES,
+  SEARCH_SOURCE_TYPES,
+  EMPTY_SEARCH,
 } from "@/lib/contracts";
+import { searchProjectDocuments } from "@/lib/resources/search";
 
 // Relative to the frontend package root, which is Vitest's cwd.
 const SCHEMA_PATH = resolve("../backend/openapi.json");
@@ -289,5 +292,89 @@ describe("the pipeline order matches the backend's ordering rule", () => {
       "has_associated_quantity",
       "has_location_aspect",
     ]);
+  });
+});
+
+
+describe.runIf(schema !== null)("project document search", () => {
+  const ROUTE = "/projects/{project_id}/search";
+
+  it("calls a route the backend actually declares", () => {
+    expect(schema?.paths[ROUTE]?.get).toBeDefined();
+  });
+
+  it("sends only parameters the backend accepts", () => {
+    const declared = new Set<string>(
+      (schema?.paths[ROUTE].get.parameters ?? []).map(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (parameter: any) => parameter.name as string,
+      ),
+    );
+
+    for (const sent of ["project_id", "q", "limit", "offset"]) {
+      expect(declared).toContain(sent);
+    }
+  });
+
+  it("describes the same source types the backend does", () => {
+    expect([...SEARCH_SOURCE_TYPES]).toEqual(backendEnum("SearchSourceType"));
+  });
+
+  it.each([
+    ["ProjectSearchResponse", EMPTY_SEARCH],
+    [
+      "SearchLocation",
+      {
+        determined: false,
+        page_number: null,
+        worksheet_name: null,
+        row_number: null,
+        cell_reference: null,
+      },
+    ],
+    [
+      "SearchSnippet",
+      {
+        text: "",
+        highlights: [],
+        truncated_before: false,
+        truncated_after: false,
+      },
+    ],
+    ["SearchHighlight", { start: 0, end: 0 }],
+    ["SearchTermSuggestion", { term: "", present_variants: [] }],
+  ])(
+    "reads every field of %s and invents none",
+    (name: string, shape: object) => {
+      const backend = Object.keys(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (schema?.components.schemas as any)[name].properties,
+      ).sort();
+
+      expect(Object.keys(shape).sort()).toEqual(backend);
+    },
+  );
+
+  it("requests the URL the backend serves", async () => {
+    const calls: string[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        calls.push(String(input));
+
+        return new Response(JSON.stringify(EMPTY_SEARCH), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    await searchProjectDocuments(7, { q: "TR1", limit: 20, offset: 0 });
+    vi.unstubAllGlobals();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("/projects/7/search");
+    expect(calls[0]).toContain("q=TR1");
   });
 });
