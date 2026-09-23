@@ -63,9 +63,30 @@ ASPECT_PREFIXES: tuple[str, ...] = ("-", "+", "=")
 #: A dotted continuation must follow a digit, so ``-Q1.1`` and ``1.5``
 #: survive whole while ``TR1.Il`` - a full stop somebody forgot to put a
 #: space after - is two terms and ``TR1`` still finds it.
-_TERM = re.compile(
-    r"(?:[-+=](?=[0-9]*[a-z]))?[0-9a-z]+(?:(?<=[0-9])\.[0-9]+)*"
+#: A chain may only **begin** where no letter or digit precedes it,
+#: and that is the whole of how a designation is told from a compound
+#: word. ``+E01-QA1`` is a product within a location and
+#: ``=G1+H2-K3`` names three aspects, so each segment stays its own
+#: term and searching ``-QA1`` finds the drawing that writes
+#: ``+E01-QA1``. But the hyphen in ``X-VDC``, in a drawing number such
+#: as ``REF-A-S-027``, or in an everyday compound such as ``e-mail``,
+#: follows a plain run: it joins rather than qualifies, and is a
+#: separator - reading it as a product aspect would split the name,
+#: invent a prefix the document never wrote, and leave ``VDC`` and the
+#: other halves unfindable.
+_ASPECT_SEGMENT = (
+    r"[-+=](?=[0-9]*[a-z])[0-9a-z]+(?:(?<=[0-9])\.[0-9]+)*"
 )
+
+_PLAIN_RUN = r"[0-9a-z]+(?:(?<=[0-9])\.[0-9]+)*"
+
+_TERM = re.compile(
+    rf"(?P<chain>(?<![0-9a-z])(?:{_ASPECT_SEGMENT})+)"
+    rf"|(?P<plain>{_PLAIN_RUN})"
+)
+
+#: One segment of a chain already matched, used to split it.
+_SEGMENT = re.compile(_ASPECT_SEGMENT)
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,7 +220,7 @@ def tokenize(text: str) -> tuple[str, ...]:
     still be searchable even when it cannot be pointed at.
     """
 
-    return tuple(_TERM.findall(fold(text)))
+    return tuple(term for _, _, term in _folded_terms(fold(text)))
 
 
 def tokenize_with_spans(text: str) -> tuple[TermSpan, ...]:
@@ -225,17 +246,43 @@ def tokenize_with_spans(text: str) -> tuple[TermSpan, ...]:
     spans: list[TermSpan] = []
     placed = 0
 
-    for match in _TERM.finditer(folded):
-        start = max(origins[match.start()], placed)
-        end = origins[match.end() - 1] + 1
+    for first, last, term in _folded_terms(folded):
+        start = max(origins[first], placed)
+        end = origins[last] + 1
 
         if start >= end:
             continue
 
-        spans.append(TermSpan(term=match.group(), start=start, end=end))
+        spans.append(TermSpan(term=term, start=start, end=end))
         placed = end
 
     return tuple(spans)
+
+
+def _folded_terms(folded: str) -> list[tuple[int, int, str]]:
+    """
+    Every term in already-folded text, as ``(first, last, term)``
+    indices into it.
+
+    A designation chain is matched whole and then split into its aspect
+    segments, so ``+E01-QA1`` yields ``+e01`` and ``-qa1`` as two terms
+    that each point at their own characters.
+    """
+
+    found: list[tuple[int, int, str]] = []
+
+    for match in _TERM.finditer(folded):
+        if match.lastgroup == "plain":
+            found.append((match.start(), match.end() - 1, match.group()))
+            continue
+
+        for segment in _SEGMENT.finditer(match.group()):
+            first = match.start() + segment.start()
+            found.append(
+                (first, first + len(segment.group()) - 1, segment.group())
+            )
+
+    return found
 
 
 def normalize(text: str) -> str:

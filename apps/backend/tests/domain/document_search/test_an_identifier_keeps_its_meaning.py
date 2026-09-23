@@ -341,3 +341,152 @@ class TestASpanCanAlwaysBeShownToTheReader:
     ) -> None:
         for span in tokenize_with_spans(text):
             assert 0 <= span.start < span.end <= len(text)
+
+
+class TestAHyphenThatJoinsRatherThanQualifies:
+    """
+    An aspect prefix **starts** a designation. A hyphen sitting between
+    two alphanumerics joins them into one name, and reading it as a
+    product aspect splits the name and invents a prefix the document
+    never wrote.
+
+    Found against a real substation corpus, where it affected nearly
+    eight thousand occurrences: drawing numbers, equipment codes and
+    the distributor's own name were all shattered, and neither half
+    could be searched for.
+    """
+
+    @pytest.mark.parametrize(
+        ("written", "expected"),
+        [
+            # A terminal block named X-VDC is one block, and both
+            # halves must find it.
+            ("X-VDC", ("x", "vdc")),
+            ("X-VAC", ("x", "vac")),
+            # A compound whose first segment is a single letter.
+            # The hyphen joins; it is not a product aspect on "mail".
+            ("e-mail", ("e", "mail")),
+            # A drawing number. An engineer quoting any part of it
+            # should arrive at the drawing.
+            ("REF-A-X01", ("ref", "a", "x01")),
+            ("Roma-Italia", ("roma", "italia")),
+        ],
+    )
+    def test_an_internal_hyphen_separates_instead_of_qualifying(
+        self, written: str, expected: tuple[str, ...]
+    ) -> None:
+        assert terms(written) == expected
+
+    @pytest.mark.parametrize(
+        "designation",
+        ["-Q1", "+189L", "=K1", "+CELLA", "-TA", "-E1", "-X", "+DQ1910"],
+    )
+    def test_a_designation_that_starts_with_its_aspect_keeps_it(
+        self, designation: str
+    ) -> None:
+        """The repair must not cost the guarantee it was built around."""
+
+        assert terms(designation) == (designation.lower(),)
+
+    @pytest.mark.parametrize(
+        ("written", "expected"),
+        [
+            ("MORSETTIERA -X +CELLA", ("morsettiera", "-x", "+cella")),
+            ("(-Q1)", ("-q1",)),
+            ("cavo, -W1", ("cavo", "-w1")),
+        ],
+    )
+    def test_an_aspect_after_a_separator_is_still_an_aspect(
+        self, written: str, expected: tuple[str, ...]
+    ) -> None:
+        assert terms(written) == expected
+
+    def test_a_compound_is_found_by_typing_it_back(self) -> None:
+        """
+        Whatever the rule, it applies identically to the query and to
+        the text, so an engineer who types what they see finds it.
+        """
+
+        from app.domain.document_search.search_normalization import (
+            containment_pattern,
+            normalize,
+        )
+
+        stored = normalize("Morsettiera X-VDC +CELLA")
+
+        for query in ("X-VDC", "VDC", "x vdc", "+CELLA"):
+            for term in terms(query):
+                pattern = containment_pattern(term).strip("%")
+
+                assert pattern in stored, (query, term)
+
+
+class TestACompoundDesignationKeepsEveryAspect:
+    """
+    IEC 81346 writes a product inside a location as one token:
+    ``+E01-QA1``. This repository already defines that notation -
+    ``evidence_patterns.DESIGNATION_IEC_81346_COMPOUND`` - and names
+    ``-QA1-XB2`` (a product within a product) as the other real form.
+
+    A first attempt at separating joining hyphens from qualifying ones
+    did it by looking only at what preceded the hyphen, which discarded
+    the second aspect of every compound: searching ``-QA1`` stopped
+    finding a drawing that writes ``+E01-QA1``, while searching ``QA1``
+    started finding it - the system asserting an identity the document
+    never stated. Both halves are pinned here.
+    """
+
+    @pytest.mark.parametrize(
+        ("written", "expected"),
+        [
+            ("+E01-QA1", ("+e01", "-qa1")),
+            ("-QA1-XB2", ("-qa1", "-xb2")),
+            ("=K1-Q1", ("=k1", "-q1")),
+            ("=G1+H2-K3", ("=g1", "+h2", "-k3")),
+            ("+CELLA-Q1", ("+cella", "-q1")),
+        ],
+    )
+    def test_each_aspect_of_a_chain_is_its_own_term(
+        self, written: str, expected: tuple[str, ...]
+    ) -> None:
+        assert terms(written) == expected
+
+    def test_a_compound_is_found_by_its_product_aspect(self) -> None:
+        assert "-qa1" in terms("+E01-QA1")
+
+    def test_a_compound_does_not_answer_for_the_bare_designation(
+        self,
+    ) -> None:
+        """
+        ``QA1`` and ``-QA1`` remain different designations even when the
+        one in the document is written inside a location.
+        """
+
+        assert "qa1" not in terms("+E01-QA1")
+
+    def test_a_chain_only_starts_where_a_designation_can_start(
+        self,
+    ) -> None:
+        """
+        The hyphen in ``X-VDC`` follows a plain run, so it joins rather
+        than qualifies - otherwise every hyphenated name in the corpus
+        would sprout an aspect it never had.
+        """
+
+        assert terms("X-VDC") == ("x", "vdc")
+        assert terms("REF-A-S") == ("ref", "a", "s")
+
+    def test_every_aspect_of_a_chain_points_at_its_own_characters(
+        self,
+    ) -> None:
+        text = "Sezionatore +E01-QA1 chiuso"
+        spans = tokenize_with_spans(text)
+
+        assert [
+            (span.term, text[span.start : span.end]) for span in spans
+        ] == [
+            ("sezionatore", "Sezionatore"),
+            ("+e01", "+E01"),
+            ("-qa1", "-QA1"),
+            ("chiuso", "chiuso"),
+        ]

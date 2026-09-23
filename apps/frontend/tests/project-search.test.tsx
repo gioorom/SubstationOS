@@ -150,12 +150,29 @@ describe("what a result shows", () => {
     ).toBeInTheDocument();
   });
 
-  it("links each result to its document", () => {
+  it("links each result to a page that exists", () => {
+    /**
+     * Regression: results linked to `/documents/{id}`, which is not a
+     * route - only `/pipeline` and `/workspace` are. Every "open the
+     * source" click reached a 404, and this test asserted the broken
+     * href, so it passed.
+     */
+
     renderPanel(aResponse());
 
     expect(
       screen.getByRole("link", { name: "schema_unifilare.pdf" }),
-    ).toHaveAttribute("href", "/documents/7");
+    ).toHaveAttribute("href", "/documents/7/workspace");
+  });
+
+  it("points every result at the same surface the document list does", () => {
+    renderPanel(aResponse());
+
+    for (const link of screen.getAllByRole("link")) {
+      expect(link.getAttribute("href")).toMatch(
+        /^\/documents\/\d+\/workspace$/,
+      );
+    }
   });
 });
 
@@ -380,5 +397,95 @@ describe("the search box", () => {
       "Il backend SubstationOS non risponde.",
     );
     expect(screen.queryByText(/Nessun risultato/)).not.toBeInTheDocument();
+  });
+});
+
+
+describe("reaching results the first page does not show", () => {
+  /**
+   * Found against a real substation corpus: a common term matched
+   * 1,697 times across 8 documents, nearly all of them inside whichever
+   * document sorted first. The panel announced "8 documenti" and
+   * rendered one, with no control to reach the rest.
+   */
+
+  function aPartialResponse(): ProjectSearchResponse {
+    return aResponse({
+      total_matches: 1697,
+      total_documents: 8,
+      documents: [aDiagramResult()],
+    });
+  }
+
+  it("says how many of the total are on screen", () => {
+    render(
+      <ProjectSearchPanel
+        query="MT"
+        onQueryChange={vi.fn()}
+        results={aPartialResponse()}
+        submitted="MT"
+        searching={false}
+        error={null}
+        shown={20}
+        hasMore
+        onLoadMore={vi.fn()}
+      />,
+    );
+
+    const summary = screen.getByRole("status");
+
+    expect(summary).toHaveTextContent("20");
+    expect(summary).toHaveTextContent("1697");
+  });
+
+  it("offers a way to reach the rest", async () => {
+    const onLoadMore = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ProjectSearchPanel
+        query="MT"
+        onQueryChange={vi.fn()}
+        results={aPartialResponse()}
+        submitted="MT"
+        searching={false}
+        error={null}
+        shown={20}
+        hasMore
+        onLoadMore={onLoadMore}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /Mostra altri risultati/ }),
+    );
+
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers nothing more when everything is already shown", () => {
+    renderPanel(aResponse());
+
+    expect(
+      screen.queryByRole("button", { name: /Mostra altri/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not claim a partial count when the page is complete", () => {
+    render(
+      <ProjectSearchPanel
+        query="-Q1"
+        onQueryChange={vi.fn()}
+        results={aResponse()}
+        submitted="-Q1"
+        searching={false}
+        error={null}
+        shown={2}
+        hasMore={false}
+        onLoadMore={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("status")).not.toHaveTextContent(/di/);
   });
 });

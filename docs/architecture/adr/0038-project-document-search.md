@@ -86,10 +86,28 @@ produced by a plotter routinely carries one where the drawing shows a
 hyphen, and deleting it produces exactly the collapse this section
 forbids.
 
+An aspect must also **start** a designation. IEC 81346 chains them -
+`+E01-QA1` is a product within a location, `=G1+H2-K3` names three
+aspects - so a prefix that follows another aspect segment continues the
+chain and each segment stays its own term. But a hyphen following a
+plain run joins rather than qualifies: `X-VDC` is one terminal block,
+`REF-A-S-027` one drawing number, and `e-mail` one everyday compound.
+Reading those as product aspects would split the name, invent a prefix
+the document never wrote, and leave each second half unfindable -
+which is what a real corpus proved, across nearly eight thousand
+occurrences.
+
 **Consequence, accepted:** `-20A` cannot be told apart from minus twenty
 amps, because nothing in the text tells them apart. It is read as a
 designation, which keeps the prefix visible to the reader rather than
 silently discarding it.
+
+**Consequence, accepted:** where extraction emits a leading hyphen that
+was never a designation - a logo whose first letter is drawn
+separately, leaving the rest of the word alone on its own line
+beginning with a hyphen - it is read as one. Nothing structural separates that from `+CELLA` or `+TELAIO`,
+which are genuine location aspects that are also ordinary Italian
+words, so no rule can find the first without destroying the second.
 
 ### 2.3 A spreadsheet segment is a row, not a cell
 
@@ -257,6 +275,7 @@ that cannot exist is a promise nothing keeps.
 | D-3 | A soft-deleted project's text stays searchable. | Consistent with `GET /projects/{id}`, which also answers for one; inconsistent with the project list, which hides it. Deciding which is right is a lifecycle question, not a search question. |
 | D-4 | Indexing reads `app.models.canonical_pdf` directly, reconstructing lines from spans. | `document_management.md` says consumers should reach PDF structure only through canonical text - but canonical text lines carry no verbatim text, only tokens, and §2.2 needs the source spelling. The existing fitness function pins importers of the canonical PDF *domain* models, not the ORM, so this is permitted by test and contested by prose. Recorded rather than resolved. |
 | D-5 | The latest-representation lookup is duplicated from the canonical PDF and workbook adapters rather than reusing their `find_latest_for_document` ports. | Those return whole aggregates; indexing wants four columns. The ordering rule (`id` descending) is identical and was verified against both, but it is correct by duplication rather than by reuse. |
+| D-6 | `normalized_text` is written at index time, and a row records no tokenizer version. Change the tokenizing rules and every row written by the previous ones silently answers the new ones wrongly, with no way to detect it and no reindex path - the only repair is re-uploading. | Not reachable at the time of writing: `document_search_segments` exists in no database on any machine here, so no index predates any rule. It became visible when the real-corpus validation changed the rules, and it is recorded because the *next* such change, against a populated index, is the one that would corrupt results. Closing it means a version column and a reindex path, which is its own change. |
 
 ---
 

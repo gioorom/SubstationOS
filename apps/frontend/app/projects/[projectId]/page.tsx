@@ -65,6 +65,10 @@ export default function ProjectDetailPage() {
     submitted: searchSubmitted,
     searching,
     error: searchError,
+    shown: searchShown,
+    hasMore: hasMoreResults,
+    loadingMore,
+    loadMore,
   } = useProjectSearch(projectId, searchQuery);
 
   if (projectId === undefined) {
@@ -230,6 +234,10 @@ export default function ProjectDetailPage() {
           submitted={searchSubmitted}
           searching={searching}
           error={searchError}
+          shown={searchShown}
+          hasMore={hasMoreResults}
+          loadingMore={loadingMore}
+          onLoadMore={() => void loadMore()}
         />
       </section>
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FileSpreadsheet, FileText, Search } from "lucide-react";
 
 import GlassPanel from "@/components/design-system/GlassPanel";
+import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/Input";
 import type {
   SearchDocumentResult,
@@ -26,6 +27,11 @@ interface ProjectSearchPanelProps {
   submitted: string;
   searching: boolean;
   error: string | null;
+  /** How many matches are on screen, of `results.total_matches`. */
+  shown?: number;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 /**
@@ -48,6 +54,10 @@ export default function ProjectSearchPanel({
   submitted,
   searching,
   error,
+  shown,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: ProjectSearchPanelProps) {
   const asked = submitted !== "";
 
@@ -99,6 +109,7 @@ export default function ProjectSearchPanel({
           searching={searching}
           totalMatches={results.total_matches}
           totalDocuments={results.total_documents}
+          shown={shown}
           terms={results.terms}
         />
       )}
@@ -117,6 +128,25 @@ export default function ProjectSearchPanel({
           ))}
         </ul>
       )}
+
+      {/*
+        Without this the panel announces a total it will not show. On a
+        real corpus a common term matches thousands of times, nearly all
+        of them inside whichever document sorts first, so the remaining
+        documents are only reachable by asking for more.
+      */}
+      {!error && hasMore && onLoadMore && (
+        <div className="mt-5 flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={loadingMore}
+            onClick={onLoadMore}
+          >
+            {loadingMore ? "Caricamento…" : "Mostra altri risultati"}
+          </Button>
+        </div>
+      )}
     </GlassPanel>
   );
 }
@@ -125,13 +155,16 @@ function ResultSummary({
   searching,
   totalMatches,
   totalDocuments,
+  shown,
   terms,
 }: {
   searching: boolean;
   totalMatches: number;
   totalDocuments: number;
+  shown?: number;
   terms: string[];
 }) {
+  const partial = shown !== undefined && shown > 0 && shown < totalMatches;
   return (
     <p
       role="status"
@@ -141,6 +174,11 @@ function ResultSummary({
         "Ricerca in corso…"
       ) : (
         <>
+          {partial && (
+            <>
+              <strong className="text-foreground">{shown}</strong> di{" "}
+            </>
+          )}
           <strong className="text-foreground">{totalMatches}</strong>{" "}
           {totalMatches === 1 ? "risultato" : "risultati"} in{" "}
           <strong className="text-foreground">{totalDocuments}</strong>{" "}
@@ -222,8 +260,15 @@ function DocumentResult({
           className="h-4 w-4 shrink-0 text-muted-foreground"
         />
 
+        {/*
+          The workspace, not `/documents/{id}` - that path has no page
+          and a result that led nowhere would break the one thing a
+          search result is for. This is the same destination the
+          documentation panel uses, and it is where the source viewer
+          and the download live.
+        */}
         <Link
-          href={`/documents/${document.document_id}`}
+          href={`/documents/${document.document_id}/workspace`}
           className="font-medium underline-offset-4 hover:underline"
         >
           {document.filename}
