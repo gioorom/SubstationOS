@@ -107,4 +107,8 @@ coverage.xml
 # -----------------------------
 # Agent / editor local state
 # -----------------------------
-.claude/settings.local.json
+# The whole directory, not just the settings file. It also holds an
+# agent's working state - including a SQLite store and its write-ahead
+# log, whose contents nobody reviews - and a `git add -A` before a push
+# would publish all of it to a public repository.
+.claude/
